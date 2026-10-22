@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The Go module and the Vite + React + TypeScript + shadcn/ui frontend exist in one repository, in separate folders.
 - [x] The production build embeds the built frontend in the Go binary. The binary serves the frontend and the `/api` routes on one port.
