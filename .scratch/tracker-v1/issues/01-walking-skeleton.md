@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Go module and the Vite + React + TypeScript + shadcn/ui frontend exist in one repository, in separate folders.
-- [ ] The production build embeds the built frontend in the Go binary. The binary serves the frontend and the `/api` routes on one port.
-- [ ] In development, the Vite dev server sends `/api` requests to the Go program.
-- [ ] The database path comes from configuration, with a default in the user's data directory. Migrations run at start.
-- [ ] `GET /api/health` returns status 200.
-- [ ] An API test starts the backend with a new temporary SQLite file and calls `GET /api/health`.
-- [ ] A test helper builds an xlsx file with the three XTB sheets (Closed Positions, Cash Operations, Open Positions) and their header rows, from rows that the test gives.
-- [ ] One command runs all backend tests. One command runs the frontend typecheck and build. The commands are in `CLAUDE.md`.
+- [x] The Go module and the Vite + React + TypeScript + shadcn/ui frontend exist in one repository, in separate folders.
+- [x] The production build embeds the built frontend in the Go binary. The binary serves the frontend and the `/api` routes on one port.
+- [x] In development, the Vite dev server sends `/api` requests to the Go program.
+- [x] The database path comes from configuration, with a default in the user's data directory. Migrations run at start.
+- [x] `GET /api/health` returns status 200.
+- [x] An API test starts the backend with a new temporary SQLite file and calls `GET /api/health`.
+- [x] A test helper builds an xlsx file with the three XTB sheets (Closed Positions, Cash Operations, Open Positions) and their header rows, from rows that the test gives.
+- [x] One command runs all backend tests. One command runs the frontend typecheck and build. The commands are in `CLAUDE.md`.

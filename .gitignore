@@ -2,3 +2,8 @@
 exports/
 
 .DS_Store
+
+# Build output. The Go program embeds the frontend build from backend/internal/web/dist.
+bin/
+backend/internal/web/dist/*
+!backend/internal/web/dist/.gitkeep
