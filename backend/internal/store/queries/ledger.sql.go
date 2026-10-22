@@ -12,33 +12,56 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const cashOperationIDs = `-- name: CashOperationIDs :many
-SELECT xtb_id
+const cashOperationByXTBID = `-- name: CashOperationByXTBID :one
+SELECT id, type, time, amount, comment
 FROM cash_operations
-WHERE account_id = ?
+WHERE account_id = ? AND xtb_id = ?
 `
 
-func (q *Queries) CashOperationIDs(ctx context.Context, accountID int64) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, cashOperationIDs, accountID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var xtb_id string
-		if err := rows.Scan(&xtb_id); err != nil {
-			return nil, err
-		}
-		items = append(items, xtb_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+type CashOperationByXTBIDParams struct {
+	AccountID int64
+	XtbID     string
+}
+
+type CashOperationByXTBIDRow struct {
+	ID      int64
+	Type    string
+	Time    string
+	Amount  decimal.Decimal
+	Comment string
+}
+
+func (q *Queries) CashOperationByXTBID(ctx context.Context, arg CashOperationByXTBIDParams) (CashOperationByXTBIDRow, error) {
+	row := q.db.QueryRowContext(ctx, cashOperationByXTBID, arg.AccountID, arg.XtbID)
+	var i CashOperationByXTBIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Type,
+		&i.Time,
+		&i.Amount,
+		&i.Comment,
+	)
+	return i, err
+}
+
+const deleteEmptyLots = `-- name: DeleteEmptyLots :exec
+DELETE FROM lots
+WHERE account_id = ? AND id NOT IN (SELECT lot_id FROM lot_fills)
+`
+
+func (q *Queries) DeleteEmptyLots(ctx context.Context, accountID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteEmptyLots, accountID)
+	return err
+}
+
+const deleteLotFill = `-- name: DeleteLotFill :exec
+DELETE FROM lot_fills
+WHERE cash_operation_id = ?
+`
+
+func (q *Queries) DeleteLotFill(ctx context.Context, cashOperationID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteLotFill, cashOperationID)
+	return err
 }
 
 const insertCashOperation = `-- name: InsertCashOperation :one
@@ -94,6 +117,49 @@ type InsertLotFillParams struct {
 func (q *Queries) InsertLotFill(ctx context.Context, arg InsertLotFillParams) error {
 	_, err := q.db.ExecContext(ctx, insertLotFill, arg.LotID, arg.CashOperationID)
 	return err
+}
+
+const knownCashOperations = `-- name: KnownCashOperations :many
+SELECT xtb_id, type, time, amount, comment
+FROM cash_operations
+WHERE account_id = ?
+`
+
+type KnownCashOperationsRow struct {
+	XtbID   string
+	Type    string
+	Time    string
+	Amount  decimal.Decimal
+	Comment string
+}
+
+func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]KnownCashOperationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, knownCashOperations, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnownCashOperationsRow
+	for rows.Next() {
+		var i KnownCashOperationsRow
+		if err := rows.Scan(
+			&i.XtbID,
+			&i.Type,
+			&i.Time,
+			&i.Amount,
+			&i.Comment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const ledgerCashOperations = `-- name: LedgerCashOperations :many
@@ -177,6 +243,92 @@ func (q *Queries) LedgerFills(ctx context.Context, accountID int64) ([]LedgerFil
 		return nil, err
 	}
 	return items, nil
+}
+
+const mixedLots = `-- name: MixedLots :many
+SELECT l.position_id
+FROM lots l
+JOIN lot_fills f ON f.lot_id = l.id
+JOIN cash_operations c ON c.id = f.cash_operation_id
+WHERE l.account_id = ?
+GROUP BY l.id, l.position_id
+HAVING COUNT(DISTINCT c.instrument_id) > 1
+ORDER BY l.position_id
+`
+
+func (q *Queries) MixedLots(ctx context.Context, accountID int64) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, mixedLots, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var position_id string
+		if err := rows.Scan(&position_id); err != nil {
+			return nil, err
+		}
+		items = append(items, position_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setLotInstruments = `-- name: SetLotInstruments :exec
+UPDATE lots
+SET instrument_id = (
+    SELECT c.instrument_id
+    FROM lot_fills f
+    JOIN cash_operations c ON c.id = f.cash_operation_id
+    WHERE f.lot_id = lots.id
+    LIMIT 1
+)
+WHERE lots.account_id = ?
+`
+
+func (q *Queries) SetLotInstruments(ctx context.Context, accountID int64) error {
+	_, err := q.db.ExecContext(ctx, setLotInstruments, accountID)
+	return err
+}
+
+const updateCashOperation = `-- name: UpdateCashOperation :exec
+UPDATE cash_operations
+SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, import_id = ?
+WHERE id = ?
+`
+
+type UpdateCashOperationParams struct {
+	Type         string
+	InstrumentID sql.NullInt64
+	Time         string
+	Amount       decimal.Decimal
+	Comment      string
+	PositionID   sql.NullString
+	Volume       decimal.NullDecimal
+	Price        decimal.NullDecimal
+	ImportID     int64
+	ID           int64
+}
+
+func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperationParams) error {
+	_, err := q.db.ExecContext(ctx, updateCashOperation,
+		arg.Type,
+		arg.InstrumentID,
+		arg.Time,
+		arg.Amount,
+		arg.Comment,
+		arg.PositionID,
+		arg.Volume,
+		arg.Price,
+		arg.ImportID,
+		arg.ID,
+	)
+	return err
 }
 
 const upsertInstrument = `-- name: UpsertInstrument :one

@@ -39,6 +39,9 @@ export function ImportPreviewCard({
   onCancel,
 }: ImportPreviewCardProps) {
   const isNewAccount = preview.account === null
+  const hasOpenConflicts = preview.conflicts.some(
+    (conflict) => conflict.decision === null
+  )
   const [name, setName] = useState("")
   const [type, setType] = useState<AccountType>("regular")
   const [currency, setCurrency] = useState(preview.suggestedCurrency)
@@ -77,6 +80,8 @@ export function ImportPreviewCard({
             <dd>{preview.newCashOperations}</dd>
             <dt className="text-muted-foreground">Known Cash Operations</dt>
             <dd>{preview.skippedCashOperations}</dd>
+            <dt className="text-muted-foreground">Import Conflicts</dt>
+            <dd>{preview.conflicts.length}</dd>
           </dl>
 
           {isNewAccount && (
@@ -143,7 +148,7 @@ export function ImportPreviewCard({
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || hasOpenConflicts}>
             Confirm Import
           </Button>
         </CardFooter>

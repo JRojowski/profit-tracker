@@ -4,13 +4,13 @@
 
 **Blocked by:** 02 (Import an export into a new Account).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The same file imported two times gives zero new Cash Operations and no change to the data.
-- [ ] A newer export that overlaps an older one adds only the new Cash Operations.
-- [ ] A known XTB ID with a different amount, time, type or Comment is an Import Conflict of kind "changed data".
-- [ ] An Import with an open conflict has the state needs-review. `POST /api/imports/{id}/confirm` fails until each conflict has a decision.
-- [ ] `POST /api/imports/{id}/conflicts/{conflictId}` records the decision.
-- [ ] `POST /api/imports/{id}/cancel` cancels the Import. Nothing changes.
-- [ ] The Import page shows the conflicts with the stored data, the new data and the two buttons.
-- [ ] API tests cover: the same file twice, an overlapping newer file, a conflict with each decision, a cancel.
+- [x] The same file imported two times gives zero new Cash Operations and no change to the data.
+- [x] A newer export that overlaps an older one adds only the new Cash Operations.
+- [x] A known XTB ID with a different amount, time, type or Comment is an Import Conflict of kind "changed data".
+- [x] An Import with an open conflict has the state needs-review. `POST /api/imports/{id}/confirm` fails until each conflict has a decision.
+- [x] `POST /api/imports/{id}/conflicts/{conflictId}` records the decision.
+- [x] `POST /api/imports/{id}/cancel` cancels the Import. Nothing changes.
+- [x] The Import page shows the conflicts with the stored data, the new data and the two buttons.
+- [x] API tests cover: the same file twice, an overlapping newer file, a conflict with each decision, a cancel.

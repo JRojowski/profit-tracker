@@ -25,8 +25,32 @@ var (
 	ErrInvalidAccount = errors.New("invalid account")
 	// ErrImportNotFound tells that no Import has the ID.
 	ErrImportNotFound = errors.New("import not found")
-	// ErrAlreadyConfirmed tells that the Import is not in preview any more.
-	ErrAlreadyConfirmed = errors.New("import is already confirmed")
+	// ErrImportClosed tells that the Import is already saved or cancelled.
+	ErrImportClosed = errors.New("the import is closed")
+	// ErrConflictNotFound tells that the Import has no Import Conflict with the ID.
+	ErrConflictNotFound = errors.New("import conflict not found")
+	// ErrInvalidDecision tells that the decision is not "keep-existing" or "use-new".
+	ErrInvalidDecision = errors.New("invalid decision")
+	// ErrOpenConflicts tells that an Import Conflict of the Import has no decision.
+	// The error text tells how many conflicts have no decision.
+	ErrOpenConflicts = store.ErrOpenConflicts
+	// ErrLedgerChanged tells that a different Import changed the Ledger after the preview.
+	// The conflicts and the decisions of the preview are not valid any more.
+	ErrLedgerChanged = store.ErrLedgerChanged
+)
+
+// The kinds of an Import Conflict.
+const (
+	// KindChangedData is a known XTB ID with a different type, time, amount or Comment.
+	KindChangedData = "changed-data"
+)
+
+// The decisions for an Import Conflict.
+const (
+	// DecisionKeepExisting keeps the stored Cash Operation.
+	DecisionKeepExisting = store.DecisionKeepExisting
+	// DecisionUseNew replaces the stored Cash Operation with the Cash Operation of the file.
+	DecisionUseNew = store.DecisionUseNew
 )
 
 // RejectedError is an error in the file that stops the Import. Its text is for the user.
@@ -68,9 +92,13 @@ type Preview struct {
 	// Account is the known Account of the account number. It is nil for a new account number.
 	Account *store.Account
 	// SuggestedCurrency is the currency prefix of the file name. It is "" if there is no prefix.
-	SuggestedCurrency     string
+	SuggestedCurrency string
+	// NewCashOperations and SkippedCashOperations do not count the Import Conflicts.
 	NewCashOperations     int
 	SkippedCashOperations int
+	// State is "preview", or "needs-review" if there are Import Conflicts.
+	State     string
+	Conflicts []store.ImportConflict
 }
 
 // NewAccount is the data that the user gives for a new Account.
@@ -92,32 +120,34 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 	if err != nil {
 		return Preview{}, err
 	}
-	newCount, skipped := len(export.CashOperations), 0
+	known := map[string]store.CashOperationData{}
 	if account != nil {
-		known, err := s.store.CashOperationIDs(ctx, account.ID)
+		known, err = s.store.KnownCashOperations(ctx, account.ID)
 		if err != nil {
 			return Preview{}, err
 		}
-		newCount, skipped = 0, 0
-		for _, op := range export.CashOperations {
-			if known[op.ID] {
-				skipped++
-			} else {
-				newCount++
-			}
-		}
 	}
+	c := compare(cashOperations(export), known)
 
 	id, err := s.store.CreatePreview(ctx, store.NewPreview{
 		AccountNumber:         export.AccountNumber,
 		FileName:              fileName,
 		File:                  data,
 		CreatedAt:             s.now(),
-		NewCashOperations:     newCount,
-		SkippedCashOperations: skipped,
+		NewCashOperations:     c.newCount,
+		SkippedCashOperations: c.skipped,
+		Conflicts:             c.conflicts,
 	})
 	if err != nil {
 		return Preview{}, err
+	}
+	conflicts, err := s.store.ImportConflicts(ctx, id)
+	if err != nil {
+		return Preview{}, err
+	}
+	state := store.StatePreview
+	if len(conflicts) > 0 {
+		state = store.StateNeedsReview
 	}
 	return Preview{
 		ID:                    id,
@@ -125,24 +155,56 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 		AccountNumber:         export.AccountNumber,
 		Account:               account,
 		SuggestedCurrency:     xtb.CurrencyFromFileName(fileName),
-		NewCashOperations:     newCount,
-		SkippedCashOperations: skipped,
+		NewCashOperations:     c.newCount,
+		SkippedCashOperations: c.skipped,
+		State:                 state,
+		Conflicts:             conflicts,
 	}, nil
 }
 
-// Confirm saves the Import in preview with the ID: the Account (if new), the Instruments,
+// comparison is the result of a comparison of the Cash Operations of a file with the stored ones.
+type comparison struct {
+	newCount  int
+	skipped   int
+	conflicts []store.NewImportConflict
+}
+
+// compare compares the Cash Operations of a file with the stored Cash Operations, by XTB ID.
+// A known XTB ID with the same data is skipped. A known XTB ID with different data is an Import Conflict.
+func compare(ops []store.CashOperation, known map[string]store.CashOperationData) comparison {
+	var c comparison
+	for _, op := range ops {
+		existing, ok := known[op.XTBID]
+		switch {
+		case !ok:
+			c.newCount++
+		case existing.Equal(op.Data()):
+			c.skipped++
+		default:
+			c.conflicts = append(c.conflicts, store.NewImportConflict{
+				Kind:     KindChangedData,
+				XTBID:    op.XTBID,
+				Existing: existing,
+				New:      op.Data(),
+			})
+		}
+	}
+	return c
+}
+
+// Confirm saves the Import with the ID: the Account (if new), the Instruments,
 // the Cash Operations and the Lots, in one transaction.
 // A known account number ignores newAccount. A new account number needs a valid newAccount.
+// Each Import Conflict must have a decision. If a different Import changed the Ledger after the preview,
+// Confirm returns ErrLedgerChanged and saves nothing.
 func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) (store.Import, error) {
 	pending, err := s.store.PendingImport(ctx, id)
-	if errors.Is(err, store.ErrNotFound) {
-		return store.Import{}, fmt.Errorf("%w: %d", ErrImportNotFound, id)
-	}
 	if err != nil {
-		return store.Import{}, err
+		return store.Import{}, openImportError(id, err)
 	}
-	if pending.State != "preview" {
-		return store.Import{}, fmt.Errorf("%w: import %d", ErrAlreadyConfirmed, id)
+	// A saved or cancelled Import has no file. SaveImport checks the state again in its transaction.
+	if !store.IsOpen(pending.State) {
+		return store.Import{}, openImportError(id, &store.ImportClosedError{ImportID: id, State: pending.State})
 	}
 
 	export, err := read(pending.File)
@@ -171,10 +233,55 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 		ImportedAt:     s.now(),
 		CashOperations: cashOperations(export),
 	})
-	if errors.Is(err, store.ErrImportNotPending) {
-		return store.Import{}, fmt.Errorf("%w: import %d", ErrAlreadyConfirmed, id)
+	switch {
+	case err == nil:
+		return saved, nil
+	case errors.Is(err, store.ErrLedgerChanged):
+		return store.Import{}, fmt.Errorf("import %d: upload the file again, because a different import changed the ledger after the preview: %w", id, err)
+	case errors.Is(err, store.ErrMixedLot):
+		return store.Import{}, &RejectedError{Err: fmt.Errorf("import %d: %w", id, err)}
+	case errors.Is(err, store.ErrOpenConflicts):
+		return store.Import{}, err
 	}
-	return saved, err
+	return store.Import{}, openImportError(id, err)
+}
+
+// Decide records the decision for the Import Conflict of the Import, and returns the conflict.
+// The user can change a decision until the Import is saved or cancelled.
+func (s *Service) Decide(ctx context.Context, importID, conflictID int64, decision string) (store.ImportConflict, error) {
+	if decision != DecisionKeepExisting && decision != DecisionUseNew {
+		return store.ImportConflict{}, fmt.Errorf("the decision %q is not %q or %q: %w", decision, DecisionKeepExisting, DecisionUseNew, ErrInvalidDecision)
+	}
+	conflict, err := s.store.DecideImportConflict(ctx, importID, conflictID, decision)
+	if errors.Is(err, store.ErrConflictNotFound) {
+		return store.ImportConflict{}, fmt.Errorf("import conflict %d of import %d: %w", conflictID, importID, ErrConflictNotFound)
+	}
+	if err != nil {
+		return store.ImportConflict{}, openImportError(importID, err)
+	}
+	return conflict, nil
+}
+
+// Cancel cancels the Import. Nothing goes into the Ledger. A cancelled Import cannot be confirmed.
+func (s *Service) Cancel(ctx context.Context, id int64) error {
+	if err := s.store.CancelImport(ctx, id); err != nil {
+		return openImportError(id, err)
+	}
+	return nil
+}
+
+// openImportError maps an error of the store for an Import that must be open to an error of the Service.
+func openImportError(id int64, err error) error {
+	var closed *store.ImportClosedError
+	switch {
+	case errors.As(err, &closed):
+		return fmt.Errorf("import %d is already %s: %w", id, closed.State, ErrImportClosed)
+	case errors.Is(err, store.ErrImportNotPending):
+		return fmt.Errorf("import %d: %w", id, ErrImportClosed)
+	case errors.Is(err, store.ErrNotFound):
+		return fmt.Errorf("import %d: %w", id, ErrImportNotFound)
+	}
+	return err
 }
 
 // Imports returns the saved Imports, the newest first.

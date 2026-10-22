@@ -30,6 +30,8 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/health", a.health)
 	mux.HandleFunc("POST /api/imports", a.previewImport)
 	mux.HandleFunc("POST /api/imports/{id}/confirm", a.confirmImport)
+	mux.HandleFunc("POST /api/imports/{id}/cancel", a.cancelImport)
+	mux.HandleFunc("POST /api/imports/{id}/conflicts/{conflictId}", a.decideConflict)
 	mux.HandleFunc("GET /api/imports", a.listImports)
 	mux.HandleFunc("GET /api/accounts", a.listAccounts)
 	mux.HandleFunc("PATCH /api/accounts/{id}", a.renameAccount)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -16,8 +17,20 @@ import (
 var (
 	// ErrNotFound tells that the requested row does not exist.
 	ErrNotFound = errors.New("not found")
-	// ErrImportNotPending tells that the Import is not in the state 'preview'.
+	// ErrImportNotPending tells that the Import is not in the state 'preview' or 'needs-review'.
 	ErrImportNotPending = errors.New("import is not in preview")
+)
+
+// The states of an Import.
+const (
+	// StatePreview is an Import that waits for the confirmation.
+	StatePreview = "preview"
+	// StateNeedsReview is an Import with Import Conflicts. It waits for the decisions and the confirmation.
+	StateNeedsReview = "needs-review"
+	// StateSaved is an Import that is in the Ledger.
+	StateSaved = "saved"
+	// StateCancelled is an Import that the user cancelled.
+	StateCancelled = "cancelled"
 )
 
 // Account is one broker Account.
@@ -30,7 +43,7 @@ type Account struct {
 	Currency string
 }
 
-// PendingImport is an Import in preview, with the file that the user uploaded.
+// PendingImport is an Import with the file that the user uploaded. The file is nil after the save or the cancel.
 type PendingImport struct {
 	ID            int64
 	AccountNumber string
@@ -59,6 +72,8 @@ type NewPreview struct {
 	CreatedAt             time.Time
 	NewCashOperations     int
 	SkippedCashOperations int
+	// Conflicts are the Import Conflicts. An Import with conflicts gets the state 'needs-review'.
+	Conflicts []NewImportConflict
 }
 
 // CashOperation is one Cash Operation to save.
@@ -82,6 +97,20 @@ type CashOperation struct {
 	IsFill bool
 }
 
+// Data returns the data of op that a re-import compares.
+func (op CashOperation) Data() CashOperationData {
+	return CashOperationData{Type: op.Type, Time: op.Time, Amount: op.Amount, Comment: op.Comment}
+}
+
+// resolution is the decision of the user for one Import Conflict of the kind "changed-data".
+type resolution struct {
+	// existing is the stored data that the user saw in the preview.
+	existing CashOperationData
+	// useNew tells to replace the stored Cash Operation with the operation of the file.
+	// If it is false, the stored Cash Operation stays.
+	useNew bool
+}
+
 // SaveImport is the data that SaveImport writes in one transaction.
 type SaveImport struct {
 	ImportID int64
@@ -90,7 +119,8 @@ type SaveImport struct {
 	Account    Account
 	ImportedAt time.Time
 	// CashOperations are all Cash Operations of the file.
-	// SaveImport skips each operation whose XTB ID already exists on the Account.
+	// SaveImport skips each operation whose XTB ID already exists on the Account with the same data.
+	// For a known XTB ID with different data, the decision of its Import Conflict applies.
 	CashOperations []CashOperation
 }
 
@@ -109,32 +139,40 @@ func (s *Store) AccountByNumber(ctx context.Context, number string) (Account, er
 	return Account{ID: row.ID, AccountNumber: row.AccountNumber, Name: row.Name, Type: row.Type, Currency: row.Currency}, nil
 }
 
-// CashOperationIDs returns the XTB IDs of the Cash Operations of the Account.
-func (s *Store) CashOperationIDs(ctx context.Context, accountID int64) (map[string]bool, error) {
-	ids, err := queries.New(s.db).CashOperationIDs(ctx, accountID)
-	if err != nil {
-		return nil, fmt.Errorf("read cash operation IDs of account %d: %w", accountID, err)
-	}
-	known := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		known[id] = true
-	}
-	return known, nil
-}
-
-// CreatePreview saves a new Import in the state 'preview' and returns its ID.
+// CreatePreview saves a new Import and its Import Conflicts, and returns the ID of the Import.
+// The state is 'needs-review' if there are conflicts, and 'preview' if not.
 // The Import holds the file. It is not in the list of saved Imports.
 func (s *Store) CreatePreview(ctx context.Context, p NewPreview) (int64, error) {
-	id, err := queries.New(s.db).CreatePreview(ctx, queries.CreatePreviewParams{
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin import preview: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := queries.New(tx)
+
+	state := StatePreview
+	if len(p.Conflicts) > 0 {
+		state = StateNeedsReview
+	}
+	id, err := q.CreatePreview(ctx, queries.CreatePreviewParams{
 		AccountNumber:         p.AccountNumber,
 		FileName:              p.FileName,
 		File:                  p.File,
-		CreatedAt:             p.CreatedAt.UTC().Format(timeLayout),
+		State:                 state,
+		CreatedAt:             formatTime(p.CreatedAt),
 		NewCashOperations:     int64(p.NewCashOperations),
 		SkippedCashOperations: int64(p.SkippedCashOperations),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("save import preview: %w", err)
+	}
+	for _, c := range p.Conflicts {
+		if err := insertImportConflict(ctx, q, id, c); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit import preview %d: %w", id, err)
 	}
 	return id, nil
 }
@@ -153,7 +191,10 @@ func (s *Store) PendingImport(ctx context.Context, id int64) (PendingImport, err
 
 // SaveImport saves the Account (if new), the Instruments, the Cash Operations and the Lots of an Import
 // in one transaction, and returns the saved Import.
-// It returns ErrImportNotPending if the Import is not in preview.
+// It returns an *ImportClosedError if the Import is not in preview or in needs-review,
+// and an *OpenConflictsError if an Import Conflict has no decision.
+// It returns ErrLedgerChanged if the Ledger does not agree with the Import Conflicts and their decisions,
+// and ErrMixedLot if the Fills of a Lot have more than one Instrument after the save.
 func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -162,12 +203,20 @@ func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 	defer func() { _ = tx.Rollback() }()
 	q := queries.New(tx)
 
+	// The checks are in the transaction, so a decision or a different Import cannot change the result.
+	if err := requireOpen(ctx, q, p.ImportID); err != nil {
+		return Import{}, err
+	}
+	resolved, err := resolutions(ctx, q, p.ImportID)
+	if err != nil {
+		return Import{}, err
+	}
 	accountID, err := saveAccount(ctx, q, p.Account)
 	if err != nil {
 		return Import{}, err
 	}
 
-	w := ledgerWriter{q: q, accountID: accountID, importID: p.ImportID, instruments: map[string]int64{}}
+	w := ledgerWriter{q: q, accountID: accountID, importID: p.ImportID, instruments: map[string]int64{}, resolutions: resolved}
 	saved, skipped := 0, 0
 	for _, op := range p.CashOperations {
 		isNew, err := w.save(ctx, op)
@@ -180,10 +229,13 @@ func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 			skipped++
 		}
 	}
+	if err := w.fixLots(ctx); err != nil {
+		return Import{}, err
+	}
 
 	n, err := q.MarkImportSaved(ctx, queries.MarkImportSavedParams{
 		AccountID:             sql.NullInt64{Int64: accountID, Valid: true},
-		ImportedAt:            sql.NullString{String: p.ImportedAt.UTC().Format(timeLayout), Valid: true},
+		ImportedAt:            sql.NullString{String: formatTime(p.ImportedAt), Valid: true},
 		NewCashOperations:     int64(saved),
 		SkippedCashOperations: int64(skipped),
 		ID:                    p.ImportID,
@@ -271,25 +323,56 @@ type ledgerWriter struct {
 	accountID   int64
 	importID    int64
 	instruments map[string]int64 // ticker to Instrument ID
+	// resolutions are the decisions for the Import Conflicts, by XTB ID.
+	resolutions map[string]resolution
 }
 
-// save writes one Cash Operation and its Lot. It returns false if the XTB ID already exists on the Account.
+// save writes one Cash Operation and its Lot. It returns true if it adds the operation or replaces
+// the stored operation, and false if the stored operation stays.
+// For a known XTB ID with different data, the decision of its Import Conflict applies.
+// It returns ErrLedgerChanged if the stored operation does not agree with the Import Conflicts.
+// It writes nothing for an operation that it skips.
 func (w *ledgerWriter) save(ctx context.Context, op CashOperation) (bool, error) {
-	var instrumentID sql.NullInt64
-	if op.Ticker != "" {
-		id, err := w.instrument(ctx, op)
-		if err != nil {
-			return false, err
-		}
-		instrumentID = sql.NullInt64{Int64: id, Valid: true}
+	stored, err := w.q.CashOperationByXTBID(ctx, queries.CashOperationByXTBIDParams{AccountID: w.accountID, XtbID: op.XTBID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return true, w.insert(ctx, op)
+	}
+	if err != nil {
+		return false, fmt.Errorf("read cash operation %s: %w", op.XTBID, err)
+	}
+	storedData, err := toCashOperationData(stored.Type, stored.Time, stored.Amount, stored.Comment)
+	if err != nil {
+		return false, fmt.Errorf("cash operation %s: %w", op.XTBID, err)
 	}
 
+	res, resolved := w.resolutions[op.XTBID]
+	if storedData.Equal(op.Data()) {
+		if resolved {
+			return false, fmt.Errorf("cash operation %s already has the data of the file: %w", op.XTBID, ErrLedgerChanged)
+		}
+		return false, nil
+	}
+	if !resolved || !res.existing.Equal(storedData) {
+		return false, fmt.Errorf("cash operation %s has data that the preview did not show: %w", op.XTBID, ErrLedgerChanged)
+	}
+	if !res.useNew {
+		return false, nil
+	}
+	return true, w.replace(ctx, stored.ID, op)
+}
+
+// insert adds a new Cash Operation and its Fill.
+func (w *ledgerWriter) insert(ctx context.Context, op CashOperation) error {
+	instrumentID, err := w.instrument(ctx, op)
+	if err != nil {
+		return err
+	}
 	opID, err := w.q.InsertCashOperation(ctx, queries.InsertCashOperationParams{
 		AccountID:    w.accountID,
 		XtbID:        op.XTBID,
 		Type:         op.Type,
 		InstrumentID: instrumentID,
-		Time:         op.Time.UTC().Format(timeLayout),
+		Time:         formatTime(op.Time),
 		Amount:       op.Amount,
 		Comment:      op.Comment,
 		PositionID:   sql.NullString{String: op.PositionID, Valid: op.PositionID != ""},
@@ -297,36 +380,87 @@ func (w *ledgerWriter) save(ctx context.Context, op CashOperation) (bool, error)
 		Price:        op.Price,
 		ImportID:     w.importID,
 	})
-	// ON CONFLICT DO NOTHING returns no row for a known XTB ID.
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
 	if err != nil {
-		return false, fmt.Errorf("save cash operation %s: %w", op.XTBID, err)
+		return fmt.Errorf("save cash operation %s: %w", op.XTBID, err)
 	}
-	if !op.IsFill {
-		return true, nil
-	}
+	return w.addFill(ctx, opID, op, instrumentID)
+}
 
+// replace writes the data of op into the stored Cash Operation with the ID, and moves its Fill to the Lot of op.
+func (w *ledgerWriter) replace(ctx context.Context, opID int64, op CashOperation) error {
+	instrumentID, err := w.instrument(ctx, op)
+	if err != nil {
+		return err
+	}
+	err = w.q.UpdateCashOperation(ctx, queries.UpdateCashOperationParams{
+		Type:         op.Type,
+		InstrumentID: instrumentID,
+		Time:         formatTime(op.Time),
+		Amount:       op.Amount,
+		Comment:      op.Comment,
+		PositionID:   sql.NullString{String: op.PositionID, Valid: op.PositionID != ""},
+		Volume:       op.Volume,
+		Price:        op.Price,
+		ImportID:     w.importID,
+		ID:           opID,
+	})
+	if err != nil {
+		return fmt.Errorf("replace cash operation %s: %w", op.XTBID, err)
+	}
+	if err := w.q.DeleteLotFill(ctx, opID); err != nil {
+		return fmt.Errorf("remove fill %s: %w", op.XTBID, err)
+	}
+	return w.addFill(ctx, opID, op, instrumentID)
+}
+
+// fixLots runs after all writes of the Import. It removes each Lot with no Fills, and gives each Lot
+// the Instrument of its Fills. A "use-new" decision can move a Fill to a different Lot or Instrument.
+// It returns ErrMixedLot if the Fills of a Lot have more than one Instrument.
+func (w *ledgerWriter) fixLots(ctx context.Context) error {
+	if err := w.q.DeleteEmptyLots(ctx, w.accountID); err != nil {
+		return fmt.Errorf("remove lots with no fills: %w", err)
+	}
+	mixed, err := w.q.MixedLots(ctx, w.accountID)
+	if err != nil {
+		return fmt.Errorf("check the instruments of the lots: %w", err)
+	}
+	if len(mixed) > 0 {
+		return fmt.Errorf("lot %s: %w", strings.Join(mixed, ", "), ErrMixedLot)
+	}
+	if err := w.q.SetLotInstruments(ctx, w.accountID); err != nil {
+		return fmt.Errorf("set the instruments of the lots: %w", err)
+	}
+	return nil
+}
+
+// addFill adds the Cash Operation with the ID to its Lot if op is a Fill.
+func (w *ledgerWriter) addFill(ctx context.Context, opID int64, op CashOperation, instrumentID sql.NullInt64) error {
+	if !op.IsFill {
+		return nil
+	}
 	lotID, err := w.q.UpsertLot(ctx, queries.UpsertLotParams{AccountID: w.accountID, PositionID: op.PositionID, InstrumentID: instrumentID.Int64})
 	if err != nil {
-		return false, fmt.Errorf("save lot %s: %w", op.PositionID, err)
+		return fmt.Errorf("save lot %s: %w", op.PositionID, err)
 	}
 	if err := w.q.InsertLotFill(ctx, queries.InsertLotFillParams{LotID: lotID, CashOperationID: opID}); err != nil {
-		return false, fmt.Errorf("save fill %s of lot %s: %w", op.XTBID, op.PositionID, err)
+		return fmt.Errorf("save fill %s of lot %s: %w", op.XTBID, op.PositionID, err)
 	}
-	return true, nil
+	return nil
 }
 
 // instrument returns the ID of the Instrument of op. It makes the Instrument if it does not exist.
-func (w *ledgerWriter) instrument(ctx context.Context, op CashOperation) (int64, error) {
+// It returns a NULL ID for an operation with no Instrument.
+func (w *ledgerWriter) instrument(ctx context.Context, op CashOperation) (sql.NullInt64, error) {
+	if op.Ticker == "" {
+		return sql.NullInt64{}, nil
+	}
 	if id, ok := w.instruments[op.Ticker]; ok {
-		return id, nil
+		return sql.NullInt64{Int64: id, Valid: true}, nil
 	}
 	id, err := w.q.UpsertInstrument(ctx, queries.UpsertInstrumentParams{Ticker: op.Ticker, Name: op.InstrumentName, Category: op.Category})
 	if err != nil {
-		return 0, fmt.Errorf("save instrument %s: %w", op.Ticker, err)
+		return sql.NullInt64{}, fmt.Errorf("save instrument %s: %w", op.Ticker, err)
 	}
 	w.instruments[op.Ticker] = id
-	return id, nil
+	return sql.NullInt64{Int64: id, Valid: true}, nil
 }

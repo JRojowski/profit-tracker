@@ -20,6 +20,30 @@ export type NewAccount = {
   currency: string
 }
 
+// ImportState "needs-review" tells that the Import has Import Conflicts.
+export type ImportState = "preview" | "needs-review"
+
+export type ConflictDecision = "keep-existing" | "use-new"
+
+// CashOperationData is the data of a Cash Operation that an Import Conflict compares.
+// The time is RFC 3339 text in UTC. The amount is decimal text in the Account currency.
+export type CashOperationData = {
+  type: string
+  time: string
+  amount: string
+  comment: string
+}
+
+// ImportConflict is a known XTB ID with different data. The decision is null until the user selects one.
+export type ImportConflict = {
+  id: number
+  kind: "changed-data"
+  xtbId: string
+  existing: CashOperationData
+  new: CashOperationData
+  decision: ConflictDecision | null
+}
+
 // ImportPreview is the result of an upload. The backend saves no Cash Operations before the confirmation.
 // The account is null when the account number is new.
 export type ImportPreview = {
@@ -30,6 +54,8 @@ export type ImportPreview = {
   suggestedCurrency: string
   newCashOperations: number
   skippedCashOperations: number
+  state: ImportState
+  conflicts: ImportConflict[]
 }
 
 export type ImportSummary = {
@@ -99,6 +125,31 @@ export async function confirmImport(
     body: JSON.stringify(account ? { account } : {}),
   })
   return readJSON<ImportSummary>(response)
+}
+
+// decideConflict records the decision for one Import Conflict and returns the updated conflict.
+export async function decideConflict(
+  importId: number,
+  conflictId: number,
+  decision: ConflictDecision
+): Promise<ImportConflict> {
+  const response = await fetch(
+    `/api/imports/${importId}/conflicts/${conflictId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  )
+  return readJSON<ImportConflict>(response)
+}
+
+// cancelImport cancels an Import in preview. Nothing changes in the Ledger.
+export async function cancelImport(id: number): Promise<void> {
+  const response = await fetch(`/api/imports/${id}/cancel`, { method: "POST" })
+  if (!response.ok) {
+    await readJSON<never>(response)
+  }
 }
 
 export async function fetchImports(

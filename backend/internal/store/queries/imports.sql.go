@@ -8,11 +8,27 @@ package queries
 import (
 	"context"
 	"database/sql"
+
+	"github.com/shopspring/decimal"
 )
+
+const cancelImport = `-- name: CancelImport :execrows
+UPDATE imports
+SET state = 'cancelled', file = NULL
+WHERE id = ? AND state IN ('preview', 'needs-review')
+`
+
+func (q *Queries) CancelImport(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, cancelImport, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
 
 const createPreview = `-- name: CreatePreview :one
 INSERT INTO imports (account_number, file_name, file, state, created_at, new_cash_operations, skipped_cash_operations)
-VALUES (?, ?, ?, 'preview', ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -20,6 +36,7 @@ type CreatePreviewParams struct {
 	AccountNumber         string
 	FileName              string
 	File                  []byte
+	State                 string
 	CreatedAt             string
 	NewCashOperations     int64
 	SkippedCashOperations int64
@@ -30,6 +47,7 @@ func (q *Queries) CreatePreview(ctx context.Context, arg CreatePreviewParams) (i
 		arg.AccountNumber,
 		arg.FileName,
 		arg.File,
+		arg.State,
 		arg.CreatedAt,
 		arg.NewCashOperations,
 		arg.SkippedCashOperations,
@@ -39,11 +57,140 @@ func (q *Queries) CreatePreview(ctx context.Context, arg CreatePreviewParams) (i
 	return id, err
 }
 
+const decideImportConflict = `-- name: DecideImportConflict :one
+UPDATE import_conflicts
+SET decision = ?
+WHERE id = ? AND import_id = ?
+RETURNING id, import_id, kind, xtb_id, existing_type, existing_time, existing_amount, existing_comment, new_type, new_time, new_amount, new_comment, decision
+`
+
+type DecideImportConflictParams struct {
+	Decision sql.NullString
+	ID       int64
+	ImportID int64
+}
+
+func (q *Queries) DecideImportConflict(ctx context.Context, arg DecideImportConflictParams) (ImportConflict, error) {
+	row := q.db.QueryRowContext(ctx, decideImportConflict, arg.Decision, arg.ID, arg.ImportID)
+	var i ImportConflict
+	err := row.Scan(
+		&i.ID,
+		&i.ImportID,
+		&i.Kind,
+		&i.XtbID,
+		&i.ExistingType,
+		&i.ExistingTime,
+		&i.ExistingAmount,
+		&i.ExistingComment,
+		&i.NewType,
+		&i.NewTime,
+		&i.NewAmount,
+		&i.NewComment,
+		&i.Decision,
+	)
+	return i, err
+}
+
+const importConflicts = `-- name: ImportConflicts :many
+SELECT id, import_id, kind, xtb_id, existing_type, existing_time, existing_amount, existing_comment, new_type, new_time, new_amount, new_comment, decision
+FROM import_conflicts
+WHERE import_id = ?
+ORDER BY id
+`
+
+func (q *Queries) ImportConflicts(ctx context.Context, importID int64) ([]ImportConflict, error) {
+	rows, err := q.db.QueryContext(ctx, importConflicts, importID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ImportConflict
+	for rows.Next() {
+		var i ImportConflict
+		if err := rows.Scan(
+			&i.ID,
+			&i.ImportID,
+			&i.Kind,
+			&i.XtbID,
+			&i.ExistingType,
+			&i.ExistingTime,
+			&i.ExistingAmount,
+			&i.ExistingComment,
+			&i.NewType,
+			&i.NewTime,
+			&i.NewAmount,
+			&i.NewComment,
+			&i.Decision,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const importState = `-- name: ImportState :one
+SELECT state
+FROM imports
+WHERE id = ?
+`
+
+func (q *Queries) ImportState(ctx context.Context, id int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, importState, id)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
+const insertImportConflict = `-- name: InsertImportConflict :exec
+INSERT INTO import_conflicts (import_id, kind, xtb_id,
+                              existing_type, existing_time, existing_amount, existing_comment,
+                              new_type, new_time, new_amount, new_comment)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertImportConflictParams struct {
+	ImportID        int64
+	Kind            string
+	XtbID           string
+	ExistingType    string
+	ExistingTime    string
+	ExistingAmount  decimal.Decimal
+	ExistingComment string
+	NewType         string
+	NewTime         string
+	NewAmount       decimal.Decimal
+	NewComment      string
+}
+
+func (q *Queries) InsertImportConflict(ctx context.Context, arg InsertImportConflictParams) error {
+	_, err := q.db.ExecContext(ctx, insertImportConflict,
+		arg.ImportID,
+		arg.Kind,
+		arg.XtbID,
+		arg.ExistingType,
+		arg.ExistingTime,
+		arg.ExistingAmount,
+		arg.ExistingComment,
+		arg.NewType,
+		arg.NewTime,
+		arg.NewAmount,
+		arg.NewComment,
+	)
+	return err
+}
+
 const markImportSaved = `-- name: MarkImportSaved :execrows
 UPDATE imports
 SET account_id = ?, state = 'saved', imported_at = ?, file = NULL,
     new_cash_operations = ?, skipped_cash_operations = ?
-WHERE id = ? AND state = 'preview'
+WHERE id = ? AND state IN ('preview', 'needs-review')
 `
 
 type MarkImportSavedParams struct {

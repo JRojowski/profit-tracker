@@ -25,6 +25,35 @@ type previewResponse struct {
 	SuggestedCurrency     string           `json:"suggestedCurrency"`
 	NewCashOperations     int              `json:"newCashOperations"`
 	SkippedCashOperations int              `json:"skippedCashOperations"`
+	// State is "preview", or "needs-review" if there are Import Conflicts.
+	State string `json:"state"`
+	// Conflicts is an empty array, not null, if there are no Import Conflicts.
+	Conflicts []importConflictResponse `json:"conflicts"`
+}
+
+// importConflictResponse is one Import Conflict.
+type importConflictResponse struct {
+	ID       int64                     `json:"id"`
+	Kind     string                    `json:"kind"`
+	XTBID    string                    `json:"xtbId"`
+	Existing cashOperationDataResponse `json:"existing"`
+	New      cashOperationDataResponse `json:"new"`
+	// Decision is null until the user decides.
+	Decision *string `json:"decision"`
+}
+
+// cashOperationDataResponse is the data of a Cash Operation that an Import Conflict compares.
+// The time is RFC 3339 text in UTC. The amount is decimal text.
+type cashOperationDataResponse struct {
+	Type    string `json:"type"`
+	Time    string `json:"time"`
+	Amount  string `json:"amount"`
+	Comment string `json:"comment"`
+}
+
+// decisionRequest is the body of POST /api/imports/{id}/conflicts/{conflictId}.
+type decisionRequest struct {
+	Decision string `json:"decision"`
 }
 
 // importResponse is one saved Import.
@@ -77,6 +106,11 @@ func (a *api) previewImport(w http.ResponseWriter, r *http.Request) {
 		SuggestedCurrency:     preview.SuggestedCurrency,
 		NewCashOperations:     preview.NewCashOperations,
 		SkippedCashOperations: preview.SkippedCashOperations,
+		State:                 preview.State,
+		Conflicts:             make([]importConflictResponse, 0, len(preview.Conflicts)),
+	}
+	for _, c := range preview.Conflicts {
+		resp.Conflicts = append(resp.Conflicts, toImportConflictResponse(c))
 	}
 	if acc := preview.Account; acc != nil {
 		accResp := toAccountResponse(*acc)
@@ -87,9 +121,8 @@ func (a *api) previewImport(w http.ResponseWriter, r *http.Request) {
 
 // confirmImport saves the Import in preview.
 func (a *api) confirmImport(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("import %q not found", r.PathValue("id")))
+	id, ok := pathID(w, r, "id", "import")
+	if !ok {
 		return
 	}
 
@@ -110,6 +143,54 @@ func (a *api) confirmImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toImportResponse(saved))
+}
+
+// decideConflict records the decision of the user for one Import Conflict.
+func (a *api) decideConflict(w http.ResponseWriter, r *http.Request) {
+	importID, ok := pathID(w, r, "id", "import")
+	if !ok {
+		return
+	}
+	conflictID, ok := pathID(w, r, "conflictId", "import conflict")
+	if !ok {
+		return
+	}
+	var req decisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "the body is not valid JSON: "+err.Error())
+		return
+	}
+
+	conflict, err := a.importer.Decide(r.Context(), importID, conflictID, req.Decision)
+	if err != nil {
+		a.writeImportError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toImportConflictResponse(conflict))
+}
+
+// cancelImport cancels the Import. Nothing goes into the Ledger.
+func (a *api) cancelImport(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id", "import")
+	if !ok {
+		return
+	}
+	if err := a.importer.Cancel(r.Context(), id); err != nil {
+		a.writeImportError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// pathID returns the ID in the path value with the name. An ID that is not a number is an unknown object.
+// It writes the error response and returns false if the ID is not valid.
+func pathID(w http.ResponseWriter, r *http.Request, name, object string) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue(name), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("%s %q not found", object, r.PathValue(name)))
+		return 0, false
+	}
+	return id, true
 }
 
 // listImports returns the saved Imports, the newest first.
@@ -139,14 +220,37 @@ func toImportResponse(imp store.Import) importResponse {
 	}
 }
 
+func toImportConflictResponse(c store.ImportConflict) importConflictResponse {
+	resp := importConflictResponse{
+		ID:       c.ID,
+		Kind:     c.Kind,
+		XTBID:    c.XTBID,
+		Existing: toCashOperationDataResponse(c.Existing),
+		New:      toCashOperationDataResponse(c.New),
+	}
+	if c.Decision != "" {
+		resp.Decision = &c.Decision
+	}
+	return resp
+}
+
+func toCashOperationDataResponse(d store.CashOperationData) cashOperationDataResponse {
+	return cashOperationDataResponse{
+		Type:    d.Type,
+		Time:    d.Time.UTC().Format(time.RFC3339),
+		Amount:  formatAmount(d.Amount),
+		Comment: d.Comment,
+	}
+}
+
 // writeImportError maps an error of the import service to a status.
 func (a *api) writeImportError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, importer.ErrRejected), errors.Is(err, importer.ErrInvalidAccount):
+	case errors.Is(err, importer.ErrRejected), errors.Is(err, importer.ErrInvalidAccount), errors.Is(err, importer.ErrInvalidDecision):
 		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, importer.ErrImportNotFound):
+	case errors.Is(err, importer.ErrImportNotFound), errors.Is(err, importer.ErrConflictNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, importer.ErrAlreadyConfirmed):
+	case errors.Is(err, importer.ErrImportClosed), errors.Is(err, importer.ErrOpenConflicts), errors.Is(err, importer.ErrLedgerChanged):
 		writeError(w, http.StatusConflict, err.Error())
 	default:
 		a.writeInternalError(w, r, err)

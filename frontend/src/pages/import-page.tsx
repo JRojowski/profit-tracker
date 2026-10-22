@@ -11,11 +11,15 @@ import {
 } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { ImportConflictsCard } from "@/components/import-conflicts-card"
 import { ImportPreviewCard } from "@/components/import-preview-card"
 import {
+  cancelImport,
   confirmImport,
+  decideConflict,
   errorMessage,
   uploadImport,
+  type ConflictDecision,
   type ImportPreview,
   type ImportSummary,
   type NewAccount,
@@ -40,13 +44,12 @@ export function ImportPage({ onImported }: ImportPageProps) {
     setInputKey((key) => key + 1)
   }
 
-  async function handleUpload(event: FormEvent) {
-    event.preventDefault()
-    if (!file) return
+  // run calls an API action. It blocks the page while the action runs and shows the error of a failed action.
+  async function run(action: () => Promise<void>) {
     setBusy(true)
     setError(null)
     try {
-      setPreview(await uploadImport(file))
+      await action()
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -54,19 +57,40 @@ export function ImportPage({ onImported }: ImportPageProps) {
     }
   }
 
+  async function handleUpload(event: FormEvent) {
+    event.preventDefault()
+    if (!file) return
+    await run(async () => setPreview(await uploadImport(file)))
+  }
+
   async function handleConfirm(account?: NewAccount) {
     if (!preview) return
-    setBusy(true)
-    setError(null)
-    try {
+    await run(async () => {
       const summary = await confirmImport(preview.id, account)
       reset()
       onImported(summary)
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setBusy(false)
-    }
+    })
+  }
+
+  async function handleDecide(conflictId: number, decision: ConflictDecision) {
+    if (!preview) return
+    await run(async () => {
+      const updated = await decideConflict(preview.id, conflictId, decision)
+      setPreview({
+        ...preview,
+        conflicts: preview.conflicts.map((conflict) =>
+          conflict.id === updated.id ? updated : conflict
+        ),
+      })
+    })
+  }
+
+  async function handleCancel() {
+    if (!preview) return
+    await run(async () => {
+      await cancelImport(preview.id)
+      reset()
+    })
   }
 
   return (
@@ -106,13 +130,22 @@ export function ImportPage({ onImported }: ImportPageProps) {
         </Alert>
       )}
 
+      {preview && preview.conflicts.length > 0 && (
+        <ImportConflictsCard
+          conflicts={preview.conflicts}
+          currency={preview.account?.currency ?? preview.suggestedCurrency}
+          busy={busy}
+          onDecide={handleDecide}
+        />
+      )}
+
       {preview && (
         <ImportPreviewCard
           key={preview.id}
           preview={preview}
           busy={busy}
           onConfirm={handleConfirm}
-          onCancel={reset}
+          onCancel={handleCancel}
         />
       )}
     </div>

@@ -46,6 +46,22 @@ type Import struct {
 	SkippedCashOperations int64
 }
 
+type ImportConflict struct {
+	ID              int64
+	ImportID        int64
+	Kind            string
+	XtbID           string
+	ExistingType    string
+	ExistingTime    string
+	ExistingAmount  decimal.Decimal
+	ExistingComment string
+	NewType         string
+	NewTime         string
+	NewAmount       decimal.Decimal
+	NewComment      string
+	Decision        sql.NullString
+}
+
 type Instrument struct {
 	ID       int64
 	Ticker   string

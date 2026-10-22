@@ -89,9 +89,9 @@ func (s *testServer) getJSON(t *testing.T, path string, v any) int {
 	return status
 }
 
-// upload sends data as the multipart field "file" with the file name to path.
+// upload sends data as the multipart field "file" with the file name to POST /api/imports.
 // It returns the status and the body.
-func (s *testServer) upload(t *testing.T, path, fileName string, data []byte) (status int, body string) {
+func (s *testServer) upload(t *testing.T, fileName string, data []byte) (status int, body string) {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -102,7 +102,7 @@ func (s *testServer) upload(t *testing.T, path, fileName string, data []byte) (s
 	require.NoError(t, err)
 	require.NoError(t, form.Close())
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.URL+path, &buf)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.URL+"/api/imports", &buf)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	resp, err := s.client.Do(req)

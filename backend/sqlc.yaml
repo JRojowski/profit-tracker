@@ -14,3 +14,7 @@ sql:
             go_type: github.com/shopspring/decimal.NullDecimal
           - column: cash_operations.price
             go_type: github.com/shopspring/decimal.NullDecimal
+          - column: import_conflicts.existing_amount
+            go_type: github.com/shopspring/decimal.Decimal
+          - column: import_conflicts.new_amount
+            go_type: github.com/shopspring/decimal.Decimal
