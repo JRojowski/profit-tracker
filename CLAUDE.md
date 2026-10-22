@@ -26,6 +26,23 @@ The binary reads the flags `-addr` and `-db`, or the variables `PROFIT_TRACKER_A
 - Delegate Go implementation work to the `go-developer` subagent.
 - When you write or review Go code yourself, load the `go-code-standard` skill first.
 
+## Second review with Codex
+
+Codex gives a second review from a different model. Do this review for each change to code, before you commit.
+
+1. Start the Codex review in the background. Then do your own review, for example with the `code-review` skill.
+
+   ```bash
+   codex exec review --uncommitted --ephemeral -o <scratchpad>/codex-review.md > /dev/null 2>&1
+   ```
+
+   The review takes some minutes. The `-o` file holds only the verdict. The full output is a long trace, so send it to `/dev/null`.
+2. Treat each Codex finding as a claim. Read the code it names and confirm or reject the finding.
+3. Fix each confirmed finding, test-first. Go fixes go to the `go-developer` subagent.
+4. In the final report to the user, list each Codex finding with its result: fixed, or rejected with the reason.
+
+The review is complete when each Codex finding has a result. If Codex fails (for example, the login expired), tell the user and continue without it.
+
 ## Agent skills
 
 ### Issue tracker
