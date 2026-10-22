@@ -1,0 +1,74 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    # Errors
+    - errorlint
+    - errname
+    - nilerr
+    # Resources and context
+    - bodyclose
+    - noctx
+    - contextcheck
+    - rowserrcheck
+    - sqlclosecheck
+    # Correctness
+    - exhaustive
+    - forcetypeassert
+    - musttag
+    - gosec
+    # Style and simplification
+    - revive
+    - gocritic
+    - copyloopvar
+    - intrange
+    - perfsprint
+    - predeclared
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - misspell
+    - nolintlint
+    # Tests
+    - testifylint
+    - thelper
+    - tparallel
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: receiver-naming
+        - name: error-strings
+        - name: error-naming
+        - name: indent-error-flow
+        - name: unused-parameter
+  exclusions:
+    generated: strict
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - forcetypeassert
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra-rules: true

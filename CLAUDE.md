@@ -1,5 +1,10 @@
 # profit-tracker
 
+## Go backend
+
+- Delegate Go implementation work to the `go-developer` subagent.
+- When you write or review Go code yourself, load the `go-code-standard` skill first.
+
 ## Agent skills
 
 ### Issue tracker
