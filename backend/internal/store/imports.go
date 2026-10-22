@@ -99,7 +99,10 @@ type CashOperation struct {
 
 // Data returns the data of op that a re-import compares.
 func (op CashOperation) Data() CashOperationData {
-	return CashOperationData{Type: op.Type, Time: op.Time, Amount: op.Amount, Comment: op.Comment}
+	return CashOperationData{
+		Type: op.Type, Time: op.Time, Amount: op.Amount, Comment: op.Comment,
+		Ticker: op.Ticker, PositionID: op.PositionID, Volume: op.Volume, Price: op.Price,
+	}
 }
 
 // resolution is the decision of the user for one Import Conflict of the kind "changed-data".
@@ -340,7 +343,10 @@ func (w *ledgerWriter) save(ctx context.Context, op CashOperation) (bool, error)
 	if err != nil {
 		return false, fmt.Errorf("read cash operation %s: %w", op.XTBID, err)
 	}
-	storedData, err := toCashOperationData(stored.Type, stored.Time, stored.Amount, stored.Comment)
+	storedData, err := withTime(stored.Time, CashOperationData{
+		Type: stored.Type, Amount: stored.Amount, Comment: stored.Comment,
+		Ticker: stored.Ticker, PositionID: stored.PositionID, Volume: stored.Volume, Price: stored.Price,
+	})
 	if err != nil {
 		return false, fmt.Errorf("cash operation %s: %w", op.XTBID, err)
 	}

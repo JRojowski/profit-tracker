@@ -436,11 +436,36 @@ type importConflict struct {
 
 // cashOperationData is the data of a Cash Operation that an Import Conflict compares.
 type cashOperationData struct {
-	Type    string `json:"type"`
-	Time    string `json:"time"`
-	Amount  string `json:"amount"`
-	Comment string `json:"comment"`
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	Amount     string  `json:"amount"`
+	Comment    string  `json:"comment"`
+	Ticker     string  `json:"ticker"`
+	PositionID string  `json:"positionId"`
+	Volume     *string `json:"volume"`
+	Price      *string `json:"price"`
 }
+
+// deposit101 is the data of the Deposit 101 of usdExport.
+func deposit101() cashOperationData {
+	return cashOperationData{Type: "Deposit", Time: "2026-02-01T10:00:00Z", Amount: "1000.00", Comment: "Blik deposit"}
+}
+
+// purchase102 is the data of the purchase 102 of usdExport.
+func purchase102() cashOperationData {
+	return cashOperationData{
+		Type: "Stock purchase", Time: "2026-02-02T10:00:00Z", Amount: "-109.40", Comment: "OPEN BUY 10 @ 10.94",
+		Ticker: "FPS.US", PositionID: "2000000001", Volume: ptr("10"), Price: ptr("10.94"),
+	}
+}
+
+// with returns d with the change applied.
+func (d cashOperationData) with(change func(*cashOperationData)) cashOperationData {
+	change(&d)
+	return d
+}
+
+func ptr(s string) *string { return &s }
 
 // summary returns the summary of the Account.
 func (s *testServer) summary(t *testing.T, accountID int64) summaryResponse {
@@ -566,15 +591,15 @@ func TestImportPreview_KnownIDWithChangedData_IsImportConflict(t *testing.T) {
 			name:     "amount",
 			xtbID:    "101",
 			change:   func(op *xtbtest.CashOperation) { op.Amount = "1200.00" },
-			existing: cashOperationData{Type: "Deposit", Time: "2026-02-01T10:00:00Z", Amount: "1000.00", Comment: "Blik deposit"},
-			new:      cashOperationData{Type: "Deposit", Time: "2026-02-01T10:00:00Z", Amount: "1200.00", Comment: "Blik deposit"},
+			existing: deposit101(),
+			new:      deposit101().with(func(d *cashOperationData) { d.Amount = "1200.00" }),
 		},
 		{
 			name:     "time",
 			xtbID:    "101",
 			change:   func(op *xtbtest.CashOperation) { op.Time = op.Time.Add(time.Second) },
-			existing: cashOperationData{Type: "Deposit", Time: "2026-02-01T10:00:00Z", Amount: "1000.00", Comment: "Blik deposit"},
-			new:      cashOperationData{Type: "Deposit", Time: "2026-02-01T10:00:01Z", Amount: "1000.00", Comment: "Blik deposit"},
+			existing: deposit101(),
+			new:      deposit101().with(func(d *cashOperationData) { d.Time = "2026-02-01T10:00:01Z" }),
 		},
 		{
 			name:  "type",
@@ -582,16 +607,36 @@ func TestImportPreview_KnownIDWithChangedData_IsImportConflict(t *testing.T) {
 			change: func(op *xtbtest.CashOperation) {
 				op.Type, op.Ticker, op.PositionID = "Deposit", "", ""
 			},
-			existing: cashOperationData{Type: "Stock purchase", Time: "2026-02-02T10:00:00Z", Amount: "-109.40", Comment: "OPEN BUY 10 @ 10.94"},
-			new:      cashOperationData{Type: "Deposit", Time: "2026-02-02T10:00:00Z", Amount: "-109.40", Comment: "OPEN BUY 10 @ 10.94"},
+			existing: purchase102(),
+			new: purchase102().with(func(d *cashOperationData) {
+				d.Type, d.Ticker, d.PositionID, d.Volume, d.Price = "Deposit", "", "", nil, nil
+			}),
 		},
 		{
 			name:     "comment",
 			xtbID:    "102",
 			change:   func(op *xtbtest.CashOperation) { op.Comment = "OPEN BUY 12 @ 9.1167" },
-			existing: cashOperationData{Type: "Stock purchase", Time: "2026-02-02T10:00:00Z", Amount: "-109.40", Comment: "OPEN BUY 10 @ 10.94"},
-			new:      cashOperationData{Type: "Stock purchase", Time: "2026-02-02T10:00:00Z", Amount: "-109.40", Comment: "OPEN BUY 12 @ 9.1167"},
+			existing: purchase102(),
+			new: purchase102().with(func(d *cashOperationData) {
+				d.Comment, d.Volume, d.Price = "OPEN BUY 12 @ 9.1167", ptr("12"), ptr("9.1167")
+			}),
 		},
+		{
+			name:     "ticker",
+			xtbID:    "102",
+			change:   func(op *xtbtest.CashOperation) { op.Ticker = "LSMC.DE" },
+			existing: purchase102(),
+			new:      purchase102().with(func(d *cashOperationData) { d.Ticker = "LSMC.DE" }),
+		},
+		{
+			name:     "position ID",
+			xtbID:    "102",
+			change:   func(op *xtbtest.CashOperation) { op.PositionID = "2000000009" },
+			existing: purchase102(),
+			new:      purchase102().with(func(d *cashOperationData) { d.PositionID = "2000000009" }),
+		},
+		// The reader takes the volume and the price from the Comment. Thus a file cannot change only
+		// the volume or only the price. TestCompare in the importer package covers these two fields.
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -638,8 +683,10 @@ func TestImportPreview_ImportConflict_HasContractJSON(t *testing.T) {
 		"id": %d,
 		"kind": "changed-data",
 		"xtbId": "101",
-		"existing": {"type": "Deposit", "time": "2026-02-01T10:00:00Z", "amount": "1000.00", "comment": "Blik deposit"},
-		"new": {"type": "Deposit", "time": "2026-02-01T10:00:00Z", "amount": "1200.00", "comment": "Blik deposit"},
+		"existing": {"type": "Deposit", "time": "2026-02-01T10:00:00Z", "amount": "1000.00", "comment": "Blik deposit",
+			"ticker": "", "positionId": "", "volume": null, "price": null},
+		"new": {"type": "Deposit", "time": "2026-02-01T10:00:00Z", "amount": "1200.00", "comment": "Blik deposit",
+			"ticker": "", "positionId": "", "volume": null, "price": null},
 		"decision": null
 	}`, conflict.ID), string(got.Conflicts[0]))
 }
@@ -726,6 +773,39 @@ func TestImportConfirm_UseNew_PurchaseWithOtherInstrument_MovesFill(t *testing.T
 		{Ticker: "LSMC.DE", Name: "LSMC.DE", Volume: "2", Cost: "109.40", AverageCost: "54.7"},
 		{Ticker: "PENG.US", Name: "PENG.US", Volume: "2", Cost: "116.58", AverageCost: "58.29"},
 	}, srv.holdings(t, accountID))
+}
+
+func TestImportConfirm_UseNew_OnlyTickerColumnChanged_HoldingHasNewInstrument(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, usdExport(), "XTB USD")
+	// The Comment has no ticker, so only the Ticker column changes.
+	preview := srv.preview(t, withChange(t, "102", func(op *xtbtest.CashOperation) { op.Ticker = "LSMC.DE" }))
+	require.Len(t, preview.Conflicts, 1)
+
+	srv.decide(t, preview.ID, preview.Conflicts[0].ID, "use-new")
+	saved := srv.confirm(t, preview.ID, nil)
+
+	assert.Equal(t, 1, saved.NewCashOperations)
+	assert.Equal(t, []holdingResponse{
+		{Ticker: "LSMC.DE", Name: "LSMC.DE", Volume: "10", Cost: "109.40", AverageCost: "10.94"},
+		{Ticker: "PENG.US", Name: "PENG.US", Volume: "2", Cost: "116.58", AverageCost: "58.29"},
+	}, srv.holdings(t, accountID))
+}
+
+func TestImportConfirm_KeepExisting_OnlyTickerColumnChanged_HoldingStays(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, usdExport(), "XTB USD")
+	preview := srv.preview(t, withChange(t, "102", func(op *xtbtest.CashOperation) { op.Ticker = "LSMC.DE" }))
+	require.Len(t, preview.Conflicts, 1)
+
+	srv.decide(t, preview.ID, preview.Conflicts[0].ID, "keep-existing")
+	saved := srv.confirm(t, preview.ID, nil)
+
+	assert.Equal(t, 0, saved.NewCashOperations)
+	assert.Equal(t, 3, saved.SkippedCashOperations)
+	assert.Equal(t, usdHoldings, srv.holdings(t, accountID))
 }
 
 func TestImportConfirm_UseNew_SameLotWithOtherTicker_MovesLotToNewInstrument(t *testing.T) {

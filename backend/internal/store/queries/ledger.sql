@@ -1,12 +1,16 @@
 -- name: KnownCashOperations :many
-SELECT xtb_id, type, time, amount, comment
-FROM cash_operations
-WHERE account_id = ?;
+SELECT c.xtb_id, c.type, c.time, c.amount, c.comment,
+       COALESCE(i.ticker, '') AS ticker, COALESCE(c.position_id, '') AS position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.account_id = ?;
 
 -- name: CashOperationByXTBID :one
-SELECT id, type, time, amount, comment
-FROM cash_operations
-WHERE account_id = ? AND xtb_id = ?;
+SELECT c.id, c.type, c.time, c.amount, c.comment,
+       COALESCE(i.ticker, '') AS ticker, COALESCE(c.position_id, '') AS position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.account_id = ? AND c.xtb_id = ?;
 
 -- name: UpdateCashOperation :exec
 UPDATE cash_operations

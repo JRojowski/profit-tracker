@@ -27,11 +27,17 @@ export type ConflictDecision = "keep-existing" | "use-new"
 
 // CashOperationData is the data of a Cash Operation that an Import Conflict compares.
 // The time is RFC 3339 text in UTC. The amount is decimal text in the Account currency.
+// The ticker and the position ID are "" for an operation with no Instrument or no Lot.
+// The volume and the price are decimal text, or null for an operation with no volume.
 export type CashOperationData = {
   type: string
   time: string
   amount: string
   comment: string
+  ticker: string
+  positionId: string
+  volume: string | null
+  price: string | null
 }
 
 // ImportConflict is a known XTB ID with different data. The decision is null until the user selects one.

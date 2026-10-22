@@ -18,3 +18,11 @@ sql:
             go_type: github.com/shopspring/decimal.Decimal
           - column: import_conflicts.new_amount
             go_type: github.com/shopspring/decimal.Decimal
+          - column: import_conflicts.existing_volume
+            go_type: github.com/shopspring/decimal.NullDecimal
+          - column: import_conflicts.existing_price
+            go_type: github.com/shopspring/decimal.NullDecimal
+          - column: import_conflicts.new_volume
+            go_type: github.com/shopspring/decimal.NullDecimal
+          - column: import_conflicts.new_price
+            go_type: github.com/shopspring/decimal.NullDecimal

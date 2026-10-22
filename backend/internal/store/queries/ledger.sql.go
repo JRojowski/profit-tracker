@@ -13,9 +13,11 @@ import (
 )
 
 const cashOperationByXTBID = `-- name: CashOperationByXTBID :one
-SELECT id, type, time, amount, comment
-FROM cash_operations
-WHERE account_id = ? AND xtb_id = ?
+SELECT c.id, c.type, c.time, c.amount, c.comment,
+       COALESCE(i.ticker, '') AS ticker, COALESCE(c.position_id, '') AS position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.account_id = ? AND c.xtb_id = ?
 `
 
 type CashOperationByXTBIDParams struct {
@@ -24,11 +26,15 @@ type CashOperationByXTBIDParams struct {
 }
 
 type CashOperationByXTBIDRow struct {
-	ID      int64
-	Type    string
-	Time    string
-	Amount  decimal.Decimal
-	Comment string
+	ID         int64
+	Type       string
+	Time       string
+	Amount     decimal.Decimal
+	Comment    string
+	Ticker     string
+	PositionID string
+	Volume     decimal.NullDecimal
+	Price      decimal.NullDecimal
 }
 
 func (q *Queries) CashOperationByXTBID(ctx context.Context, arg CashOperationByXTBIDParams) (CashOperationByXTBIDRow, error) {
@@ -40,6 +46,10 @@ func (q *Queries) CashOperationByXTBID(ctx context.Context, arg CashOperationByX
 		&i.Time,
 		&i.Amount,
 		&i.Comment,
+		&i.Ticker,
+		&i.PositionID,
+		&i.Volume,
+		&i.Price,
 	)
 	return i, err
 }
@@ -120,17 +130,23 @@ func (q *Queries) InsertLotFill(ctx context.Context, arg InsertLotFillParams) er
 }
 
 const knownCashOperations = `-- name: KnownCashOperations :many
-SELECT xtb_id, type, time, amount, comment
-FROM cash_operations
-WHERE account_id = ?
+SELECT c.xtb_id, c.type, c.time, c.amount, c.comment,
+       COALESCE(i.ticker, '') AS ticker, COALESCE(c.position_id, '') AS position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.account_id = ?
 `
 
 type KnownCashOperationsRow struct {
-	XtbID   string
-	Type    string
-	Time    string
-	Amount  decimal.Decimal
-	Comment string
+	XtbID      string
+	Type       string
+	Time       string
+	Amount     decimal.Decimal
+	Comment    string
+	Ticker     string
+	PositionID string
+	Volume     decimal.NullDecimal
+	Price      decimal.NullDecimal
 }
 
 func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]KnownCashOperationsRow, error) {
@@ -148,6 +164,10 @@ func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]K
 			&i.Time,
 			&i.Amount,
 			&i.Comment,
+			&i.Ticker,
+			&i.PositionID,
+			&i.Volume,
+			&i.Price,
 		); err != nil {
 			return nil, err
 		}

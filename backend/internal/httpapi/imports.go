@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/jrojowski/profit-tracker/backend/internal/importer"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -43,12 +45,18 @@ type importConflictResponse struct {
 }
 
 // cashOperationDataResponse is the data of a Cash Operation that an Import Conflict compares.
-// The time is RFC 3339 text in UTC. The amount is decimal text.
+// The time is RFC 3339 text in UTC. The amount, the volume and the price are decimal text.
 type cashOperationDataResponse struct {
 	Type    string `json:"type"`
 	Time    string `json:"time"`
 	Amount  string `json:"amount"`
 	Comment string `json:"comment"`
+	// Ticker and PositionID are "" for an operation with none.
+	Ticker     string `json:"ticker"`
+	PositionID string `json:"positionId"`
+	// Volume and Price are null for an operation with none.
+	Volume *string `json:"volume"`
+	Price  *string `json:"price"`
 }
 
 // decisionRequest is the body of POST /api/imports/{id}/conflicts/{conflictId}.
@@ -236,11 +244,24 @@ func toImportConflictResponse(c store.ImportConflict) importConflictResponse {
 
 func toCashOperationDataResponse(d store.CashOperationData) cashOperationDataResponse {
 	return cashOperationDataResponse{
-		Type:    d.Type,
-		Time:    d.Time.UTC().Format(time.RFC3339),
-		Amount:  formatAmount(d.Amount),
-		Comment: d.Comment,
+		Type:       d.Type,
+		Time:       d.Time.UTC().Format(time.RFC3339),
+		Amount:     formatAmount(d.Amount),
+		Comment:    d.Comment,
+		Ticker:     d.Ticker,
+		PositionID: d.PositionID,
+		Volume:     nullDecimalText(d.Volume),
+		Price:      nullDecimalText(d.Price),
 	}
+}
+
+// nullDecimalText returns the decimal text of d, or nil if d is not valid.
+func nullDecimalText(d decimal.NullDecimal) *string {
+	if !d.Valid {
+		return nil
+	}
+	text := d.Decimal.String()
+	return &text
 }
 
 // writeImportError maps an error of the import service to a status.

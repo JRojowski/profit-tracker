@@ -54,12 +54,29 @@ type CashOperationData struct {
 	Time    time.Time
 	Amount  decimal.Decimal
 	Comment string
+	// Ticker and PositionID are "" for an operation with no Instrument or no Lot.
+	Ticker     string
+	PositionID string
+	// Volume and Price are not valid for an operation with no volume.
+	Volume decimal.NullDecimal
+	Price  decimal.NullDecimal
 }
 
-// Equal tells if d and o have the same type, time, amount and Comment.
-// It compares the amounts as numbers, so "1000" and "1000.00" are equal.
+// Equal tells if d and o have the same type, time, amount, Comment, ticker, position ID, volume and price.
+// It compares the amounts, volumes and prices as numbers, so "1000" and "1000.00" are equal.
+// A missing volume or price equals only a missing volume or price.
 func (d CashOperationData) Equal(o CashOperationData) bool {
-	return d.Type == o.Type && d.Time.Equal(o.Time) && d.Amount.Equal(o.Amount) && d.Comment == o.Comment
+	return d.Type == o.Type && d.Time.Equal(o.Time) && d.Amount.Equal(o.Amount) && d.Comment == o.Comment &&
+		d.Ticker == o.Ticker && d.PositionID == o.PositionID &&
+		nullEqual(d.Volume, o.Volume) && nullEqual(d.Price, o.Price)
+}
+
+// nullEqual tells if a and b are both missing, or both valid with the same number.
+func nullEqual(a, b decimal.NullDecimal) bool {
+	if !a.Valid || !b.Valid {
+		return a.Valid == b.Valid
+	}
+	return a.Decimal.Equal(b.Decimal)
 }
 
 // ImportConflict is one Import Conflict of an Import.
@@ -90,7 +107,10 @@ func (s *Store) KnownCashOperations(ctx context.Context, accountID int64) (map[s
 	}
 	known := make(map[string]CashOperationData, len(rows))
 	for _, row := range rows {
-		data, err := toCashOperationData(row.Type, row.Time, row.Amount, row.Comment)
+		data, err := withTime(row.Time, CashOperationData{
+			Type: row.Type, Amount: row.Amount, Comment: row.Comment,
+			Ticker: row.Ticker, PositionID: row.PositionID, Volume: row.Volume, Price: row.Price,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("cash operation %s of account %d: %w", row.XtbID, accountID, err)
 		}
@@ -235,17 +255,25 @@ func importConflicts(ctx context.Context, q *queries.Queries, importID int64) ([
 
 func insertImportConflict(ctx context.Context, q *queries.Queries, importID int64, c NewImportConflict) error {
 	err := q.InsertImportConflict(ctx, queries.InsertImportConflictParams{
-		ImportID:        importID,
-		Kind:            c.Kind,
-		XtbID:           c.XTBID,
-		ExistingType:    c.Existing.Type,
-		ExistingTime:    formatTime(c.Existing.Time),
-		ExistingAmount:  c.Existing.Amount,
-		ExistingComment: c.Existing.Comment,
-		NewType:         c.New.Type,
-		NewTime:         formatTime(c.New.Time),
-		NewAmount:       c.New.Amount,
-		NewComment:      c.New.Comment,
+		ImportID:           importID,
+		Kind:               c.Kind,
+		XtbID:              c.XTBID,
+		ExistingType:       c.Existing.Type,
+		ExistingTime:       formatTime(c.Existing.Time),
+		ExistingAmount:     c.Existing.Amount,
+		ExistingComment:    c.Existing.Comment,
+		ExistingTicker:     c.Existing.Ticker,
+		ExistingPositionID: c.Existing.PositionID,
+		ExistingVolume:     c.Existing.Volume,
+		ExistingPrice:      c.Existing.Price,
+		NewType:            c.New.Type,
+		NewTime:            formatTime(c.New.Time),
+		NewAmount:          c.New.Amount,
+		NewComment:         c.New.Comment,
+		NewTicker:          c.New.Ticker,
+		NewPositionID:      c.New.PositionID,
+		NewVolume:          c.New.Volume,
+		NewPrice:           c.New.Price,
 	})
 	if err != nil {
 		return fmt.Errorf("save import conflict %s of import %d: %w", c.XTBID, importID, err)
@@ -254,11 +282,17 @@ func insertImportConflict(ctx context.Context, q *queries.Queries, importID int6
 }
 
 func toImportConflict(row queries.ImportConflict) (ImportConflict, error) {
-	existing, err := toCashOperationData(row.ExistingType, row.ExistingTime, row.ExistingAmount, row.ExistingComment)
+	existing, err := withTime(row.ExistingTime, CashOperationData{
+		Type: row.ExistingType, Amount: row.ExistingAmount, Comment: row.ExistingComment,
+		Ticker: row.ExistingTicker, PositionID: row.ExistingPositionID, Volume: row.ExistingVolume, Price: row.ExistingPrice,
+	})
 	if err != nil {
 		return ImportConflict{}, fmt.Errorf("import conflict %d: %w", row.ID, err)
 	}
-	newData, err := toCashOperationData(row.NewType, row.NewTime, row.NewAmount, row.NewComment)
+	newData, err := withTime(row.NewTime, CashOperationData{
+		Type: row.NewType, Amount: row.NewAmount, Comment: row.NewComment,
+		Ticker: row.NewTicker, PositionID: row.NewPositionID, Volume: row.NewVolume, Price: row.NewPrice,
+	})
 	if err != nil {
 		return ImportConflict{}, fmt.Errorf("import conflict %d: %w", row.ID, err)
 	}
@@ -272,12 +306,14 @@ func toImportConflict(row queries.ImportConflict) (ImportConflict, error) {
 	}, nil
 }
 
-func toCashOperationData(typ, at string, amount decimal.Decimal, comment string) (CashOperationData, error) {
+// withTime returns d with the time from its text form in the database.
+func withTime(at string, d CashOperationData) (CashOperationData, error) {
 	t, err := time.Parse(timeLayout, at)
 	if err != nil {
 		return CashOperationData{}, fmt.Errorf("parse time %q: %w", at, err)
 	}
-	return CashOperationData{Type: typ, Time: t.UTC(), Amount: amount, Comment: comment}, nil
+	d.Time = t.UTC()
+	return d, nil
 }
 
 // formatTime returns the text form of t in the database.

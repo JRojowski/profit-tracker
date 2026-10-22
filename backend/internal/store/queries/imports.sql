@@ -42,8 +42,10 @@ ORDER BY i.imported_at DESC, i.id DESC;
 -- name: InsertImportConflict :exec
 INSERT INTO import_conflicts (import_id, kind, xtb_id,
                               existing_type, existing_time, existing_amount, existing_comment,
-                              new_type, new_time, new_amount, new_comment)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                              existing_ticker, existing_position_id, existing_volume, existing_price,
+                              new_type, new_time, new_amount, new_comment,
+                              new_ticker, new_position_id, new_volume, new_price)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ImportConflicts :many
 SELECT *

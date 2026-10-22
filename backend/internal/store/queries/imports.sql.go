@@ -61,7 +61,7 @@ const decideImportConflict = `-- name: DecideImportConflict :one
 UPDATE import_conflicts
 SET decision = ?
 WHERE id = ? AND import_id = ?
-RETURNING id, import_id, kind, xtb_id, existing_type, existing_time, existing_amount, existing_comment, new_type, new_time, new_amount, new_comment, decision
+RETURNING id, import_id, kind, xtb_id, existing_type, existing_time, existing_amount, existing_comment, new_type, new_time, new_amount, new_comment, decision, existing_ticker, existing_position_id, existing_volume, existing_price, new_ticker, new_position_id, new_volume, new_price
 `
 
 type DecideImportConflictParams struct {
@@ -87,12 +87,20 @@ func (q *Queries) DecideImportConflict(ctx context.Context, arg DecideImportConf
 		&i.NewAmount,
 		&i.NewComment,
 		&i.Decision,
+		&i.ExistingTicker,
+		&i.ExistingPositionID,
+		&i.ExistingVolume,
+		&i.ExistingPrice,
+		&i.NewTicker,
+		&i.NewPositionID,
+		&i.NewVolume,
+		&i.NewPrice,
 	)
 	return i, err
 }
 
 const importConflicts = `-- name: ImportConflicts :many
-SELECT id, import_id, kind, xtb_id, existing_type, existing_time, existing_amount, existing_comment, new_type, new_time, new_amount, new_comment, decision
+SELECT id, import_id, kind, xtb_id, existing_type, existing_time, existing_amount, existing_comment, new_type, new_time, new_amount, new_comment, decision, existing_ticker, existing_position_id, existing_volume, existing_price, new_ticker, new_position_id, new_volume, new_price
 FROM import_conflicts
 WHERE import_id = ?
 ORDER BY id
@@ -121,6 +129,14 @@ func (q *Queries) ImportConflicts(ctx context.Context, importID int64) ([]Import
 			&i.NewAmount,
 			&i.NewComment,
 			&i.Decision,
+			&i.ExistingTicker,
+			&i.ExistingPositionID,
+			&i.ExistingVolume,
+			&i.ExistingPrice,
+			&i.NewTicker,
+			&i.NewPositionID,
+			&i.NewVolume,
+			&i.NewPrice,
 		); err != nil {
 			return nil, err
 		}
@@ -151,22 +167,32 @@ func (q *Queries) ImportState(ctx context.Context, id int64) (string, error) {
 const insertImportConflict = `-- name: InsertImportConflict :exec
 INSERT INTO import_conflicts (import_id, kind, xtb_id,
                               existing_type, existing_time, existing_amount, existing_comment,
-                              new_type, new_time, new_amount, new_comment)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              existing_ticker, existing_position_id, existing_volume, existing_price,
+                              new_type, new_time, new_amount, new_comment,
+                              new_ticker, new_position_id, new_volume, new_price)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertImportConflictParams struct {
-	ImportID        int64
-	Kind            string
-	XtbID           string
-	ExistingType    string
-	ExistingTime    string
-	ExistingAmount  decimal.Decimal
-	ExistingComment string
-	NewType         string
-	NewTime         string
-	NewAmount       decimal.Decimal
-	NewComment      string
+	ImportID           int64
+	Kind               string
+	XtbID              string
+	ExistingType       string
+	ExistingTime       string
+	ExistingAmount     decimal.Decimal
+	ExistingComment    string
+	ExistingTicker     string
+	ExistingPositionID string
+	ExistingVolume     decimal.NullDecimal
+	ExistingPrice      decimal.NullDecimal
+	NewType            string
+	NewTime            string
+	NewAmount          decimal.Decimal
+	NewComment         string
+	NewTicker          string
+	NewPositionID      string
+	NewVolume          decimal.NullDecimal
+	NewPrice           decimal.NullDecimal
 }
 
 func (q *Queries) InsertImportConflict(ctx context.Context, arg InsertImportConflictParams) error {
@@ -178,10 +204,18 @@ func (q *Queries) InsertImportConflict(ctx context.Context, arg InsertImportConf
 		arg.ExistingTime,
 		arg.ExistingAmount,
 		arg.ExistingComment,
+		arg.ExistingTicker,
+		arg.ExistingPositionID,
+		arg.ExistingVolume,
+		arg.ExistingPrice,
 		arg.NewType,
 		arg.NewTime,
 		arg.NewAmount,
 		arg.NewComment,
+		arg.NewTicker,
+		arg.NewPositionID,
+		arg.NewVolume,
+		arg.NewPrice,
 	)
 	return err
 }

@@ -20,7 +20,7 @@ import type {
   ConflictDecision,
   ImportConflict,
 } from "@/lib/api"
-import { formatAmount } from "@/lib/format"
+import { formatAmount, formatVolume } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type ImportConflictsCardProps = {
@@ -30,6 +30,9 @@ type ImportConflictsCardProps = {
   busy: boolean
   onDecide: (conflictId: number, decision: ConflictDecision) => void
 }
+
+// none marks a field that the Cash Operation does not have.
+const none = "—"
 
 // fields are the rows of the comparison table, in display order.
 const fields: {
@@ -49,6 +52,23 @@ const fields: {
     format: (data, currency) => formatAmount(data.amount, currency),
   },
   { key: "comment", label: "Comment", format: (data) => data.comment },
+  { key: "ticker", label: "Ticker", format: (data) => data.ticker || none },
+  {
+    key: "positionId",
+    label: "Position ID",
+    format: (data) => data.positionId || none,
+  },
+  {
+    key: "volume",
+    label: "Volume",
+    format: (data) => (data.volume === null ? none : formatVolume(data.volume)),
+  },
+  {
+    key: "price",
+    label: "Price",
+    // The price is in the Instrument currency, which can differ from the Account currency.
+    format: (data) => (data.price === null ? none : formatVolume(data.price)),
+  },
 ]
 
 const decisionLabels: Record<ConflictDecision, string> = {
