@@ -80,9 +80,9 @@ export function DashboardPage() {
   function handleRenamed(renamed: Account) {
     setAccounts(
       (list) =>
-        list?.map((account) =>
-          account.id === renamed.id ? renamed : account
-        ) ?? null
+        list
+          ?.map((account) => (account.id === renamed.id ? renamed : account))
+          .sort(byNameThenId) ?? null
     )
     setRenaming(false)
   }
@@ -174,4 +174,10 @@ export function DashboardPage() {
       )}
     </div>
   )
+}
+
+// byNameThenId sorts the Accounts in the order of GET /api/accounts.
+function byNameThenId(a: Account, b: Account): number {
+  if (a.name !== b.name) return a.name < b.name ? -1 : 1
+  return a.id - b.id
 }

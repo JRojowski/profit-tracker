@@ -7,3 +7,6 @@ exports/
 bin/
 backend/internal/web/dist/*
 !backend/internal/web/dist/.gitkeep
+
+# Playwright MCP snapshots, screenshots and test uploads.
+.playwright-mcp/
