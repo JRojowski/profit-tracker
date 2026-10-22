@@ -8,6 +8,7 @@ export type AccountType = (typeof accountTypes)[number]
 
 export type Account = {
   id: number
+  accountNumber: string
   name: string
   type: AccountType
   currency: string
@@ -105,4 +106,55 @@ export async function fetchImports(
 ): Promise<ImportSummary[]> {
   const response = await fetch("/api/imports", { signal })
   return readJSON<ImportSummary[]>(response)
+}
+
+// AccountSummary holds the values that the backend calculates from the Ledger.
+// Amounts are decimal text in the Account currency.
+export type AccountSummary = {
+  accountId: number
+  currency: string
+  cash: string
+  netDeposits: string
+}
+
+// Holding holds all open Lots of one Instrument. Volumes and amounts are decimal text.
+export type Holding = {
+  ticker: string
+  name: string
+  volume: string
+  cost: string
+  averageCost: string
+}
+
+export async function fetchAccounts(signal?: AbortSignal): Promise<Account[]> {
+  const response = await fetch("/api/accounts", { signal })
+  return readJSON<Account[]>(response)
+}
+
+export async function renameAccount(
+  id: number,
+  name: string
+): Promise<Account> {
+  const response = await fetch(`/api/accounts/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+  return readJSON<Account>(response)
+}
+
+export async function fetchAccountSummary(
+  id: number,
+  signal?: AbortSignal
+): Promise<AccountSummary> {
+  const response = await fetch(`/api/accounts/${id}/summary`, { signal })
+  return readJSON<AccountSummary>(response)
+}
+
+export async function fetchHoldings(
+  id: number,
+  signal?: AbortSignal
+): Promise<Holding[]> {
+  const response = await fetch(`/api/accounts/${id}/holdings`, { signal })
+  return readJSON<Holding[]>(response)
 }

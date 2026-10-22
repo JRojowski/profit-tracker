@@ -16,14 +16,6 @@ import (
 // maxUploadBytes is the largest export file that the API accepts. A full-history export is far smaller.
 const maxUploadBytes = 32 << 20
 
-// accountResponse is an Account in a response.
-type accountResponse struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Currency string `json:"currency"`
-}
-
 // previewResponse is the body of POST /api/imports.
 type previewResponse struct {
 	ID                    int64            `json:"id"`
@@ -87,7 +79,8 @@ func (a *api) previewImport(w http.ResponseWriter, r *http.Request) {
 		SkippedCashOperations: preview.SkippedCashOperations,
 	}
 	if acc := preview.Account; acc != nil {
-		resp.Account = &accountResponse{ID: acc.ID, Name: acc.Name, Type: acc.Type, Currency: acc.Currency}
+		accResp := toAccountResponse(*acc)
+		resp.Account = &accResp
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

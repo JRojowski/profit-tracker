@@ -96,6 +96,89 @@ func (q *Queries) InsertLotFill(ctx context.Context, arg InsertLotFillParams) er
 	return err
 }
 
+const ledgerCashOperations = `-- name: LedgerCashOperations :many
+SELECT type, amount, position_id
+FROM cash_operations
+WHERE account_id = ?
+ORDER BY time, id
+`
+
+type LedgerCashOperationsRow struct {
+	Type       string
+	Amount     decimal.Decimal
+	PositionID sql.NullString
+}
+
+func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]LedgerCashOperationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, ledgerCashOperations, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LedgerCashOperationsRow
+	for rows.Next() {
+		var i LedgerCashOperationsRow
+		if err := rows.Scan(&i.Type, &i.Amount, &i.PositionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ledgerFills = `-- name: LedgerFills :many
+SELECT l.position_id, i.ticker, i.name AS instrument_name, c.volume, c.amount
+FROM lots l
+JOIN instruments i ON i.id = l.instrument_id
+JOIN lot_fills f ON f.lot_id = l.id
+JOIN cash_operations c ON c.id = f.cash_operation_id
+WHERE l.account_id = ?
+ORDER BY l.position_id, c.time, c.id
+`
+
+type LedgerFillsRow struct {
+	PositionID     string
+	Ticker         string
+	InstrumentName string
+	Volume         decimal.NullDecimal
+	Amount         decimal.Decimal
+}
+
+func (q *Queries) LedgerFills(ctx context.Context, accountID int64) ([]LedgerFillsRow, error) {
+	rows, err := q.db.QueryContext(ctx, ledgerFills, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LedgerFillsRow
+	for rows.Next() {
+		var i LedgerFillsRow
+		if err := rows.Scan(
+			&i.PositionID,
+			&i.Ticker,
+			&i.InstrumentName,
+			&i.Volume,
+			&i.Amount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertInstrument = `-- name: UpsertInstrument :one
 INSERT INTO instruments (ticker, name, category)
 VALUES (?, ?, ?)

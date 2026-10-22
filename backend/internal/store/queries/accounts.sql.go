@@ -9,6 +9,25 @@ import (
 	"context"
 )
 
+const accountByID = `-- name: AccountByID :one
+SELECT id, account_number, name, type, currency
+FROM accounts
+WHERE id = ?
+`
+
+func (q *Queries) AccountByID(ctx context.Context, id int64) (Account, error) {
+	row := q.db.QueryRowContext(ctx, accountByID, id)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.AccountNumber,
+		&i.Name,
+		&i.Type,
+		&i.Currency,
+	)
+	return i, err
+}
+
 const accountByNumber = `-- name: AccountByNumber :one
 SELECT id, account_number, name, type, currency
 FROM accounts
@@ -26,6 +45,41 @@ func (q *Queries) AccountByNumber(ctx context.Context, accountNumber string) (Ac
 		&i.Currency,
 	)
 	return i, err
+}
+
+const accounts = `-- name: Accounts :many
+SELECT id, account_number, name, type, currency
+FROM accounts
+ORDER BY name, id
+`
+
+func (q *Queries) Accounts(ctx context.Context) ([]Account, error) {
+	rows, err := q.db.QueryContext(ctx, accounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Account
+	for rows.Next() {
+		var i Account
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountNumber,
+			&i.Name,
+			&i.Type,
+			&i.Currency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const createAccount = `-- name: CreateAccount :one
@@ -51,4 +105,29 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (i
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const renameAccount = `-- name: RenameAccount :one
+UPDATE accounts
+SET name = ?
+WHERE id = ?
+RETURNING id, account_number, name, type, currency
+`
+
+type RenameAccountParams struct {
+	Name string
+	ID   int64
+}
+
+func (q *Queries) RenameAccount(ctx context.Context, arg RenameAccountParams) (Account, error) {
+	row := q.db.QueryRowContext(ctx, renameAccount, arg.Name, arg.ID)
+	var i Account
+	err := row.Scan(
+		&i.ID,
+		&i.AccountNumber,
+		&i.Name,
+		&i.Type,
+		&i.Currency,
+	)
+	return i, err
 }

@@ -4,11 +4,11 @@
 
 **Blocked by:** 02 (Import an export into a new Account).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `GET /api/accounts` lists the Accounts. `PATCH /api/accounts/{id}` changes the name.
-- [ ] `GET /api/accounts/{id}/summary` returns the cash balance and the Net Deposits.
-- [ ] `GET /api/accounts/{id}/holdings` returns one row per Instrument with the open volume and the average cost.
-- [ ] A pure Ledger calculator produces these values. No table stores Holdings or balances.
-- [ ] The dashboard has an Account selector, the summary tiles and the Holdings table.
-- [ ] API tests check the values for a synthetic export with deposits and purchases of two Instruments.
+- [x] `GET /api/accounts` lists the Accounts. `PATCH /api/accounts/{id}` changes the name.
+- [x] `GET /api/accounts/{id}/summary` returns the cash balance and the Net Deposits.
+- [x] `GET /api/accounts/{id}/holdings` returns one row per Instrument with the open volume and the average cost.
+- [x] A pure Ledger calculator produces these values. No table stores Holdings or balances.
+- [x] The dashboard has an Account selector, the summary tiles and the Holdings table.
+- [x] API tests check the values for a synthetic export with deposits and purchases of two Instruments.

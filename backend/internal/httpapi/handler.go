@@ -31,6 +31,10 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("POST /api/imports", a.previewImport)
 	mux.HandleFunc("POST /api/imports/{id}/confirm", a.confirmImport)
 	mux.HandleFunc("GET /api/imports", a.listImports)
+	mux.HandleFunc("GET /api/accounts", a.listAccounts)
+	mux.HandleFunc("PATCH /api/accounts/{id}", a.renameAccount)
+	mux.HandleFunc("GET /api/accounts/{id}/summary", a.accountSummary)
+	mux.HandleFunc("GET /api/accounts/{id}/holdings", a.accountHoldings)
 	mux.HandleFunc("/api/", notFound)
 	mux.Handle("/", frontendHandler(opts.Frontend))
 	return mux

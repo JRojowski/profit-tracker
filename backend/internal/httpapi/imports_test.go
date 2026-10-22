@@ -31,10 +31,11 @@ type previewResponse struct {
 
 // accountResponse is an Account in an API response.
 type accountResponse struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Currency string `json:"currency"`
+	ID            int64  `json:"id"`
+	AccountNumber string `json:"accountNumber"`
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	Currency      string `json:"currency"`
 }
 
 // importResponse is one saved Import in GET /api/imports and in the confirm response.
@@ -147,7 +148,7 @@ func TestImportConfirm_NewAccount_SavesAccountAndListsImport(t *testing.T) {
 
 	again := srv.preview(t, usdExport())
 	require.NotNil(t, again.Account, "the account number is known after the confirmation")
-	assert.Equal(t, accountResponse{ID: got.AccountID, Name: "XTB USD", Type: "regular", Currency: "USD"}, *again.Account)
+	assert.Equal(t, accountResponse{ID: got.AccountID, AccountNumber: "56000001", Name: "XTB USD", Type: "regular", Currency: "USD"}, *again.Account)
 }
 
 func TestImportConfirm_KnownAccount_GoesToSameAccountWithNoBody(t *testing.T) {

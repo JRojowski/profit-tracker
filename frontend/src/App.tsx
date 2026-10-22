@@ -3,16 +3,17 @@ import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { fetchHealth } from "@/lib/api"
+import { DashboardPage } from "@/pages/dashboard-page"
 import { ImportPage } from "@/pages/import-page"
 import { ImportsPage } from "@/pages/imports-page"
 
 type BackendState = "checking" | "ok" | "unavailable"
 
-type Page = "import" | "imports"
+type Page = "dashboard" | "import" | "imports"
 
 export function App() {
   const [backend, setBackend] = useState<BackendState>("checking")
-  const [page, setPage] = useState<Page>("import")
+  const [page, setPage] = useState<Page>("dashboard")
 
   useEffect(() => {
     const controller = new AbortController()
@@ -37,9 +38,13 @@ export function App() {
       <main className="flex flex-1 flex-col gap-4 p-6">
         <Tabs value={page} onValueChange={(value) => setPage(value as Page)}>
           <TabsList>
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="import">Import</TabsTrigger>
             <TabsTrigger value="imports">Imports</TabsTrigger>
           </TabsList>
+          <TabsContent value="dashboard">
+            <DashboardPage />
+          </TabsContent>
           <TabsContent value="import">
             <ImportPage onImported={() => setPage("imports")} />
           </TabsContent>
