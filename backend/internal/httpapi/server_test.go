@@ -1,10 +1,12 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -85,4 +87,50 @@ func (s *testServer) getJSON(t *testing.T, path string, v any) int {
 	require.True(t, strings.HasPrefix(contentType, "application/json"), "content type %q, body %q", contentType, body)
 	require.NoError(t, json.Unmarshal([]byte(body), v), "body %q", body)
 	return status
+}
+
+// upload sends data as the multipart field "file" with the file name to path.
+// It returns the status and the body.
+func (s *testServer) upload(t *testing.T, path, fileName string, data []byte) (status int, body string) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	form := multipart.NewWriter(&buf)
+	part, err := form.CreateFormFile("file", fileName)
+	require.NoError(t, err)
+	_, err = part.Write(data)
+	require.NoError(t, err)
+	require.NoError(t, form.Close())
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.URL+path, &buf)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	resp, err := s.client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	got, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, string(got)
+}
+
+// postJSON sends v as a JSON body to path. A nil v sends no body.
+// It returns the status and the body.
+func (s *testServer) postJSON(t *testing.T, path string, v any) (status int, body string) {
+	t.Helper()
+
+	var reqBody io.Reader
+	if v != nil {
+		data, err := json.Marshal(v)
+		require.NoError(t, err)
+		reqBody = bytes.NewReader(data)
+	}
+	status, _, body = s.do(t, http.MethodPost, path, reqBody)
+	return status, body
+}
+
+// decode decodes the JSON body into v and stops the test if it is not valid JSON.
+func decode(t *testing.T, body string, v any) {
+	t.Helper()
+	require.NoError(t, json.Unmarshal([]byte(body), v), "body %q", body)
 }

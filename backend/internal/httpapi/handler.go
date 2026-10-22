@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/importer"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
@@ -23,10 +24,13 @@ type Options struct {
 
 // NewHandler returns the handler for the API routes and the frontend.
 func NewHandler(opts Options) http.Handler {
-	a := &api{store: opts.Store, logger: opts.Logger}
+	a := &api{store: opts.Store, importer: importer.NewService(opts.Store), logger: opts.Logger}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
+	mux.HandleFunc("POST /api/imports", a.previewImport)
+	mux.HandleFunc("POST /api/imports/{id}/confirm", a.confirmImport)
+	mux.HandleFunc("GET /api/imports", a.listImports)
 	mux.HandleFunc("/api/", notFound)
 	mux.Handle("/", frontendHandler(opts.Frontend))
 	return mux
@@ -34,8 +38,9 @@ func NewHandler(opts Options) http.Handler {
 
 // api holds the dependencies of the API handlers.
 type api struct {
-	store  *store.Store
-	logger *slog.Logger
+	store    *store.Store
+	importer *importer.Service
+	logger   *slog.Logger
 }
 
 // errorResponse is the JSON body of each API error.
@@ -45,7 +50,7 @@ type errorResponse struct {
 
 // notFound answers an unknown /api path. It never returns the frontend.
 func notFound(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotFound, errorResponse{Error: "no API route for " + r.Method + " " + r.URL.Path})
+	writeError(w, http.StatusNotFound, "no API route for "+r.Method+" "+r.URL.Path)
 }
 
 // writeJSON writes v as a JSON body with the status.
