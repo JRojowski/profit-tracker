@@ -19,6 +19,7 @@ import type {
   CashOperationData,
   ConflictDecision,
   ImportConflict,
+  ProfitCheck,
 } from "@/lib/api"
 import { formatAmount, formatVolume } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -74,6 +75,13 @@ const fields: {
 const decisionLabels: Record<ConflictDecision, string> = {
   "keep-existing": "Keep existing",
   "use-new": "Use new",
+  accept: "Accept",
+}
+
+// decisionsByKind are the decisions that the backend accepts for each conflict kind.
+const decisionsByKind: Record<ImportConflict["kind"], ConflictDecision[]> = {
+  "changed-data": ["keep-existing", "use-new"],
+  "check-mismatch": ["accept"],
 }
 
 export function ImportConflictsCard({
@@ -91,9 +99,11 @@ export function ImportConflictsCard({
       <CardHeader>
         <CardTitle>Import Conflicts</CardTitle>
         <CardDescription>
-          These Cash Operations have a known XTB ID but different data. Select
-          the data to keep for each one. You can confirm the Import when each
-          conflict has a decision.
+          A Cash Operation with a known XTB ID but different data needs a
+          decision: keep the stored data or use the new data. A sale with a
+          Realized Profit that differs from Closed Positions by more than 0.01
+          needs your acceptance. You can confirm the Import when each conflict
+          has a decision.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -106,6 +116,9 @@ export function ImportConflictsCard({
           <div key={conflict.id} className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium">
+                {conflict.kind === "check-mismatch"
+                  ? "Realized Profit check, sale"
+                  : "Changed data,"}{" "}
                 XTB ID {conflict.xtbId}
               </span>
               {conflict.decision === null ? (
@@ -114,44 +127,19 @@ export function ImportConflictsCard({
                 <Badge>{decisionLabels[conflict.decision]}</Badge>
               )}
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead />
-                  <TableHead>Stored data</TableHead>
-                  <TableHead>New data</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {fields.map((field) => {
-                  const changed =
-                    conflict.existing[field.key] !== conflict.new[field.key]
-                  return (
-                    <TableRow key={field.key}>
-                      <TableCell className="text-muted-foreground">
-                        {field.label}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "whitespace-normal",
-                          changed && "font-medium"
-                        )}
-                      >
-                        {field.format(conflict.existing, currency)}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "whitespace-normal",
-                          changed && "font-medium"
-                        )}
-                      >
-                        {field.format(conflict.new, currency)}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+            {conflict.kind === "check-mismatch" ? (
+              <ProfitCheckTable
+                sale={conflict.new}
+                check={conflict.check}
+                currency={currency}
+              />
+            ) : (
+              <ChangedDataTable
+                existing={conflict.existing}
+                incoming={conflict.new}
+                currency={currency}
+              />
+            )}
             <ToggleGroup
               type="single"
               variant="outline"
@@ -163,16 +151,101 @@ export function ImportConflictsCard({
                 if (value) onDecide(conflict.id, value as ConflictDecision)
               }}
             >
-              <ToggleGroupItem value="keep-existing">
-                {decisionLabels["keep-existing"]}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="use-new">
-                {decisionLabels["use-new"]}
-              </ToggleGroupItem>
+              {decisionsByKind[conflict.kind].map((decision) => (
+                <ToggleGroupItem key={decision} value={decision}>
+                  {decisionLabels[decision]}
+                </ToggleGroupItem>
+              ))}
             </ToggleGroup>
           </div>
         ))}
       </CardContent>
     </Card>
+  )
+}
+
+type ChangedDataTableProps = {
+  existing: CashOperationData
+  incoming: CashOperationData
+  currency: string
+}
+
+// ChangedDataTable compares the stored data and the new data of a Cash Operation.
+function ChangedDataTable({
+  existing,
+  incoming,
+  currency,
+}: ChangedDataTableProps) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead />
+          <TableHead>Stored data</TableHead>
+          <TableHead>New data</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {fields.map((field) => {
+          const changed = existing[field.key] !== incoming[field.key]
+          return (
+            <TableRow key={field.key}>
+              <TableCell className="text-muted-foreground">
+                {field.label}
+              </TableCell>
+              <TableCell
+                className={cn("whitespace-normal", changed && "font-medium")}
+              >
+                {field.format(existing, currency)}
+              </TableCell>
+              <TableCell
+                className={cn("whitespace-normal", changed && "font-medium")}
+              >
+                {field.format(incoming, currency)}
+              </TableCell>
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
+  )
+}
+
+type ProfitCheckTableProps = {
+  sale: CashOperationData
+  check: ProfitCheck
+  currency: string
+}
+
+// ProfitCheckTable shows the Realized Profit of a sale next to the Profit/Loss in Closed Positions.
+function ProfitCheckTable({ sale, check, currency }: ProfitCheckTableProps) {
+  return (
+    <Table>
+      <TableBody>
+        <TableRow>
+          <TableCell className="text-muted-foreground">Sale</TableCell>
+          <TableCell className="text-right whitespace-normal">
+            {sale.ticker} · {new Date(sale.time).toLocaleString()} ·{" "}
+            {sale.comment}
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell className="text-muted-foreground">
+            Realized Profit from the Ledger
+          </TableCell>
+          <TableCell className="text-right tabular-nums">
+            {formatAmount(check.calculated, currency)}
+          </TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell className="text-muted-foreground">
+            Profit/Loss in Closed Positions
+          </TableCell>
+          <TableCell className="text-right tabular-nums">
+            {formatAmount(check.closedPositions, currency)}
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
   )
 }

@@ -24,6 +24,8 @@ var (
 	ErrUnknownOperationType = errors.New("unknown cash operation type")
 	// ErrInvalidRow tells that a Cash Operation row has a value that the reader cannot use.
 	ErrInvalidRow = errors.New("invalid cash operation row")
+	// ErrInvalidClosedPosition tells that a Closed Positions row has a value that the reader cannot use.
+	ErrInvalidClosedPosition = errors.New("invalid closed position row")
 )
 
 // OperationType is the type of a Cash Operation, as the export writes it.
@@ -33,13 +35,17 @@ type OperationType string
 const (
 	TypeDeposit       OperationType = "Deposit"
 	TypeStockPurchase OperationType = "Stock purchase"
+	TypeStockSell     OperationType = "Stock sell"
 )
 
 // knownTypes are the types that the reader accepts. A later ticket adds the other types of the spec.
-var knownTypes = []OperationType{TypeDeposit, TypeStockPurchase}
+var knownTypes = []OperationType{TypeDeposit, TypeStockPurchase, TypeStockSell}
 
-// sheetCashOperations is the name of the sheet with the Cash Operations.
-const sheetCashOperations = "Cash Operations"
+// Sheet names of the export.
+const (
+	sheetCashOperations  = "Cash Operations"
+	sheetClosedPositions = "Closed Positions"
+)
 
 // cashHeader is row 5 of the Cash Operations sheet.
 var cashHeader = []string{"Type", "Instrument", "Ticker", "Category", "Time", "Amount", "ID", "Comment", "Product", "Position ID"}
@@ -60,6 +66,26 @@ const (
 	colPositionID = 9
 )
 
+// closedHeader is row 5 of the Closed Positions sheet.
+var closedHeader = []string{
+	"Instrument", "Ticker", "Category", "Type", "Volume", "Open Price", "Open Time (UTC)",
+	"Close Price", "Close Time (UTC)", "Product", "Profit/Loss", "Gross Profit", "Purchase Value",
+	"Sale Value", "Stop Loss", "Take Profit", "Commission", "Margin", "Swap", "Rollover",
+	"Open Conversion Rate", "Close Conversion Rate", "Close Origin", "Position ID", "Comment",
+}
+
+// Columns of the Closed Positions sheet. The rows and the header row are the same as in the Cash Operations sheet.
+const (
+	colClosedTicker     = 1
+	colClosedVolume     = 4
+	colClosedCloseTime  = 8
+	colClosedProfitLoss = 10
+	colClosedPositionID = 23
+)
+
+// closedSummary is the text in column A of the summary row under the Closed Positions rows.
+const closedSummary = "Profit/loss"
+
 // Export is the content of one XTB export that the tool uses.
 type Export struct {
 	// AccountNumber is the broker account number from row 1.
@@ -68,6 +94,23 @@ type Export struct {
 	CashOperations []CashOperation
 	// Total is the amount in the Total row of the Cash Operations sheet.
 	Total decimal.Decimal
+	// ClosedPositions are the rows of the Closed Positions sheet, in the order of the file.
+	ClosedPositions []ClosedPosition
+}
+
+// ClosedPosition is one row of the Closed Positions sheet: one closed part of a Lot.
+// The tool uses it only to check its Realized Profit. See ADR 0001.
+type ClosedPosition struct {
+	// Row is the row number in the sheet, for error messages.
+	Row    int
+	Ticker string
+	// PositionID is the Lot ID, in the same form as in the Cash Operations sheet.
+	PositionID string
+	// Volume is the closed volume.
+	Volume    decimal.Decimal
+	CloseTime time.Time
+	// ProfitLoss is the profit of the closed part that the broker calculated, in the Account currency.
+	ProfitLoss decimal.Decimal
 }
 
 // CashOperation is one row of the Cash Operations sheet.
@@ -89,6 +132,8 @@ type CashOperation struct {
 	PositionID string
 	// Purchase is the parsed Comment of a Stock purchase. It is nil for the other types.
 	Purchase *Purchase
+	// Sale is the parsed Comment of a Stock sell. It is nil for the other types.
+	Sale *Sale
 }
 
 // Purchase is the parsed Comment of a Stock purchase, for example "OPEN BUY FPS.US 1/1.27 @ 39.24".
@@ -101,9 +146,23 @@ type Purchase struct {
 	Price decimal.Decimal
 }
 
-// purchaseComment matches "OPEN BUY [TICKER] <volume>[/<order volume>] @ <price>".
+// Sale is the parsed Comment of a Stock sell, for example "CLOSE BUY 9/10 @ 10.26".
+type Sale struct {
+	// Volume is the closed volume of the Lot. ADR 0001: the number before the slash.
+	Volume decimal.Decimal
+	// OrderVolume is the volume of the full sell order, which can close more than one Lot.
+	// It is Volume when the Comment has no order volume.
+	OrderVolume decimal.Decimal
+	// Price is the price of one unit.
+	Price decimal.Decimal
+}
+
+// The Comments of purchases and sales: "<prefix> [TICKER] <volume>[/<order volume>] @ <price>".
 // The ticker must contain a letter. Thus the volume never matches as a ticker.
-var purchaseComment = regexp.MustCompile(`^OPEN BUY (?:\S*[A-Za-z]\S* )?(\d+(?:\.\d+)?)(?:/(\d+(?:\.\d+)?))? @ (\d+(?:\.\d+)?)$`)
+var (
+	purchaseComment = regexp.MustCompile(`^OPEN BUY (?:\S*[A-Za-z]\S* )?(\d+(?:\.\d+)?)(?:/(\d+(?:\.\d+)?))? @ (\d+(?:\.\d+)?)$`)
+	saleComment     = regexp.MustCompile(`^CLOSE BUY (?:\S*[A-Za-z]\S* )?(\d+(?:\.\d+)?)(?:/(\d+(?:\.\d+)?))? @ (\d+(?:\.\d+)?)$`)
+)
 
 // fileCurrency matches the currency prefix of an export file name, for example "USD_".
 var fileCurrency = regexp.MustCompile(`^([A-Z]{3})_`)
@@ -133,7 +192,77 @@ func Read(data []byte) (Export, error) {
 	if err != nil {
 		return Export{}, fmt.Errorf("read %s sheet: %w", sheetCashOperations, err)
 	}
-	return readCashOperations(rows)
+	export, err := readCashOperations(rows)
+	if err != nil {
+		return Export{}, err
+	}
+
+	if idx, err := f.GetSheetIndex(sheetClosedPositions); err != nil || idx < 0 {
+		return Export{}, fmt.Errorf("%w: it has no %q sheet", ErrNotExport, sheetClosedPositions)
+	}
+	rows, err = f.GetRows(sheetClosedPositions, excelize.Options{RawCellValue: true})
+	if err != nil {
+		return Export{}, fmt.Errorf("read %s sheet: %w", sheetClosedPositions, err)
+	}
+	export.ClosedPositions, err = readClosedPositions(rows)
+	if err != nil {
+		return Export{}, err
+	}
+	return export, nil
+}
+
+// readClosedPositions reads the rows of the Closed Positions sheet, up to the summary row.
+func readClosedPositions(rows [][]string) ([]ClosedPosition, error) {
+	if len(rows) < headerRow {
+		return nil, fmt.Errorf("%w: the %q sheet has no header in row %d", ErrNotExport, sheetClosedPositions, headerRow)
+	}
+	if header := rows[headerRow-1]; len(header) < len(closedHeader) || !slices.Equal(header[:len(closedHeader)], closedHeader) {
+		return nil, fmt.Errorf("%w: the %q sheet has an unknown header in row %d", ErrNotExport, sheetClosedPositions, headerRow)
+	}
+
+	var positions []ClosedPosition
+	for i := firstRow - 1; i < len(rows); i++ {
+		row, rowNumber := rows[i], i+1
+		first := strings.TrimSpace(cellAt(row, 0))
+		if first == closedSummary {
+			break
+		}
+		if first == "" && strings.TrimSpace(cellAt(row, colClosedPositionID)) == "" {
+			continue
+		}
+		p, err := readClosedPosition(row, rowNumber)
+		if err != nil {
+			return nil, err
+		}
+		positions = append(positions, p)
+	}
+	return positions, nil
+}
+
+// readClosedPosition reads one row of the Closed Positions sheet.
+func readClosedPosition(row []string, rowNumber int) (ClosedPosition, error) {
+	invalid := func(column, value string) error {
+		return fmt.Errorf("%w: row %d has the %s %q, which is not valid", ErrInvalidClosedPosition, rowNumber, column, value)
+	}
+	p := ClosedPosition{Row: rowNumber, Ticker: strings.TrimSpace(cellAt(row, colClosedTicker))}
+
+	// The export writes the Position ID as a Java double, for example "2.636532207E9".
+	id, err := decimal.NewFromString(cellAt(row, colClosedPositionID))
+	if err != nil || !id.IsInteger() || id.IsNegative() {
+		return ClosedPosition{}, invalid("position ID", cellAt(row, colClosedPositionID))
+	}
+	p.PositionID = id.String()
+
+	if p.Volume, err = decimal.NewFromString(cellAt(row, colClosedVolume)); err != nil {
+		return ClosedPosition{}, invalid("volume", cellAt(row, colClosedVolume))
+	}
+	if p.CloseTime, err = serialTime(cellAt(row, colClosedCloseTime)); err != nil {
+		return ClosedPosition{}, invalid("close time", cellAt(row, colClosedCloseTime))
+	}
+	if p.ProfitLoss, err = decimal.NewFromString(cellAt(row, colClosedProfitLoss)); err != nil {
+		return ClosedPosition{}, invalid("profit/loss", cellAt(row, colClosedProfitLoss))
+	}
+	return p, nil
 }
 
 // readCashOperations reads the rows of the Cash Operations sheet.
@@ -199,33 +328,51 @@ func readCashOperation(row []string, rowNumber int, typ OperationType) (CashOper
 	}
 	op.Time = at
 
+	if typ != TypeStockPurchase && typ != TypeStockSell {
+		return op, nil
+	}
+	if op.Ticker == "" || op.PositionID == "" {
+		return CashOperation{}, fmt.Errorf("%w: the %s in row %d has no ticker or no position ID", ErrInvalidRow, typ, rowNumber)
+	}
 	if typ == TypeStockPurchase {
-		if op.Ticker == "" || op.PositionID == "" {
-			return CashOperation{}, fmt.Errorf("%w: the %s in row %d has no ticker or no position ID", ErrInvalidRow, typ, rowNumber)
-		}
-		purchase, err := parsePurchase(op.Comment)
+		volume, orderVolume, price, err := parseComment(purchaseComment, "purchase", "OPEN BUY", op.Comment)
 		if err != nil {
 			return CashOperation{}, fmt.Errorf("%w: row %d: %w", ErrInvalidRow, rowNumber, err)
 		}
-		op.Purchase = &purchase
+		op.Purchase = &Purchase{Volume: volume, OrderVolume: orderVolume, Price: price}
+		return op, nil
 	}
+	volume, orderVolume, price, err := parseComment(saleComment, "sale", "CLOSE BUY", op.Comment)
+	if err != nil {
+		return CashOperation{}, fmt.Errorf("%w: row %d: %w", ErrInvalidRow, rowNumber, err)
+	}
+	op.Sale = &Sale{Volume: volume, OrderVolume: orderVolume, Price: price}
 	return op, nil
 }
 
-// parsePurchase parses the Comment of a Stock purchase.
+// parseComment parses the Comment of a purchase or a sale with the regular expression re.
 // It accepts the Comment with and without the ticker, and with and without the order volume.
-func parsePurchase(comment string) (Purchase, error) {
-	m := purchaseComment.FindStringSubmatch(comment)
+// The order volume is the volume when the Comment has no order volume.
+// It rejects a zero volume and a zero order volume.
+func parseComment(re *regexp.Regexp, kind, prefix, comment string) (volume, orderVolume, price decimal.Decimal, err error) {
+	m := re.FindStringSubmatch(comment)
 	if m == nil {
-		return Purchase{}, fmt.Errorf("the purchase comment %q does not have the form \"OPEN BUY [TICKER] <volume> @ <price>\"", comment)
+		return decimal.Decimal{}, decimal.Decimal{}, decimal.Decimal{},
+			fmt.Errorf("the %s comment %q does not have the form \"%s [TICKER] <volume> @ <price>\"", kind, comment, prefix)
 	}
 	// The regular expression accepts only decimal digits. Thus these conversions cannot fail.
-	volume := decimal.RequireFromString(m[1])
-	orderVolume := volume
+	volume = decimal.RequireFromString(m[1])
+	orderVolume = volume
 	if m[2] != "" {
 		orderVolume = decimal.RequireFromString(m[2])
 	}
-	return Purchase{Volume: volume, OrderVolume: orderVolume, Price: decimal.RequireFromString(m[3])}, nil
+	// The regular expression accepts no sign. Thus a volume that is not positive is zero.
+	// A zero volume gives no Lot volume to divide by, and a sale with it closes nothing. See ADR 0001.
+	if volume.IsZero() || orderVolume.IsZero() {
+		return decimal.Decimal{}, decimal.Decimal{}, decimal.Decimal{},
+			fmt.Errorf("the %s comment %q has a zero volume or a zero order volume", kind, comment)
+	}
+	return volume, orderVolume, decimal.RequireFromString(m[3]), nil
 }
 
 // excelEpoch is day 0 of the Excel serial dates.

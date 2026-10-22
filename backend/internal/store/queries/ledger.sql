@@ -48,7 +48,7 @@ INSERT INTO lot_fills (lot_id, cash_operation_id)
 VALUES (?, ?);
 
 -- name: LedgerCashOperations :many
-SELECT type, amount, position_id
+SELECT xtb_id, type, time, amount, position_id, volume
 FROM cash_operations
 WHERE account_id = ?
 ORDER BY time, id;

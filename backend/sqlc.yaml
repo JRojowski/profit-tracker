@@ -15,7 +15,7 @@ sql:
           - column: cash_operations.price
             go_type: github.com/shopspring/decimal.NullDecimal
           - column: import_conflicts.existing_amount
-            go_type: github.com/shopspring/decimal.Decimal
+            go_type: github.com/shopspring/decimal.NullDecimal
           - column: import_conflicts.new_amount
             go_type: github.com/shopspring/decimal.Decimal
           - column: import_conflicts.existing_volume
@@ -25,4 +25,8 @@ sql:
           - column: import_conflicts.new_volume
             go_type: github.com/shopspring/decimal.NullDecimal
           - column: import_conflicts.new_price
+            go_type: github.com/shopspring/decimal.NullDecimal
+          - column: import_conflicts.check_calculated
+            go_type: github.com/shopspring/decimal.NullDecimal
+          - column: import_conflicts.check_closed_positions
             go_type: github.com/shopspring/decimal.NullDecimal

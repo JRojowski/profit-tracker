@@ -11,6 +11,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb"
 )
@@ -29,8 +30,9 @@ var (
 	ErrImportClosed = errors.New("the import is closed")
 	// ErrConflictNotFound tells that the Import has no Import Conflict with the ID.
 	ErrConflictNotFound = errors.New("import conflict not found")
-	// ErrInvalidDecision tells that the decision is not "keep-existing" or "use-new".
-	ErrInvalidDecision = errors.New("invalid decision")
+	// ErrInvalidDecision tells that the decision is not a known decision,
+	// or that it is not valid for the kind of the Import Conflict.
+	ErrInvalidDecision = store.ErrInvalidDecision
 	// ErrOpenConflicts tells that an Import Conflict of the Import has no decision.
 	// The error text tells how many conflicts have no decision.
 	ErrOpenConflicts = store.ErrOpenConflicts
@@ -41,16 +43,21 @@ var (
 
 // The kinds of an Import Conflict.
 const (
-	// KindChangedData is a known XTB ID with a different type, time, amount or Comment.
-	KindChangedData = "changed-data"
+	// KindChangedData is a known XTB ID with different data.
+	KindChangedData = store.KindChangedData
+	// KindCheckMismatch is a new sale whose Realized Profit does not agree with Closed Positions.
+	KindCheckMismatch = store.KindCheckMismatch
 )
 
 // The decisions for an Import Conflict.
 const (
-	// DecisionKeepExisting keeps the stored Cash Operation.
+	// DecisionKeepExisting keeps the stored Cash Operation. It is valid for the kind "changed-data".
 	DecisionKeepExisting = store.DecisionKeepExisting
 	// DecisionUseNew replaces the stored Cash Operation with the Cash Operation of the file.
+	// It is valid for the kind "changed-data".
 	DecisionUseNew = store.DecisionUseNew
+	// DecisionAccept imports the sale with the difference noted. It is valid for the kind "check-mismatch".
+	DecisionAccept = store.DecisionAccept
 )
 
 // RejectedError is an error in the file that stops the Import. Its text is for the user.
@@ -109,6 +116,7 @@ type NewAccount struct {
 }
 
 // Preview reads the file and saves an Import in preview. Nothing goes into the Ledger.
+// It runs the Realized Profit check of ADR 0001 on the Ledger as it is after the Import.
 // An error in the file is a *RejectedError.
 func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Preview, error) {
 	export, err := read(data)
@@ -121,13 +129,31 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 		return Preview{}, err
 	}
 	known := map[string]store.CashOperationData{}
+	var stored ledger.Ledger
 	if account != nil {
 		known, err = s.store.KnownCashOperations(ctx, account.ID)
 		if err != nil {
 			return Preview{}, err
 		}
+		stored, err = s.store.Ledger(ctx, account.ID)
+		if err != nil {
+			return Preview{}, err
+		}
 	}
-	c := compare(cashOperations(export), known)
+	ops := cashOperations(export)
+	c := compare(ops, known)
+
+	newOps := map[string]store.CashOperation{}
+	for _, op := range ops {
+		if _, ok := known[op.XTBID]; !ok {
+			newOps[op.XTBID] = op
+		}
+	}
+	after, err := ledger.Calculate(withNewOperations(stored, ops, newOps))
+	if err != nil {
+		return Preview{}, &RejectedError{Err: fmt.Errorf("%w: %w", errLedgerNotValid, err)}
+	}
+	c.conflicts = append(c.conflicts, checkRealizedProfit(after.Sales, export.ClosedPositions, newOps)...)
 
 	id, err := s.store.CreatePreview(ctx, store.NewPreview{
 		AccountNumber:         export.AccountNumber,
@@ -184,7 +210,7 @@ func compare(ops []store.CashOperation, known map[string]store.CashOperationData
 			c.conflicts = append(c.conflicts, store.NewImportConflict{
 				Kind:     KindChangedData,
 				XTBID:    op.XTBID,
-				Existing: existing,
+				Existing: &existing,
 				New:      op.Data(),
 			})
 		}
@@ -232,10 +258,15 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 		Account:        *account,
 		ImportedAt:     s.now(),
 		CashOperations: cashOperations(export),
+		CheckLedger:    checkLedger,
 	})
+	var invalid *invalidLedgerError
 	switch {
 	case err == nil:
 		return saved, nil
+	case errors.As(err, &invalid):
+		// The decisions give a Ledger that the calculator cannot use. Nothing is saved, and the Import stays open.
+		return store.Import{}, &RejectedError{Err: err}
 	case errors.Is(err, store.ErrLedgerChanged):
 		return store.Import{}, fmt.Errorf("import %d: upload the file again, because a different import changed the ledger after the preview: %w", id, err)
 	case errors.Is(err, store.ErrMixedLot):
@@ -247,11 +278,10 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 }
 
 // Decide records the decision for the Import Conflict of the Import, and returns the conflict.
+// The decision must be valid for the kind of the conflict: "keep-existing" or "use-new" for "changed-data",
+// and "accept" for "check-mismatch". The store checks this rule.
 // The user can change a decision until the Import is saved or cancelled.
 func (s *Service) Decide(ctx context.Context, importID, conflictID int64, decision string) (store.ImportConflict, error) {
-	if decision != DecisionKeepExisting && decision != DecisionUseNew {
-		return store.ImportConflict{}, fmt.Errorf("the decision %q is not %q or %q: %w", decision, DecisionKeepExisting, DecisionUseNew, ErrInvalidDecision)
-	}
 	conflict, err := s.store.DecideImportConflict(ctx, importID, conflictID, decision)
 	if errors.Is(err, store.ErrConflictNotFound) {
 		return store.ImportConflict{}, fmt.Errorf("import conflict %d of import %d: %w", conflictID, importID, ErrConflictNotFound)
@@ -335,11 +365,16 @@ func cashOperations(export xtb.Export) []store.CashOperation {
 			Comment:        op.Comment,
 			PositionID:     op.PositionID,
 		}
-		if op.Purchase != nil {
+		switch {
+		case op.Purchase != nil:
 			// One Fill per Lot. The Lot ID is the XTB position ID. Ticket 06 adds the rule of ADR 0002.
 			saved.Volume = decimal.NewNullDecimal(op.Purchase.Volume)
 			saved.Price = decimal.NewNullDecimal(op.Purchase.Price)
 			saved.IsFill = true
+		case op.Sale != nil:
+			// ADR 0001: the volume of a sale is the closed volume of its Lot.
+			saved.Volume = decimal.NewNullDecimal(op.Sale.Volume)
+			saved.Price = decimal.NewNullDecimal(op.Sale.Price)
 		}
 		ops = append(ops, saved)
 	}

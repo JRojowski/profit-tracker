@@ -35,13 +35,26 @@ type previewResponse struct {
 
 // importConflictResponse is one Import Conflict.
 type importConflictResponse struct {
-	ID       int64                     `json:"id"`
-	Kind     string                    `json:"kind"`
-	XTBID    string                    `json:"xtbId"`
-	Existing cashOperationDataResponse `json:"existing"`
-	New      cashOperationDataResponse `json:"new"`
+	ID   int64  `json:"id"`
+	Kind string `json:"kind"`
+	// XTBID is the XTB ID of the Cash Operation. For the kind "check-mismatch", it is the sale.
+	XTBID string `json:"xtbId"`
+	// Existing is the stored data. It is null for the kind "check-mismatch".
+	Existing *cashOperationDataResponse `json:"existing"`
+	// New is the data of the file. For the kind "check-mismatch", it is the sale.
+	New cashOperationDataResponse `json:"new"`
+	// Check is the Realized Profit check. It is null for the kind "changed-data".
+	Check *checkResponse `json:"check"`
 	// Decision is null until the user decides.
 	Decision *string `json:"decision"`
+}
+
+// checkResponse is the Realized Profit check of one sale. The values are decimal text.
+type checkResponse struct {
+	// Calculated is the Realized Profit from the Ledger. It is exact, with no rounding.
+	Calculated string `json:"calculated"`
+	// ClosedPositions is the Profit/Loss in the Closed Positions sheet.
+	ClosedPositions string `json:"closedPositions"`
 }
 
 // cashOperationDataResponse is the data of a Cash Operation that an Import Conflict compares.
@@ -230,11 +243,17 @@ func toImportResponse(imp store.Import) importResponse {
 
 func toImportConflictResponse(c store.ImportConflict) importConflictResponse {
 	resp := importConflictResponse{
-		ID:       c.ID,
-		Kind:     c.Kind,
-		XTBID:    c.XTBID,
-		Existing: toCashOperationDataResponse(c.Existing),
-		New:      toCashOperationDataResponse(c.New),
+		ID:    c.ID,
+		Kind:  c.Kind,
+		XTBID: c.XTBID,
+		New:   toCashOperationDataResponse(c.New),
+	}
+	if c.Existing != nil {
+		existing := toCashOperationDataResponse(*c.Existing)
+		resp.Existing = &existing
+	}
+	if c.Check != nil {
+		resp.Check = &checkResponse{Calculated: formatAmount(c.Check.Calculated), ClosedPositions: formatAmount(c.Check.ClosedPositions)}
 	}
 	if c.Decision != "" {
 		resp.Decision = &c.Decision

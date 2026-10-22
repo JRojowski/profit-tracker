@@ -44,8 +44,14 @@ INSERT INTO import_conflicts (import_id, kind, xtb_id,
                               existing_type, existing_time, existing_amount, existing_comment,
                               existing_ticker, existing_position_id, existing_volume, existing_price,
                               new_type, new_time, new_amount, new_comment,
-                              new_ticker, new_position_id, new_volume, new_price)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                              new_ticker, new_position_id, new_volume, new_price,
+                              check_calculated, check_closed_positions)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: ImportConflictKind :one
+SELECT kind
+FROM import_conflicts
+WHERE id = ? AND import_id = ?;
 
 -- name: ImportConflicts :many
 SELECT *

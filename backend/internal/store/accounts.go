@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store/queries"
@@ -56,8 +57,11 @@ func (s *Store) Ledger(ctx context.Context, accountID int64) (ledger.Ledger, err
 	}
 	// The transaction only reads. A rollback ends it.
 	defer func() { _ = tx.Rollback() }()
-	q := queries.New(tx)
+	return readLedger(ctx, queries.New(tx), accountID)
+}
 
+// readLedger reads the Cash Operations and the Lots of the Account with q.
+func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledger.Ledger, error) {
 	opRows, err := q.LedgerCashOperations(ctx, accountID)
 	if err != nil {
 		return ledger.Ledger{}, fmt.Errorf("read cash operations of account %d: %w", accountID, err)
@@ -69,10 +73,18 @@ func (s *Store) Ledger(ctx context.Context, accountID int64) (ledger.Ledger, err
 
 	l := ledger.Ledger{CashOperations: make([]ledger.CashOperation, 0, len(opRows))}
 	for _, row := range opRows {
+		at, err := time.Parse(timeLayout, row.Time)
+		if err != nil {
+			return ledger.Ledger{}, fmt.Errorf("cash operation %s of account %d: parse time %q: %w", row.XtbID, accountID, row.Time, err)
+		}
 		l.CashOperations = append(l.CashOperations, ledger.CashOperation{
+			XTBID:      row.XtbID,
 			Type:       row.Type,
+			Time:       at.UTC(),
 			Amount:     row.Amount,
 			PositionID: row.PositionID.String,
+			// A missing volume gives zero. The Ledger calculator uses the volume only for a sale.
+			Volume: row.Volume.Decimal,
 		})
 	}
 	// The rows are ordered by position ID, so the Fills of one Lot are next to each other.

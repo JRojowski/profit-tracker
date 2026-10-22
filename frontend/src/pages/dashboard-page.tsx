@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { AccountSummaryTiles } from "@/components/account-summary-tiles"
 import { HoldingsTable } from "@/components/holdings-table"
 import { RenameAccountForm } from "@/components/rename-account-form"
+import { SalesTable } from "@/components/sales-table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,9 +20,11 @@ import {
   fetchAccounts,
   fetchAccountSummary,
   fetchHoldings,
+  fetchSales,
   type Account,
   type AccountSummary,
   type Holding,
+  type Sale,
 } from "@/lib/api"
 
 // AccountState holds the values of the selected Account.
@@ -29,6 +32,7 @@ type AccountState = {
   accountId: number
   summary: AccountSummary
   holdings: Holding[]
+  sales: Sale[]
 }
 
 // ValuesError holds the error of the last failed load of Account values.
@@ -65,9 +69,10 @@ export function DashboardPage() {
     Promise.all([
       fetchAccountSummary(selectedId, controller.signal),
       fetchHoldings(selectedId, controller.signal),
+      fetchSales(selectedId, controller.signal),
     ])
-      .then(([summary, holdings]) => {
-        setState({ accountId: selectedId, summary, holdings })
+      .then(([summary, holdings, sales]) => {
+        setState({ accountId: selectedId, summary, holdings, sales })
         setValuesError(null)
       })
       .catch((err: unknown) => {
@@ -161,6 +166,17 @@ export function DashboardPage() {
             <CardContent>
               <HoldingsTable
                 holdings={current.holdings}
+                currency={current.summary.currency}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Sales</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SalesTable
+                sales={current.sales}
                 currency={current.summary.currency}
               />
             </CardContent>

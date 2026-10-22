@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -22,15 +25,57 @@ var (
 	ErrOpenConflicts = errors.New("an import conflict has no decision")
 	// ErrMixedLot tells that the Fills of one Lot have more than one Instrument.
 	ErrMixedLot = errors.New("a lot has fills of more than one instrument")
+	// ErrInvalidDecision tells that the decision is not valid for the kind of the Import Conflict.
+	ErrInvalidDecision = errors.New("invalid decision")
+)
+
+// The kinds of an Import Conflict.
+const (
+	// KindChangedData is a known XTB ID with a different type, time, amount, Comment, ticker,
+	// position ID, volume or price.
+	KindChangedData = "changed-data"
+	// KindCheckMismatch is a new sale whose Realized Profit differs by more than 0.01
+	// from the Profit/Loss in the Closed Positions sheet. See ADR 0001.
+	KindCheckMismatch = "check-mismatch"
 )
 
 // The decisions for an Import Conflict.
 const (
-	// DecisionKeepExisting keeps the stored Cash Operation.
+	// DecisionKeepExisting keeps the stored Cash Operation. It is valid for the kind "changed-data".
 	DecisionKeepExisting = "keep-existing"
 	// DecisionUseNew replaces the stored Cash Operation with the Cash Operation of the file.
+	// It is valid for the kind "changed-data".
 	DecisionUseNew = "use-new"
+	// DecisionAccept imports the sale and notes the difference. It is valid for the kind "check-mismatch".
+	// The Ledger stays the source of truth. The tool copies nothing from Closed Positions.
+	DecisionAccept = "accept"
 )
+
+// decisionsByKind are the valid decisions for each kind of Import Conflict.
+var decisionsByKind = map[string][]string{
+	KindChangedData:   {DecisionKeepExisting, DecisionUseNew},
+	KindCheckMismatch: {DecisionAccept},
+}
+
+// InvalidDecisionError tells that the decision is not valid for the kind of the Import Conflict.
+// It wraps ErrInvalidDecision.
+type InvalidDecisionError struct {
+	Kind     string
+	Decision string
+}
+
+func (e *InvalidDecisionError) Error() string {
+	valid := decisionsByKind[e.Kind]
+	quoted := make([]string, len(valid))
+	for i, d := range valid {
+		quoted[i] = strconv.Quote(d)
+	}
+	return fmt.Sprintf("the decision %q is not valid for an import conflict of the kind %q: the valid decisions are %s",
+		e.Decision, e.Kind, strings.Join(quoted, " and "))
+}
+
+// Unwrap returns ErrInvalidDecision.
+func (e *InvalidDecisionError) Unwrap() error { return ErrInvalidDecision }
 
 // OpenConflictsError tells how many Import Conflicts have no decision. It wraps ErrOpenConflicts.
 type OpenConflictsError struct {
@@ -83,20 +128,35 @@ func nullEqual(a, b decimal.NullDecimal) bool {
 type ImportConflict struct {
 	ID int64
 	// Kind is "changed-data" or "check-mismatch".
-	Kind     string
-	XTBID    string
-	Existing CashOperationData
-	New      CashOperationData
-	// Decision is "", "keep-existing" or "use-new". "" tells that the user did not decide.
+	Kind  string
+	XTBID string
+	// Existing is the stored data. It is nil for the kind "check-mismatch".
+	Existing *CashOperationData
+	// New is the data of the file. For the kind "check-mismatch", it is the sale.
+	New CashOperationData
+	// Check is the Realized Profit check. It is nil for the kind "changed-data".
+	Check *Check
+	// Decision is "", "keep-existing", "use-new" or "accept". "" tells that the user did not decide.
 	Decision string
+}
+
+// Check is the result of the Realized Profit check of one sale. See ADR 0001.
+type Check struct {
+	// Calculated is the Realized Profit from the Ledger.
+	Calculated decimal.Decimal
+	// ClosedPositions is the Profit/Loss of the sale in the Closed Positions sheet.
+	ClosedPositions decimal.Decimal
 }
 
 // NewImportConflict is an Import Conflict that CreatePreview saves.
 type NewImportConflict struct {
-	Kind     string
-	XTBID    string
-	Existing CashOperationData
+	Kind  string
+	XTBID string
+	// Existing is the stored data. It must be set for the kind "changed-data" and nil for "check-mismatch".
+	Existing *CashOperationData
 	New      CashOperationData
+	// Check must be set for the kind "check-mismatch" and nil for "changed-data".
+	Check *Check
 }
 
 // KnownCashOperations returns the data of the Cash Operations of the Account, by XTB ID.
@@ -137,6 +197,16 @@ func (s *Store) DecideImportConflict(ctx context.Context, importID, conflictID i
 
 	if err := requireOpen(ctx, q, importID); err != nil {
 		return ImportConflict{}, err
+	}
+	kind, err := q.ImportConflictKind(ctx, queries.ImportConflictKindParams{ID: conflictID, ImportID: importID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ImportConflict{}, fmt.Errorf("import conflict %d of import %d: %w", conflictID, importID, ErrConflictNotFound)
+	}
+	if err != nil {
+		return ImportConflict{}, fmt.Errorf("read import conflict %d: %w", conflictID, err)
+	}
+	if !slices.Contains(decisionsByKind[kind], decision) {
+		return ImportConflict{}, &InvalidDecisionError{Kind: kind, Decision: decision}
 	}
 	row, err := q.DecideImportConflict(ctx, queries.DecideImportConflictParams{
 		Decision: sql.NullString{String: decision, Valid: true},
@@ -215,8 +285,9 @@ func IsOpen(state string) bool {
 	return state == StatePreview || state == StateNeedsReview
 }
 
-// resolutions reads the decisions for the Import Conflicts of the Import, by XTB ID.
-// It returns an *OpenConflictsError if a conflict has no decision.
+// resolutions reads the decisions for the Import Conflicts of the kind "changed-data", by XTB ID.
+// A conflict of the kind "check-mismatch" changes no write: its sale is new, and the decision "accept" saves it.
+// It returns an *OpenConflictsError if a conflict of any kind has no decision.
 func resolutions(ctx context.Context, q *queries.Queries, importID int64) (map[string]resolution, error) {
 	conflicts, err := importConflicts(ctx, q, importID)
 	if err != nil {
@@ -229,7 +300,10 @@ func resolutions(ctx context.Context, q *queries.Queries, importID int64) (map[s
 			open++
 			continue
 		}
-		resolved[c.XTBID] = resolution{existing: c.Existing, useNew: c.Decision == DecisionUseNew}
+		if c.Kind != KindChangedData || c.Existing == nil {
+			continue
+		}
+		resolved[c.XTBID] = resolution{existing: *c.Existing, useNew: c.Decision == DecisionUseNew}
 	}
 	if open > 0 {
 		return nil, &OpenConflictsError{ImportID: importID, Count: open}
@@ -254,41 +328,45 @@ func importConflicts(ctx context.Context, q *queries.Queries, importID int64) ([
 }
 
 func insertImportConflict(ctx context.Context, q *queries.Queries, importID int64, c NewImportConflict) error {
-	err := q.InsertImportConflict(ctx, queries.InsertImportConflictParams{
-		ImportID:           importID,
-		Kind:               c.Kind,
-		XtbID:              c.XTBID,
-		ExistingType:       c.Existing.Type,
-		ExistingTime:       formatTime(c.Existing.Time),
-		ExistingAmount:     c.Existing.Amount,
-		ExistingComment:    c.Existing.Comment,
-		ExistingTicker:     c.Existing.Ticker,
-		ExistingPositionID: c.Existing.PositionID,
-		ExistingVolume:     c.Existing.Volume,
-		ExistingPrice:      c.Existing.Price,
-		NewType:            c.New.Type,
-		NewTime:            formatTime(c.New.Time),
-		NewAmount:          c.New.Amount,
-		NewComment:         c.New.Comment,
-		NewTicker:          c.New.Ticker,
-		NewPositionID:      c.New.PositionID,
-		NewVolume:          c.New.Volume,
-		NewPrice:           c.New.Price,
-	})
-	if err != nil {
+	params := queries.InsertImportConflictParams{
+		ImportID:      importID,
+		Kind:          c.Kind,
+		XtbID:         c.XTBID,
+		NewType:       c.New.Type,
+		NewTime:       formatTime(c.New.Time),
+		NewAmount:     c.New.Amount,
+		NewComment:    c.New.Comment,
+		NewTicker:     c.New.Ticker,
+		NewPositionID: c.New.PositionID,
+		NewVolume:     c.New.Volume,
+		NewPrice:      c.New.Price,
+	}
+	if e := c.Existing; e != nil {
+		params.ExistingType = validString(e.Type)
+		params.ExistingTime = validString(formatTime(e.Time))
+		params.ExistingAmount = decimal.NewNullDecimal(e.Amount)
+		params.ExistingComment = validString(e.Comment)
+		params.ExistingTicker = validString(e.Ticker)
+		params.ExistingPositionID = validString(e.PositionID)
+		params.ExistingVolume = e.Volume
+		params.ExistingPrice = e.Price
+	}
+	if ch := c.Check; ch != nil {
+		params.CheckCalculated = decimal.NewNullDecimal(ch.Calculated)
+		params.CheckClosedPositions = decimal.NewNullDecimal(ch.ClosedPositions)
+	}
+	if err := q.InsertImportConflict(ctx, params); err != nil {
 		return fmt.Errorf("save import conflict %s of import %d: %w", c.XTBID, importID, err)
 	}
 	return nil
 }
 
+// validString returns s as a valid sql.NullString, also when s is "".
+func validString(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: true}
+}
+
 func toImportConflict(row queries.ImportConflict) (ImportConflict, error) {
-	existing, err := withTime(row.ExistingTime, CashOperationData{
-		Type: row.ExistingType, Amount: row.ExistingAmount, Comment: row.ExistingComment,
-		Ticker: row.ExistingTicker, PositionID: row.ExistingPositionID, Volume: row.ExistingVolume, Price: row.ExistingPrice,
-	})
-	if err != nil {
-		return ImportConflict{}, fmt.Errorf("import conflict %d: %w", row.ID, err)
-	}
 	newData, err := withTime(row.NewTime, CashOperationData{
 		Type: row.NewType, Amount: row.NewAmount, Comment: row.NewComment,
 		Ticker: row.NewTicker, PositionID: row.NewPositionID, Volume: row.NewVolume, Price: row.NewPrice,
@@ -296,14 +374,29 @@ func toImportConflict(row queries.ImportConflict) (ImportConflict, error) {
 	if err != nil {
 		return ImportConflict{}, fmt.Errorf("import conflict %d: %w", row.ID, err)
 	}
-	return ImportConflict{
+	conflict := ImportConflict{
 		ID:       row.ID,
 		Kind:     row.Kind,
 		XTBID:    row.XtbID,
-		Existing: existing,
 		New:      newData,
 		Decision: row.Decision.String,
-	}, nil
+	}
+	// The table CHECK makes all existing_* columns of a "changed-data" conflict NOT NULL.
+	if row.ExistingTime.Valid {
+		existing, err := withTime(row.ExistingTime.String, CashOperationData{
+			Type: row.ExistingType.String, Amount: row.ExistingAmount.Decimal, Comment: row.ExistingComment.String,
+			Ticker: row.ExistingTicker.String, PositionID: row.ExistingPositionID.String,
+			Volume: row.ExistingVolume, Price: row.ExistingPrice,
+		})
+		if err != nil {
+			return ImportConflict{}, fmt.Errorf("import conflict %d: %w", row.ID, err)
+		}
+		conflict.Existing = &existing
+	}
+	if row.CheckCalculated.Valid && row.CheckClosedPositions.Valid {
+		conflict.Check = &Check{Calculated: row.CheckCalculated.Decimal, ClosedPositions: row.CheckClosedPositions.Decimal}
+	}
+	return conflict, nil
 }
 
 // withTime returns d with the time from its text form in the database.

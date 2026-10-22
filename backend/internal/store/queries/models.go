@@ -47,27 +47,29 @@ type Import struct {
 }
 
 type ImportConflict struct {
-	ID                 int64
-	ImportID           int64
-	Kind               string
-	XtbID              string
-	ExistingType       string
-	ExistingTime       string
-	ExistingAmount     decimal.Decimal
-	ExistingComment    string
-	NewType            string
-	NewTime            string
-	NewAmount          decimal.Decimal
-	NewComment         string
-	Decision           sql.NullString
-	ExistingTicker     string
-	ExistingPositionID string
-	ExistingVolume     decimal.NullDecimal
-	ExistingPrice      decimal.NullDecimal
-	NewTicker          string
-	NewPositionID      string
-	NewVolume          decimal.NullDecimal
-	NewPrice           decimal.NullDecimal
+	ID                   int64
+	ImportID             int64
+	Kind                 string
+	XtbID                string
+	ExistingType         sql.NullString
+	ExistingTime         sql.NullString
+	ExistingAmount       decimal.NullDecimal
+	ExistingComment      sql.NullString
+	ExistingTicker       sql.NullString
+	ExistingPositionID   sql.NullString
+	ExistingVolume       decimal.NullDecimal
+	ExistingPrice        decimal.NullDecimal
+	NewType              string
+	NewTime              string
+	NewAmount            decimal.Decimal
+	NewComment           string
+	NewTicker            string
+	NewPositionID        string
+	NewVolume            decimal.NullDecimal
+	NewPrice             decimal.NullDecimal
+	CheckCalculated      decimal.NullDecimal
+	CheckClosedPositions decimal.NullDecimal
+	Decision             sql.NullString
 }
 
 type Instrument struct {

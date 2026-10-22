@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -43,6 +44,22 @@ type holdingResponse struct {
 	Volume      string `json:"volume"`
 	Cost        string `json:"cost"`
 	AverageCost string `json:"averageCost"`
+}
+
+// saleResponse is one row of GET /api/accounts/{id}/sales. Amounts and the volume are decimal text.
+type saleResponse struct {
+	XTBID string `json:"xtbId"`
+	// Time is RFC 3339 text in UTC.
+	Time       string `json:"time"`
+	Ticker     string `json:"ticker"`
+	Name       string `json:"name"`
+	PositionID string `json:"positionId"`
+	// Volume is the closed volume of the Lot.
+	Volume string `json:"volume"`
+	Amount string `json:"amount"`
+	// Cost is the cost of the closed part. ADR 0001: it is exact. The frontend rounds for display.
+	Cost           string `json:"cost"`
+	RealizedProfit string `json:"realizedProfit"`
 }
 
 // listAccounts returns all Accounts, ordered by name.
@@ -118,6 +135,29 @@ func (a *api) accountHoldings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// accountSales returns the sales of the Account with their Realized Profit, in time order and then in XTB ID order.
+func (a *api) accountSales(w http.ResponseWriter, r *http.Request) {
+	_, state, ok := a.accountState(w, r)
+	if !ok {
+		return
+	}
+	resp := make([]saleResponse, 0, len(state.Sales))
+	for _, s := range state.Sales {
+		resp = append(resp, saleResponse{
+			XTBID:          s.XTBID,
+			Time:           s.Time.UTC().Format(time.RFC3339),
+			Ticker:         s.Instrument.Ticker,
+			Name:           s.Instrument.Name,
+			PositionID:     s.PositionID,
+			Volume:         s.Volume.String(),
+			Amount:         formatAmount(s.Amount),
+			Cost:           formatAmount(s.Cost),
+			RealizedProfit: formatAmount(s.RealizedProfit),
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // accountState reads the Account of the path and calculates its state from the Ledger.
 // It writes the error response and returns false if it cannot.
 func (a *api) accountState(w http.ResponseWriter, r *http.Request) (store.Account, ledger.State, bool) {
@@ -135,7 +175,12 @@ func (a *api) accountState(w http.ResponseWriter, r *http.Request) (store.Accoun
 		a.writeInternalError(w, r, err)
 		return store.Account{}, ledger.State{}, false
 	}
-	return acc, ledger.Calculate(l), true
+	state, err := ledger.Calculate(l)
+	if err != nil {
+		a.writeInternalError(w, r, fmt.Errorf("calculate the state of account %d: %w", id, err))
+		return store.Account{}, ledger.State{}, false
+	}
+	return acc, state, true
 }
 
 // accountID returns the Account ID of the path. An ID that is not a number is an unknown Account.

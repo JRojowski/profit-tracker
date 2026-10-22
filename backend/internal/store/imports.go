@@ -10,6 +10,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store/queries"
 )
 
@@ -125,6 +126,9 @@ type SaveImport struct {
 	// SaveImport skips each operation whose XTB ID already exists on the Account with the same data.
 	// For a known XTB ID with different data, the decision of its Import Conflict applies.
 	CashOperations []CashOperation
+	// CheckLedger checks the Ledger of the Account after all writes, in the same transaction.
+	// If it returns an error, SaveImport saves nothing and returns that error. A nil CheckLedger checks nothing.
+	CheckLedger func(ledger.Ledger) error
 }
 
 // timeLayout is the text form of the times in the database. In UTC, the text sorts in time order.
@@ -198,6 +202,7 @@ func (s *Store) PendingImport(ctx context.Context, id int64) (PendingImport, err
 // and an *OpenConflictsError if an Import Conflict has no decision.
 // It returns ErrLedgerChanged if the Ledger does not agree with the Import Conflicts and their decisions,
 // and ErrMixedLot if the Fills of a Lot have more than one Instrument after the save.
+// It returns the error of p.CheckLedger if the Ledger after the save fails the check.
 func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -234,6 +239,16 @@ func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 	}
 	if err := w.fixLots(ctx); err != nil {
 		return Import{}, err
+	}
+	if p.CheckLedger != nil {
+		// The decisions of the Import Conflicts can change the Lots and the sales. The check sees the result.
+		after, err := readLedger(ctx, q, accountID)
+		if err != nil {
+			return Import{}, err
+		}
+		if err := p.CheckLedger(after); err != nil {
+			return Import{}, fmt.Errorf("import %d: %w", p.ImportID, err)
+		}
 	}
 
 	n, err := q.MarkImportSaved(ctx, queries.MarkImportSavedParams{

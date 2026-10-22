@@ -212,8 +212,8 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 	}{
 		{
 			name:      "unknown type names the type and the row",
-			data:      withRow(xtbtest.CashOperation{Type: "Stock sell", Ticker: "FPS.US", Amount: "120.00", ID: "999", Comment: "CLOSE BUY 10 @ 12.00", PositionID: "2000000001"}),
-			wantError: []string{"unknown cash operation type", `"Stock sell"`, "row 9"},
+			data:      withRow(xtbtest.CashOperation{Type: "Dividend", Ticker: "FPS.US", Amount: "1.20", ID: "999", Comment: "FPS.US USD 0.12/ SHR"}),
+			wantError: []string{"unknown cash operation type", `"Dividend"`, "row 9"},
 		},
 		{
 			name:      "type that no broker has",
@@ -432,6 +432,8 @@ type importConflict struct {
 	Existing cashOperationData `json:"existing"`
 	New      cashOperationData `json:"new"`
 	Decision *string           `json:"decision"`
+	// Check is null for the kind "changed-data".
+	Check *checkData `json:"check"`
 }
 
 // cashOperationData is the data of a Cash Operation that an Import Conflict compares.
@@ -687,6 +689,7 @@ func TestImportPreview_ImportConflict_HasContractJSON(t *testing.T) {
 			"ticker": "", "positionId": "", "volume": null, "price": null},
 		"new": {"type": "Deposit", "time": "2026-02-01T10:00:00Z", "amount": "1200.00", "comment": "Blik deposit",
 			"ticker": "", "positionId": "", "volume": null, "price": null},
+		"check": null,
 		"decision": null
 	}`, conflict.ID), string(got.Conflicts[0]))
 }
@@ -999,6 +1002,13 @@ func TestImportDecision_InvalidRequest_ReturnsError(t *testing.T) {
 			body:       `{"decision":"drop"}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  `"drop"`,
+		},
+		{
+			name:       "accept for changed data",
+			path:       func(f decisionFixture) string { return path(f.preview.ID, f.preview.Conflicts[0].ID) },
+			body:       `{"decision":"accept"}`,
+			wantStatus: http.StatusBadRequest,
+			wantError:  `"accept" is not valid for an import conflict of the kind "changed-data"`,
 		},
 		{
 			name:       "no decision",

@@ -134,6 +134,8 @@ func TestAccountDashboard_UnknownAccount_ReturnsNotFound(t *testing.T) {
 		"/api/accounts/999/holdings",
 		"/api/accounts/abc/summary",
 		"/api/accounts/abc/holdings",
+		"/api/accounts/999/sales",
+		"/api/accounts/abc/sales",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

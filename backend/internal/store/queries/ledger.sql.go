@@ -183,16 +183,19 @@ func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]K
 }
 
 const ledgerCashOperations = `-- name: LedgerCashOperations :many
-SELECT type, amount, position_id
+SELECT xtb_id, type, time, amount, position_id, volume
 FROM cash_operations
 WHERE account_id = ?
 ORDER BY time, id
 `
 
 type LedgerCashOperationsRow struct {
+	XtbID      string
 	Type       string
+	Time       string
 	Amount     decimal.Decimal
 	PositionID sql.NullString
+	Volume     decimal.NullDecimal
 }
 
 func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]LedgerCashOperationsRow, error) {
@@ -204,7 +207,14 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 	var items []LedgerCashOperationsRow
 	for rows.Next() {
 		var i LedgerCashOperationsRow
-		if err := rows.Scan(&i.Type, &i.Amount, &i.PositionID); err != nil {
+		if err := rows.Scan(
+			&i.XtbID,
+			&i.Type,
+			&i.Time,
+			&i.Amount,
+			&i.PositionID,
+			&i.Volume,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

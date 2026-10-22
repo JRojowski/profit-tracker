@@ -23,7 +23,9 @@ export type NewAccount = {
 // ImportState "needs-review" tells that the Import has Import Conflicts.
 export type ImportState = "preview" | "needs-review"
 
-export type ConflictDecision = "keep-existing" | "use-new"
+// ConflictDecision "keep-existing" and "use-new" are for a "changed-data" conflict.
+// "accept" is for a "check-mismatch" conflict. It saves the Import with the difference.
+export type ConflictDecision = "keep-existing" | "use-new" | "accept"
 
 // CashOperationData is the data of a Cash Operation that an Import Conflict compares.
 // The time is RFC 3339 text in UTC. The amount is decimal text in the Account currency.
@@ -40,15 +42,36 @@ export type CashOperationData = {
   price: string | null
 }
 
-// ImportConflict is a known XTB ID with different data. The decision is null until the user selects one.
-export type ImportConflict = {
-  id: number
-  kind: "changed-data"
-  xtbId: string
-  existing: CashOperationData
-  new: CashOperationData
-  decision: ConflictDecision | null
+// ProfitCheck compares the Realized Profit of a sale with the Profit/Loss in Closed Positions.
+// The values are decimal text in the Account currency.
+export type ProfitCheck = {
+  calculated: string
+  closedPositions: string
 }
+
+// ImportConflict is a Cash Operation that needs a decision. The decision is null until the user selects one.
+// A "changed-data" conflict is a known XTB ID with different data.
+// A "check-mismatch" conflict is a sale with a Realized Profit that differs from Closed Positions by more than 0.01.
+export type ImportConflict =
+  | {
+      id: number
+      kind: "changed-data"
+      xtbId: string
+      existing: CashOperationData
+      new: CashOperationData
+      check: null
+      decision: ConflictDecision | null
+    }
+  | {
+      id: number
+      kind: "check-mismatch"
+      xtbId: string
+      // existing is null, because the check is for a new sale. new holds the data of the sale.
+      existing: null
+      new: CashOperationData
+      check: ProfitCheck
+      decision: ConflictDecision | null
+    }
 
 // ImportPreview is the result of an upload. The backend saves no Cash Operations before the confirmation.
 // The account is null when the account number is new.
@@ -183,6 +206,20 @@ export type Holding = {
   averageCost: string
 }
 
+// Sale is one sale with its Realized Profit. The time is RFC 3339 text in UTC.
+// Volumes and amounts are decimal text in the Account currency.
+export type Sale = {
+  xtbId: string
+  time: string
+  ticker: string
+  name: string
+  positionId: string
+  volume: string
+  amount: string
+  cost: string
+  realizedProfit: string
+}
+
 export async function fetchAccounts(signal?: AbortSignal): Promise<Account[]> {
   const response = await fetch("/api/accounts", { signal })
   return readJSON<Account[]>(response)
@@ -214,4 +251,12 @@ export async function fetchHoldings(
 ): Promise<Holding[]> {
   const response = await fetch(`/api/accounts/${id}/holdings`, { signal })
   return readJSON<Holding[]>(response)
+}
+
+export async function fetchSales(
+  id: number,
+  signal?: AbortSignal
+): Promise<Sale[]> {
+  const response = await fetch(`/api/accounts/${id}/sales`, { signal })
+  return readJSON<Sale[]>(response)
 }

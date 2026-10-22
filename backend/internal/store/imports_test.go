@@ -35,9 +35,10 @@ func TestSaveImport_KeepExistingWithOtherTicker_AddsNoInstrument(t *testing.T) {
 
 	changed := stored
 	changed.Ticker, changed.InstrumentName, changed.Comment = "LSMC.DE", "LSMC.DE", "OPEN BUY LSMC.DE 10 @ 10.94"
+	existing := stored.Data()
 	secondID, err := db.CreatePreview(ctx, store.NewPreview{
 		AccountNumber: account.AccountNumber, FileName: "second.xlsx", CreatedAt: at,
-		Conflicts: []store.NewImportConflict{{Kind: "changed-data", XTBID: "102", Existing: stored.Data(), New: changed.Data()}},
+		Conflicts: []store.NewImportConflict{{Kind: "changed-data", XTBID: "102", Existing: &existing, New: changed.Data()}},
 	})
 	require.NoError(t, err)
 	conflicts, err := db.ImportConflicts(ctx, secondID)
