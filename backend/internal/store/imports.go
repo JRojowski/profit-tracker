@@ -94,8 +94,12 @@ type CashOperation struct {
 	// Volume and Price are the parsed volume and price. They are not valid for an operation with no volume.
 	Volume decimal.NullDecimal
 	Price  decimal.NullDecimal
-	// IsFill tells that the operation is a Fill of the Lot PositionID.
+	// IsFill tells that the operation is a Fill of the Lot LotID.
 	IsFill bool
+	// LotID is the ID of the Lot of a Fill. ADR 0002: it can be the position ID of a different Fill
+	// of the same order. It is empty for an operation that is not a Fill.
+	// It is not a part of Data, because the importer calculates it from the file.
+	LotID string
 }
 
 // Data returns the data of op that a re-import compares.
@@ -349,7 +353,7 @@ type ledgerWriter struct {
 // the stored operation, and false if the stored operation stays.
 // For a known XTB ID with different data, the decision of its Import Conflict applies.
 // It returns ErrLedgerChanged if the stored operation does not agree with the Import Conflicts.
-// It writes nothing for an operation that it skips.
+// For an operation that it skips, it writes nothing, except that it moves a Fill to the Lot op.LotID.
 func (w *ledgerWriter) save(ctx context.Context, op CashOperation) (bool, error) {
 	stored, err := w.q.CashOperationByXTBID(ctx, queries.CashOperationByXTBIDParams{AccountID: w.accountID, XtbID: op.XTBID})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -371,7 +375,9 @@ func (w *ledgerWriter) save(ctx context.Context, op CashOperation) (bool, error)
 		if resolved {
 			return false, fmt.Errorf("cash operation %s already has the data of the file: %w", op.XTBID, ErrLedgerChanged)
 		}
-		return false, nil
+		// ADR 0002: the Lot of a known Fill can change, for example when an older Import saved each Fill as a Lot.
+		// The operation still counts as skipped.
+		return false, w.moveFill(ctx, stored.ID, op)
 	}
 	if !resolved || !res.existing.Equal(storedData) {
 		return false, fmt.Errorf("cash operation %s has data that the preview did not show: %w", op.XTBID, ErrLedgerChanged)
@@ -434,6 +440,29 @@ func (w *ledgerWriter) replace(ctx context.Context, opID int64, op CashOperation
 	return w.addFill(ctx, opID, op, instrumentID)
 }
 
+// moveFill moves the stored Fill with the ID to the Lot op.LotID if its stored Lot is different.
+// It does nothing if op is not a Fill.
+func (w *ledgerWriter) moveFill(ctx context.Context, opID int64, op CashOperation) error {
+	if !op.IsFill {
+		return nil
+	}
+	stored, err := w.q.FillLot(ctx, opID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("read lot of fill %s: %w", op.XTBID, err)
+	}
+	if err == nil && stored == op.LotID {
+		return nil
+	}
+	instrumentID, err := w.instrument(ctx, op)
+	if err != nil {
+		return err
+	}
+	if err := w.q.DeleteLotFill(ctx, opID); err != nil {
+		return fmt.Errorf("remove fill %s from lot %s: %w", op.XTBID, stored, err)
+	}
+	return w.addFill(ctx, opID, op, instrumentID)
+}
+
 // fixLots runs after all writes of the Import. It removes each Lot with no Fills, and gives each Lot
 // the Instrument of its Fills. A "use-new" decision can move a Fill to a different Lot or Instrument.
 // It returns ErrMixedLot if the Fills of a Lot have more than one Instrument.
@@ -459,12 +488,15 @@ func (w *ledgerWriter) addFill(ctx context.Context, opID int64, op CashOperation
 	if !op.IsFill {
 		return nil
 	}
-	lotID, err := w.q.UpsertLot(ctx, queries.UpsertLotParams{AccountID: w.accountID, PositionID: op.PositionID, InstrumentID: instrumentID.Int64})
+	if op.LotID == "" {
+		return fmt.Errorf("fill %s has no lot ID: %w", op.XTBID, ErrNoLotID)
+	}
+	lotID, err := w.q.UpsertLot(ctx, queries.UpsertLotParams{AccountID: w.accountID, PositionID: op.LotID, InstrumentID: instrumentID.Int64})
 	if err != nil {
-		return fmt.Errorf("save lot %s: %w", op.PositionID, err)
+		return fmt.Errorf("save lot %s: %w", op.LotID, err)
 	}
 	if err := w.q.InsertLotFill(ctx, queries.InsertLotFillParams{LotID: lotID, CashOperationID: opID}); err != nil {
-		return fmt.Errorf("save fill %s of lot %s: %w", op.XTBID, op.PositionID, err)
+		return fmt.Errorf("save fill %s of lot %s: %w", op.XTBID, op.LotID, err)
 	}
 	return nil
 }

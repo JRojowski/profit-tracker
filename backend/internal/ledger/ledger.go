@@ -67,6 +67,8 @@ type Lot struct {
 
 // Fill is one purchase Cash Operation of a Lot.
 type Fill struct {
+	// XTBID is the XTB ID of the purchase.
+	XTBID  string
 	Volume decimal.Decimal
 	// Amount is the purchase amount in the Account currency. It is negative.
 	Amount decimal.Decimal

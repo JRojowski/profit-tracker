@@ -1,12 +1,15 @@
 package xtb_test
 
 import (
+	"bytes"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xuri/excelize/v2"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb"
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb/xtbtest"
@@ -174,4 +177,76 @@ func TestRead_ZeroVolumeInComment_ReturnsInvalidRow(t *testing.T) {
 			assert.Contains(t, err.Error(), "zero")
 		})
 	}
+}
+
+func TestRead_OpenPositions_GiveLotIDsAndVolumes(t *testing.T) {
+	t.Parallel()
+	data := xtbtest.Build(t, xtbtest.Export{OpenLots: []xtbtest.OpenLot{
+		{Ticker: "LSMC.DE", PositionID: "1851988998", Volume: "1.1773", Value: "100.00"},
+		{Ticker: "FPS.US", PositionID: "2860602916", Volume: "1.27", Value: "50.00"},
+		{Ticker: "LSMC.DE", PositionID: "1851990000", Volume: "2", Value: "170.00"},
+	}})
+
+	got, err := xtb.Read(data)
+
+	require.NoError(t, err)
+	assert.Equal(t, []xtb.OpenLot{
+		{Row: 11, Ticker: "LSMC.DE", PositionID: "1851988998", Volume: decimal.RequireFromString("1.1773")},
+		{Row: 12, Ticker: "LSMC.DE", PositionID: "1851990000", Volume: decimal.RequireFromString("2")},
+		{Row: 14, Ticker: "FPS.US", PositionID: "2860602916", Volume: decimal.RequireFromString("1.27")},
+	}, got.OpenLots, "the group rows 10 and 13 are not Lots")
+}
+
+func TestRead_OpenPositionIDAsJavaDouble_GivesPlainID(t *testing.T) {
+	t.Parallel()
+	data := xtbtest.Build(t, xtbtest.Export{OpenLots: []xtbtest.OpenLot{
+		{Ticker: "FPS.US", PositionID: "2.860602916E9", Volume: "1.27"},
+	}})
+
+	got, err := xtb.Read(data)
+
+	require.NoError(t, err)
+	require.Len(t, got.OpenLots, 1)
+	assert.Equal(t, "2860602916", got.OpenLots[0].PositionID)
+	assert.Equal(t, "1.27", got.OpenLots[0].Volume.String())
+}
+
+func TestRead_InvalidOpenPositionRow_ReturnsInvalidOpenPosition(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		lot        xtbtest.OpenLot
+		wantInText string
+	}{
+		{name: "position ID that is not a number", lot: xtbtest.OpenLot{Ticker: "FPS.US", PositionID: "ABC", Volume: "1"}, wantInText: `"ABC"`},
+		{name: "no position ID", lot: xtbtest.OpenLot{Ticker: "FPS.US", Volume: "1"}, wantInText: "position ID"},
+		{name: "no volume", lot: xtbtest.OpenLot{Ticker: "FPS.US", PositionID: "2860602916"}, wantInText: "volume"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			data := xtbtest.Build(t, xtbtest.Export{OpenLots: []xtbtest.OpenLot{tc.lot}})
+
+			_, err := xtb.Read(data)
+
+			require.ErrorIs(t, err, xtb.ErrInvalidOpenPosition)
+			assert.Contains(t, err.Error(), "row 11")
+			assert.Contains(t, err.Error(), tc.wantInText)
+		})
+	}
+}
+
+func TestRead_NoOpenPositionsSheet_ReturnsNotExport(t *testing.T) {
+	t.Parallel()
+	f, err := excelize.OpenReader(bytes.NewReader(xtbtest.Build(t, xtbtest.Export{})))
+	require.NoError(t, err)
+	require.NoError(t, f.DeleteSheet(xtbtest.SheetOpenPositions))
+	var buf bytes.Buffer
+	require.NoError(t, f.Write(&buf))
+
+	_, err = xtb.Read(buf.Bytes())
+
+	require.ErrorIs(t, err, xtb.ErrNotExport)
+	assert.Contains(t, err.Error(), "Open Positions")
 }

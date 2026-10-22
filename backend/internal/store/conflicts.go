@@ -25,6 +25,8 @@ var (
 	ErrOpenConflicts = errors.New("an import conflict has no decision")
 	// ErrMixedLot tells that the Fills of one Lot have more than one Instrument.
 	ErrMixedLot = errors.New("a lot has fills of more than one instrument")
+	// ErrNoLotID tells that a Fill to save has no Lot ID. It is a defect of the caller.
+	ErrNoLotID = errors.New("a fill has no lot id")
 	// ErrInvalidDecision tells that the decision is not valid for the kind of the Import Conflict.
 	ErrInvalidDecision = errors.New("invalid decision")
 )

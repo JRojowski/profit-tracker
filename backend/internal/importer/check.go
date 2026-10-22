@@ -3,6 +3,7 @@ package importer
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -39,6 +40,34 @@ func checkLedger(l ledger.Ledger) error {
 	return nil
 }
 
+// withLots returns the Ledger l with each Fill in lotIDs moved to its Lot ID, by XTB ID.
+// It makes a Lot that does not exist, and it removes a Lot with no Fills. Store.SaveImport makes the same moves.
+func withLots(l ledger.Ledger, lotIDs map[string]string) ledger.Ledger {
+	lots := make([]ledger.Lot, 0, len(l.Lots))
+	index := make(map[string]int, len(l.Lots))
+	for _, lot := range l.Lots {
+		index[lot.PositionID] = len(lots)
+		lots = append(lots, ledger.Lot{PositionID: lot.PositionID, Instrument: lot.Instrument})
+	}
+	for _, lot := range l.Lots {
+		for _, f := range lot.Fills {
+			id, ok := lotIDs[f.XTBID]
+			if !ok {
+				id = lot.PositionID
+			}
+			i, ok := index[id]
+			if !ok {
+				i = len(lots)
+				index[id] = i
+				lots = append(lots, ledger.Lot{PositionID: id, Instrument: lot.Instrument})
+			}
+			lots[i].Fills = append(lots[i].Fills, f)
+		}
+	}
+	l.Lots = slices.DeleteFunc(lots, func(lot ledger.Lot) bool { return len(lot.Fills) == 0 })
+	return l
+}
+
 // withNewOperations returns the Ledger l with the new Cash Operations of the Import added.
 // ops are all Cash Operations of the file, and newOps are the ones that are not stored, by XTB ID.
 // A known XTB ID keeps its stored data, because a decision for a changed-data conflict is not known yet.
@@ -62,16 +91,16 @@ func withNewOperations(l ledger.Ledger, ops []store.CashOperation, newOps map[st
 		if !op.IsFill {
 			continue
 		}
-		i, ok := lots[op.PositionID]
+		i, ok := lots[op.LotID]
 		if !ok {
 			i = len(l.Lots)
-			lots[op.PositionID] = i
+			lots[op.LotID] = i
 			l.Lots = append(l.Lots, ledger.Lot{
-				PositionID: op.PositionID,
+				PositionID: op.LotID,
 				Instrument: ledger.Instrument{Ticker: op.Ticker, Name: op.InstrumentName},
 			})
 		}
-		l.Lots[i].Fills = append(l.Lots[i].Fills, ledger.Fill{Volume: op.Volume.Decimal, Amount: op.Amount})
+		l.Lots[i].Fills = append(l.Lots[i].Fills, ledger.Fill{XTBID: op.XTBID, Volume: op.Volume.Decimal, Amount: op.Amount})
 	}
 	return l
 }

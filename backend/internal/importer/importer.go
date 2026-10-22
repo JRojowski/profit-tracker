@@ -12,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
+	"github.com/jrojowski/profit-tracker/backend/internal/lot"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb"
 )
@@ -140,16 +141,26 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 			return Preview{}, err
 		}
 	}
-	ops := cashOperations(export)
+	ops, err := cashOperations(export)
+	if err != nil {
+		return Preview{}, err
+	}
 	c := compare(ops, known)
 
 	newOps := map[string]store.CashOperation{}
+	// skippedFills are the Lot IDs of the known Fills that the file has with the same data. Confirm moves
+	// each of them to this Lot. ADR 0002: the Lot can be different from the stored Lot.
+	skippedFills := map[string]string{}
 	for _, op := range ops {
-		if _, ok := known[op.XTBID]; !ok {
+		existing, ok := known[op.XTBID]
+		switch {
+		case !ok:
 			newOps[op.XTBID] = op
+		case op.IsFill && existing.Equal(op.Data()):
+			skippedFills[op.XTBID] = op.LotID
 		}
 	}
-	after, err := ledger.Calculate(withNewOperations(stored, ops, newOps))
+	after, err := ledger.Calculate(withNewOperations(withLots(stored, skippedFills), ops, newOps))
 	if err != nil {
 		return Preview{}, &RejectedError{Err: fmt.Errorf("%w: %w", errLedgerNotValid, err)}
 	}
@@ -253,11 +264,15 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 		}
 	}
 
+	ops, err := cashOperations(export)
+	if err != nil {
+		return store.Import{}, err
+	}
 	saved, err := s.store.SaveImport(ctx, store.SaveImport{
 		ImportID:       id,
 		Account:        *account,
 		ImportedAt:     s.now(),
-		CashOperations: cashOperations(export),
+		CashOperations: ops,
 		CheckLedger:    checkLedger,
 	})
 	var invalid *invalidLedgerError
@@ -351,7 +366,12 @@ func read(data []byte) (xtb.Export, error) {
 }
 
 // cashOperations converts the Cash Operations of the export for the store.
-func cashOperations(export xtb.Export) []store.CashOperation {
+// It builds the Lots of the Fills with the rule of ADR 0002. An order that does not fit the rule is a *RejectedError.
+func cashOperations(export xtb.Export) ([]store.CashOperation, error) {
+	lots, err := lot.Build(export.CashOperations, export.ClosedPositions, export.OpenLots)
+	if err != nil {
+		return nil, &RejectedError{Err: err}
+	}
 	ops := make([]store.CashOperation, 0, len(export.CashOperations))
 	for _, op := range export.CashOperations {
 		saved := store.CashOperation{
@@ -367,7 +387,8 @@ func cashOperations(export xtb.Export) []store.CashOperation {
 		}
 		switch {
 		case op.Purchase != nil:
-			// One Fill per Lot. The Lot ID is the XTB position ID. Ticket 06 adds the rule of ADR 0002.
+			// ADR 0002: the Lot of a Fill can have the position ID of a different Fill of the same order.
+			saved.LotID = lots[op.ID]
 			saved.Volume = decimal.NewNullDecimal(op.Purchase.Volume)
 			saved.Price = decimal.NewNullDecimal(op.Purchase.Price)
 			saved.IsFill = true
@@ -378,7 +399,7 @@ func cashOperations(export xtb.Export) []store.CashOperation {
 		}
 		ops = append(ops, saved)
 	}
-	return ops
+	return ops, nil
 }
 
 // validate checks the data of a new Account.

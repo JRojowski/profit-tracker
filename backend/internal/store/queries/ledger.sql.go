@@ -74,6 +74,20 @@ func (q *Queries) DeleteLotFill(ctx context.Context, cashOperationID int64) erro
 	return err
 }
 
+const fillLot = `-- name: FillLot :one
+SELECT l.position_id
+FROM lot_fills f
+JOIN lots l ON l.id = f.lot_id
+WHERE f.cash_operation_id = ?
+`
+
+func (q *Queries) FillLot(ctx context.Context, cashOperationID int64) (string, error) {
+	row := q.db.QueryRowContext(ctx, fillLot, cashOperationID)
+	var position_id string
+	err := row.Scan(&position_id)
+	return position_id, err
+}
+
 const insertCashOperation = `-- name: InsertCashOperation :one
 INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, import_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -229,7 +243,7 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 }
 
 const ledgerFills = `-- name: LedgerFills :many
-SELECT l.position_id, i.ticker, i.name AS instrument_name, c.volume, c.amount
+SELECT l.position_id, i.ticker, i.name AS instrument_name, c.xtb_id, c.volume, c.amount
 FROM lots l
 JOIN instruments i ON i.id = l.instrument_id
 JOIN lot_fills f ON f.lot_id = l.id
@@ -242,6 +256,7 @@ type LedgerFillsRow struct {
 	PositionID     string
 	Ticker         string
 	InstrumentName string
+	XtbID          string
 	Volume         decimal.NullDecimal
 	Amount         decimal.Decimal
 }
@@ -259,6 +274,7 @@ func (q *Queries) LedgerFills(ctx context.Context, accountID int64) ([]LedgerFil
 			&i.PositionID,
 			&i.Ticker,
 			&i.InstrumentName,
+			&i.XtbID,
 			&i.Volume,
 			&i.Amount,
 		); err != nil {

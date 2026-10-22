@@ -99,7 +99,7 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 			})
 		}
 		lot := &l.Lots[len(l.Lots)-1]
-		lot.Fills = append(lot.Fills, ledger.Fill{Volume: row.Volume.Decimal, Amount: row.Amount})
+		lot.Fills = append(lot.Fills, ledger.Fill{XTBID: row.XtbID, Volume: row.Volume.Decimal, Amount: row.Amount})
 	}
 	return l, nil
 }

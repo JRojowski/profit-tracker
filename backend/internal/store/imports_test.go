@@ -24,7 +24,7 @@ func TestSaveImport_KeepExistingWithOtherTicker_AddsNoInstrument(t *testing.T) {
 	at := time.Date(2026, 2, 2, 10, 0, 0, 0, time.UTC)
 	stored := store.CashOperation{
 		XTBID: "102", Type: "Stock purchase", Ticker: "FPS.US", InstrumentName: "FPS.US", Category: "STOCK",
-		Time: at, Amount: decimal.RequireFromString("-109.40"), Comment: "OPEN BUY 10 @ 10.94", PositionID: "2000000001",
+		Time: at, Amount: decimal.RequireFromString("-109.40"), Comment: "OPEN BUY 10 @ 10.94", PositionID: "2000000001", LotID: "2000000001",
 		Volume: decimal.NewNullDecimal(decimal.RequireFromString("10")), Price: decimal.NewNullDecimal(decimal.RequireFromString("10.94")), IsFill: true,
 	}
 	account := store.Account{AccountNumber: "56000001", Name: "XTB USD", Type: "regular", Currency: "USD"}

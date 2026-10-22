@@ -175,7 +175,7 @@ func TestImportConfirm_KnownAccount_GoesToSameAccountWithNoBody(t *testing.T) {
 	newer := usdExport()
 	newer.To = time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
 	newer.CashOperations = append([]xtbtest.CashOperation{
-		{Type: "Stock purchase", Ticker: "LSMC.DE", Time: opTime(4), Amount: "-126.35", ID: "104", Comment: "OPEN BUY 0.6169/1.6169 @ 47.755", PositionID: "2000000003"},
+		{Type: "Stock purchase", Ticker: "LSMC.DE", Time: opTime(4), Amount: "-126.35", ID: "104", Comment: "OPEN BUY 0.6169 @ 47.755", PositionID: "2000000003"},
 	}, newer.CashOperations...)
 	preview := srv.preview(t, newer)
 
@@ -267,23 +267,32 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 func TestImportPreview_PurchaseCommentForms_AreAccepted(t *testing.T) {
 	t.Parallel()
 
-	comments := []string{
-		"OPEN BUY 2 @ 58.29",
-		"OPEN BUY PENG.US 2 @ 58.29",
-		"OPEN BUY 0.6169/1.6169 @ 47.755",
-		"OPEN BUY FPS.US 1/1.27 @ 39.24",
+	// Each case is one full order. A Comment with an order volume is one Fill of an order with two Fills.
+	tests := []struct {
+		name     string
+		comments []string
+	}{
+		{name: "whole volume", comments: []string{"OPEN BUY 2 @ 58.29"}},
+		{name: "whole volume with ticker", comments: []string{"OPEN BUY PENG.US 2 @ 58.29"}},
+		{name: "fills with order volume", comments: []string{"OPEN BUY 0.6169/1.6169 @ 47.755", "OPEN BUY 1/1.6169 @ 47.705"}},
+		{name: "fills with ticker and order volume", comments: []string{"OPEN BUY PENG.US 0.27/1.27 @ 39.37", "OPEN BUY PENG.US 1/1.27 @ 39.24"}},
 	}
-	for _, comment := range comments {
-		t.Run(comment, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			srv := startServer(t)
-			export := xtbtest.Export{CashOperations: []xtbtest.CashOperation{
-				{Type: "Stock purchase", Ticker: "PENG.US", Amount: "-116.58", Comment: comment, PositionID: "2000000002"},
-			}}
+			var export xtbtest.Export
+			for i, comment := range tc.comments {
+				// The Fills of one order follow each other within seconds and share one Position ID (ADR 0002, case A).
+				export.CashOperations = append(export.CashOperations, xtbtest.CashOperation{
+					Type: "Stock purchase", Ticker: "PENG.US", Time: opTime(2).Add(time.Duration(i) * time.Second),
+					Amount: "-116.58", Comment: comment, PositionID: "2000000002",
+				})
+			}
 
 			got := srv.preview(t, export)
 
-			assert.Equal(t, 1, got.NewCashOperations)
+			assert.Equal(t, len(tc.comments), got.NewCashOperations)
 		})
 	}
 }

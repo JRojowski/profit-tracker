@@ -21,6 +21,12 @@ WHERE id = ?;
 DELETE FROM lot_fills
 WHERE cash_operation_id = ?;
 
+-- name: FillLot :one
+SELECT l.position_id
+FROM lot_fills f
+JOIN lots l ON l.id = f.lot_id
+WHERE f.cash_operation_id = ?;
+
 -- name: DeleteEmptyLots :exec
 DELETE FROM lots
 WHERE account_id = ? AND id NOT IN (SELECT lot_id FROM lot_fills);
@@ -54,7 +60,7 @@ WHERE account_id = ?
 ORDER BY time, id;
 
 -- name: LedgerFills :many
-SELECT l.position_id, i.ticker, i.name AS instrument_name, c.volume, c.amount
+SELECT l.position_id, i.ticker, i.name AS instrument_name, c.xtb_id, c.volume, c.amount
 FROM lots l
 JOIN instruments i ON i.id = l.instrument_id
 JOIN lot_fills f ON f.lot_id = l.id

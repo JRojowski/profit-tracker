@@ -26,6 +26,8 @@ var (
 	ErrInvalidRow = errors.New("invalid cash operation row")
 	// ErrInvalidClosedPosition tells that a Closed Positions row has a value that the reader cannot use.
 	ErrInvalidClosedPosition = errors.New("invalid closed position row")
+	// ErrInvalidOpenPosition tells that a Lot row of the Open Positions sheet has a value that the reader cannot use.
+	ErrInvalidOpenPosition = errors.New("invalid open position row")
 )
 
 // OperationType is the type of a Cash Operation, as the export writes it.
@@ -45,6 +47,7 @@ var knownTypes = []OperationType{TypeDeposit, TypeStockPurchase, TypeStockSell}
 const (
 	sheetCashOperations  = "Cash Operations"
 	sheetClosedPositions = "Closed Positions"
+	sheetOpenPositions   = "Open Positions"
 )
 
 // cashHeader is row 5 of the Cash Operations sheet.
@@ -83,6 +86,23 @@ const (
 	colClosedPositionID = 23
 )
 
+// openHeader is row 9 of the Open Positions sheet.
+var openHeader = []string{"Product", "Instrument/Position", "Ticker", "Category", "Type", "Volume"}
+
+// Rows and columns of the Open Positions sheet. A group row per Instrument has no Type.
+// The Lot rows of the Instrument follow it, with the Position ID in place of the Instrument name.
+const (
+	openHeaderRow = 9
+
+	colOpenPositionID = 1
+	colOpenTicker     = 2
+	colOpenType       = 4
+	colOpenVolume     = 5
+)
+
+// openLotType is the Type of a Lot row in the Open Positions sheet.
+const openLotType = "BUY"
+
 // closedSummary is the text in column A of the summary row under the Closed Positions rows.
 const closedSummary = "Profit/loss"
 
@@ -96,6 +116,20 @@ type Export struct {
 	Total decimal.Decimal
 	// ClosedPositions are the rows of the Closed Positions sheet, in the order of the file.
 	ClosedPositions []ClosedPosition
+	// OpenLots are the Lot rows of the Open Positions sheet, in the order of the file.
+	OpenLots []OpenLot
+}
+
+// OpenLot is one Lot row of the Open Positions sheet: the open part of a Lot at the time of the report.
+// The tool uses only the Lot ID and the volume, never the prices. See ADR 0002.
+type OpenLot struct {
+	// Row is the row number in the sheet, for error messages.
+	Row    int
+	Ticker string
+	// PositionID is the Lot ID, in the same form as in the Cash Operations sheet.
+	PositionID string
+	// Volume is the open volume.
+	Volume decimal.Decimal
 }
 
 // ClosedPosition is one row of the Closed Positions sheet: one closed part of a Lot.
@@ -208,7 +242,78 @@ func Read(data []byte) (Export, error) {
 	if err != nil {
 		return Export{}, err
 	}
+
+	if idx, err := f.GetSheetIndex(sheetOpenPositions); err != nil || idx < 0 {
+		return Export{}, fmt.Errorf("%w: it has no %q sheet", ErrNotExport, sheetOpenPositions)
+	}
+	rows, err = f.GetRows(sheetOpenPositions, excelize.Options{RawCellValue: true})
+	if err != nil {
+		return Export{}, fmt.Errorf("read %s sheet: %w", sheetOpenPositions, err)
+	}
+	export.OpenLots, err = readOpenLots(rows)
+	if err != nil {
+		return Export{}, err
+	}
 	return export, nil
+}
+
+// readOpenLots reads the Lot rows of the Open Positions sheet. It skips the group rows, which have no Type.
+func readOpenLots(rows [][]string) ([]OpenLot, error) {
+	if len(rows) < openHeaderRow {
+		return nil, fmt.Errorf("%w: the %q sheet has no header in row %d", ErrNotExport, sheetOpenPositions, openHeaderRow)
+	}
+	if header := rows[openHeaderRow-1]; len(header) < len(openHeader) || !slices.Equal(header[:len(openHeader)], openHeader) {
+		return nil, fmt.Errorf("%w: the %q sheet has an unknown header in row %d", ErrNotExport, sheetOpenPositions, openHeaderRow)
+	}
+
+	var lots []OpenLot
+	for i := openHeaderRow; i < len(rows); i++ {
+		row, rowNumber := rows[i], i+1
+		typ := strings.TrimSpace(cellAt(row, colOpenType))
+		if typ == "" {
+			continue
+		}
+		lot, err := readOpenLot(row, rowNumber, typ)
+		if err != nil {
+			return nil, err
+		}
+		lots = append(lots, lot)
+	}
+	return lots, nil
+}
+
+// readOpenLot reads one Lot row of the Open Positions sheet.
+func readOpenLot(row []string, rowNumber int, typ string) (OpenLot, error) {
+	invalid := func(column, value string) error {
+		return fmt.Errorf("%w: row %d has the %s %q, which is not valid", ErrInvalidOpenPosition, rowNumber, column, value)
+	}
+	if typ != openLotType {
+		return OpenLot{}, invalid("type", typ)
+	}
+	lot := OpenLot{Row: rowNumber, Ticker: strings.TrimSpace(cellAt(row, colOpenTicker))}
+
+	raw := strings.TrimSpace(cellAt(row, colOpenPositionID))
+	id, ok := positionID(raw)
+	if !ok {
+		return OpenLot{}, invalid("position ID", raw)
+	}
+	lot.PositionID = id
+
+	var err error
+	if lot.Volume, err = decimal.NewFromString(cellAt(row, colOpenVolume)); err != nil {
+		return OpenLot{}, invalid("volume", cellAt(row, colOpenVolume))
+	}
+	return lot, nil
+}
+
+// positionID returns the Position ID in its plain form, and false if the value is not a Position ID.
+// The export writes it as plain digits or as a Java double, for example "2.636532207E9".
+func positionID(value string) (string, bool) {
+	id, err := decimal.NewFromString(value)
+	if err != nil || !id.IsInteger() || id.IsNegative() {
+		return "", false
+	}
+	return id.String(), true
 }
 
 // readClosedPositions reads the rows of the Closed Positions sheet, up to the summary row.
@@ -247,12 +352,13 @@ func readClosedPosition(row []string, rowNumber int) (ClosedPosition, error) {
 	p := ClosedPosition{Row: rowNumber, Ticker: strings.TrimSpace(cellAt(row, colClosedTicker))}
 
 	// The export writes the Position ID as a Java double, for example "2.636532207E9".
-	id, err := decimal.NewFromString(cellAt(row, colClosedPositionID))
-	if err != nil || !id.IsInteger() || id.IsNegative() {
+	id, ok := positionID(cellAt(row, colClosedPositionID))
+	if !ok {
 		return ClosedPosition{}, invalid("position ID", cellAt(row, colClosedPositionID))
 	}
-	p.PositionID = id.String()
+	p.PositionID = id
 
+	var err error
 	if p.Volume, err = decimal.NewFromString(cellAt(row, colClosedVolume)); err != nil {
 		return ClosedPosition{}, invalid("volume", cellAt(row, colClosedVolume))
 	}
