@@ -203,6 +203,9 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 	}
 	totalMismatch := usdExport()
 	totalMismatch.CashTotal = "774.03"
+	// The tolerance for float noise is smaller than half a cent, so half a cent is a real difference.
+	totalHalfCentOff := usdExport()
+	totalHalfCentOff.CashTotal = "774.025"
 	brokenZip := []byte("PK\x03\x04 not a zip")
 
 	tests := []struct {
@@ -246,6 +249,11 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 			wantError: []string{"Total row", "774.02", "774.03"},
 		},
 		{
+			name:      "Total row half a cent off",
+			data:      xtbtest.Build(t, totalHalfCentOff),
+			wantError: []string{"Total row", "774.02", "774.025"},
+		},
+		{
 			name:      "purchase comment in an unknown form",
 			data:      withRow(xtbtest.CashOperation{Type: "Stock purchase", Ticker: "FPS.US", Amount: "-1.00", Comment: "BUY SOME", PositionID: "2000000009"}),
 			wantError: []string{"row 9", `"BUY SOME"`},
@@ -267,6 +275,25 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 			assert.Empty(t, srv.imports(t))
 		})
 	}
+}
+
+func TestImportPreview_TotalRowWithFloatNoise_IsAccepted(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// A real XTB export: Excel stores the Total row as a float sum with noise.
+	export := xtbtest.Export{
+		AccountNumber: "56000001",
+		Currency:      "USD",
+		CashOperations: []xtbtest.CashOperation{
+			{Type: "Deposit", Time: opTime(2), Amount: "83.03", ID: "102", Comment: "Blik deposit"},
+			{Type: "Deposit", Time: opTime(1), Amount: "900.00", ID: "101", Comment: "Blik deposit"},
+		},
+		CashTotal: "983.029999999997",
+	}
+
+	got := srv.preview(t, export)
+
+	assert.Equal(t, 2, got.NewCashOperations)
 }
 
 func TestImportPreview_PurchaseCommentForms_AreAccepted(t *testing.T) {

@@ -78,6 +78,11 @@ const (
 	TypeIKZE    = "IKZE"
 )
 
+// totalTolerance is half a cent. The Total row check accepts a difference that is smaller than totalTolerance.
+// Excel stores the Total row as a float sum, so the Total can have float noise, for example 983.029999999997.
+// A difference of one cent is a real difference and the check rejects it.
+var totalTolerance = decimal.New(5, -3)
+
 // currencyCode matches a currency code, for example "USD".
 var currencyCode = regexp.MustCompile(`^[A-Z]{3}$`)
 
@@ -367,7 +372,7 @@ func read(data []byte) (xtb.Export, error) {
 		sum = sum.Add(op.Amount)
 	}
 	// The Total row check: a difference means that the reader lost rows.
-	if !sum.Equal(export.Total) {
+	if sum.Sub(export.Total).Abs().GreaterThanOrEqual(totalTolerance) {
 		return xtb.Export{}, &RejectedError{Err: fmt.Errorf("%w: the sum is %s, the Total row is %s", ErrTotalMismatch, sum, export.Total)}
 	}
 	return export, nil
