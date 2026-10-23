@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,16 +40,39 @@ type summaryResponse struct {
 	NetDividends   string `json:"netDividends"`
 	NetInterest    string `json:"netInterest"`
 	Fees           string `json:"fees"`
-	TotalResult    string `json:"totalResult"`
+	// UnrealizedProfit is the sum over the Holdings with a price. It is a part of TotalResult.
+	UnrealizedProfit string `json:"unrealizedProfit"`
+	TotalResult      string `json:"totalResult"`
+	// Value is the cash balance plus the value of the Holdings with a price.
+	Value string `json:"value"`
+	// PriceDate is the oldest price date of the Holdings with a price, as YYYY-MM-DD. It is nil if no Holding has a price.
+	PriceDate *string `json:"priceDate"`
+	// StalePrices tells that a Holding in the Account currency has no price, or its price was fetched before today.
+	StalePrices bool `json:"stalePrices"`
+	// UnpricedHoldings is the number of Holdings with no value.
+	UnpricedHoldings int `json:"unpricedHoldings"`
 }
 
 // holdingResponse is one row of GET /api/accounts/{id}/holdings. Amounts and the volume are decimal text.
+// The price fields are nil when the Holding has no value. Then Note tells the reason.
 type holdingResponse struct {
 	Ticker      string `json:"ticker"`
 	Name        string `json:"name"`
 	Volume      string `json:"volume"`
 	Cost        string `json:"cost"`
 	AverageCost string `json:"averageCost"`
+	// QuoteCurrency is nil when the quote currency of the Instrument is not known.
+	QuoteCurrency *string `json:"quoteCurrency"`
+	// Price is the close price. PriceDate is its date as YYYY-MM-DD.
+	Price     *string `json:"price"`
+	PriceDate *string `json:"priceDate"`
+	Value     *string `json:"value"`
+	// UnrealizedProfit is Value minus Cost.
+	UnrealizedProfit *string `json:"unrealizedProfit"`
+	// UnrealizedProfitPercent is UnrealizedProfit × 100 / Cost, exact. The frontend rounds for display.
+	UnrealizedProfitPercent *string `json:"unrealizedProfitPercent"`
+	// Note is a sentence for the user when the Holding has no value.
+	Note *string `json:"note"`
 }
 
 // saleResponse is one row of GET /api/accounts/{id}/sales. Amounts and the volume are decimal text.
@@ -106,53 +130,53 @@ func (a *api) renameAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAccountResponse(acc))
 }
 
-// accountSummary returns the cash balance, the Net Deposits, and the total result with its parts of the Account.
+// accountSummary returns the value, the cash balance, the Net Deposits, the total result with its parts,
+// and the price status of the Account.
 func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
-	acc, state, ok := a.accountState(w, r)
+	view, ok := a.accountView(w, r)
 	if !ok {
 		return
 	}
+	state := view.state
 	writeJSON(w, http.StatusOK, summaryResponse{
-		AccountID:      acc.ID,
-		Currency:       acc.Currency,
-		Cash:           formatAmount(state.Cash),
-		NetDeposits:    formatAmount(state.NetDeposits),
-		RealizedProfit: formatAmount(state.RealizedProfit),
-		NetDividends:   formatAmount(state.NetDividends),
-		NetInterest:    formatAmount(state.NetInterest),
-		Fees:           formatAmount(state.Fees),
-		TotalResult:    formatAmount(state.TotalResult),
+		AccountID:        view.account.ID,
+		Currency:         view.account.Currency,
+		Cash:             formatAmount(state.Cash),
+		NetDeposits:      formatAmount(state.NetDeposits),
+		RealizedProfit:   formatAmount(state.RealizedProfit),
+		NetDividends:     formatAmount(state.NetDividends),
+		NetInterest:      formatAmount(state.NetInterest),
+		Fees:             formatAmount(state.Fees),
+		UnrealizedProfit: formatAmount(state.UnrealizedProfit),
+		TotalResult:      formatAmount(state.TotalResult),
+		Value:            formatAmount(state.Value),
+		PriceDate:        view.priceDate(),
+		StalePrices:      view.stalePrices(a.today()),
+		UnpricedHoldings: view.unpricedHoldings(),
 	})
 }
 
-// accountHoldings returns the Holdings of the Account, ordered by ticker.
+// accountHoldings returns the Holdings of the Account with their value, ordered by ticker.
 func (a *api) accountHoldings(w http.ResponseWriter, r *http.Request) {
-	_, state, ok := a.accountState(w, r)
+	view, ok := a.accountView(w, r)
 	if !ok {
 		return
 	}
-	resp := make([]holdingResponse, 0, len(state.Holdings))
-	for _, h := range state.Holdings {
-		resp = append(resp, holdingResponse{
-			Ticker: h.Instrument.Ticker,
-			Name:   h.Instrument.Name,
-			Volume: h.Volume.String(),
-			Cost:   formatAmount(h.Cost),
-			// The frontend rounds for display. ADR 0001: the tool rounds only for display.
-			AverageCost: h.AverageCost().String(),
-		})
+	resp := make([]holdingResponse, 0, len(view.state.Holdings))
+	for _, h := range view.state.Holdings {
+		resp = append(resp, view.holdingRow(h))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
 // accountSales returns the sales of the Account with their Realized Profit, in time order and then in XTB ID order.
 func (a *api) accountSales(w http.ResponseWriter, r *http.Request) {
-	_, state, ok := a.accountState(w, r)
+	view, ok := a.accountView(w, r)
 	if !ok {
 		return
 	}
-	resp := make([]saleResponse, 0, len(state.Sales))
-	for _, s := range state.Sales {
+	resp := make([]saleResponse, 0, len(view.state.Sales))
+	for _, s := range view.state.Sales {
 		resp = append(resp, saleResponse{
 			XTBID:          s.XTBID,
 			Time:           s.Time.UTC().Format(time.RFC3339),
@@ -168,29 +192,46 @@ func (a *api) accountSales(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// accountState reads the Account of the path and calculates its state from the Ledger.
+// accountView reads the Account of the path and calculates its state from the Ledger and the stored prices.
 // It writes the error response and returns false if it cannot.
-func (a *api) accountState(w http.ResponseWriter, r *http.Request) (store.Account, ledger.State, bool) {
+func (a *api) accountView(w http.ResponseWriter, r *http.Request) (accountView, bool) {
 	id, ok := accountID(w, r)
 	if !ok {
-		return store.Account{}, ledger.State{}, false
+		return accountView{}, false
 	}
 	acc, err := a.store.Account(r.Context(), id)
 	if err != nil {
 		a.writeAccountError(w, r, err)
-		return store.Account{}, ledger.State{}, false
+		return accountView{}, false
 	}
-	l, err := a.store.Ledger(r.Context(), id)
+	view, err := a.readAccountView(r.Context(), acc)
 	if err != nil {
 		a.writeInternalError(w, r, err)
-		return store.Account{}, ledger.State{}, false
+		return accountView{}, false
 	}
+	return view, true
+}
+
+// readAccountView reads the Ledger and the price data, and calculates the state of the Account.
+func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountView, error) {
+	l, err := a.store.Ledger(ctx, acc.ID)
+	if err != nil {
+		return accountView{}, err
+	}
+	quoteCurrencies, err := a.store.QuoteCurrencies(ctx)
+	if err != nil {
+		return accountView{}, err
+	}
+	prices, err := a.store.LastPrices(ctx)
+	if err != nil {
+		return accountView{}, err
+	}
+	l.Prices = accountPrices(acc.Currency, quoteCurrencies, prices)
 	state, err := ledger.Calculate(l)
 	if err != nil {
-		a.writeInternalError(w, r, fmt.Errorf("calculate the state of account %d: %w", id, err))
-		return store.Account{}, ledger.State{}, false
+		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)
 	}
-	return acc, state, true
+	return accountView{account: acc, state: state, quoteCurrencies: quoteCurrencies, prices: prices}, nil
 }
 
 // accountID returns the Account ID of the path. An ID that is not a number is an unknown Account.

@@ -86,9 +86,12 @@ type CashOperation struct {
 	Ticker         string
 	InstrumentName string
 	Category       string
-	Time           time.Time
-	Amount         decimal.Decimal
-	Comment        string
+	// QuoteCurrency is the quote currency of the Instrument, or empty if it is not known.
+	// The store sets it only when it adds the Instrument. Thus a later Import keeps a quote currency that the user set.
+	QuoteCurrency string
+	Time          time.Time
+	Amount        decimal.Decimal
+	Comment       string
 	// PositionID is the Lot ID. It is empty for an operation with no Lot.
 	PositionID string
 	// Volume and Price are the parsed volume and price. They are not valid for an operation with no volume.
@@ -510,7 +513,12 @@ func (w *ledgerWriter) instrument(ctx context.Context, op CashOperation) (sql.Nu
 	if id, ok := w.instruments[op.Ticker]; ok {
 		return sql.NullInt64{Int64: id, Valid: true}, nil
 	}
-	id, err := w.q.UpsertInstrument(ctx, queries.UpsertInstrumentParams{Ticker: op.Ticker, Name: op.InstrumentName, Category: op.Category})
+	id, err := w.q.UpsertInstrument(ctx, queries.UpsertInstrumentParams{
+		Ticker:        op.Ticker,
+		Name:          op.InstrumentName,
+		Category:      op.Category,
+		QuoteCurrency: sql.NullString{String: op.QuoteCurrency, Valid: op.QuoteCurrency != ""},
+	})
 	if err != nil {
 		return sql.NullInt64{}, fmt.Errorf("save instrument %s: %w", op.Ticker, err)
 	}

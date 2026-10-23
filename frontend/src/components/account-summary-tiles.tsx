@@ -15,16 +15,25 @@ type AccountSummaryTilesProps = {
 type Tile = {
   label: string
   amount: string
+  // note is a short text under the amount, or undefined.
+  note?: string
 }
 
 export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
+  const unpriced = unpricedNote(summary.unpricedHoldings)
   const accountTiles: Tile[] = [
+    { label: "Value", amount: summary.value, note: unpriced },
     { label: "Cash", amount: summary.cash },
     { label: "Net Deposits", amount: summary.netDeposits },
-    { label: "Total result", amount: summary.totalResult },
+    { label: "Total result", amount: summary.totalResult, note: unpriced },
   ]
   const resultParts: Tile[] = [
     { label: "Realized Profit", amount: summary.realizedProfit },
+    {
+      label: "Unrealized Profit",
+      amount: summary.unrealizedProfit,
+      note: unpriced,
+    },
     { label: "Net dividends", amount: summary.netDividends },
     { label: "Net interest", amount: summary.netInterest },
     { label: "Fees", amount: summary.fees },
@@ -32,7 +41,7 @@ export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {accountTiles.map((tile) => (
           <SummaryTile
             key={tile.label}
@@ -46,7 +55,7 @@ export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
         <h3 className="text-sm font-medium text-muted-foreground">
           Parts of the total result
         </h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {resultParts.map((tile) => (
             <SummaryTile
               key={tile.label}
@@ -75,7 +84,16 @@ function SummaryTile({ tile, currency, titleClassName }: SummaryTileProps) {
         <CardTitle className={cn("tabular-nums", titleClassName)}>
           {formatAmount(tile.amount, currency)}
         </CardTitle>
+        {tile.note && <CardDescription>{tile.note}</CardDescription>}
       </CardHeader>
     </Card>
   )
+}
+
+// unpricedNote tells that the amount leaves out the Holdings with no value.
+function unpricedNote(count: number): string | undefined {
+  if (count === 0) return undefined
+  return count === 1
+    ? "Without 1 Holding that has no value."
+    : `Without ${count} Holdings that have no value.`
 }

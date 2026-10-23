@@ -22,3 +22,19 @@ export function formatVolume(volume: string): string {
     maximumFractionDigits: 10,
   }).format(Number(volume))
 }
+
+// formatPercent shows a decimal percentage from the backend with 2 decimal places, for example "8.85 %".
+// The backend sends 8.85 for 8.85 %, not 0.0885.
+export function formatPercent(percent: string): string {
+  return new Intl.NumberFormat(undefined, {
+    style: "percent",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(percent) / 100)
+}
+
+// formatDate shows a YYYY-MM-DD date in the local format. It reads the date as a calendar date, with no time zone shift.
+export function formatDate(date: string): string {
+  const [year, month, day] = date.split("-").map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString()
+}

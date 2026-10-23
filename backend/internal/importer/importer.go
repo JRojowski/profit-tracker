@@ -13,6 +13,7 @@ import (
 
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/lot"
+	"github.com/jrojowski/profit-tracker/backend/internal/price"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb"
 )
@@ -393,6 +394,7 @@ func cashOperations(export xtb.Export) ([]store.CashOperation, error) {
 			Ticker:         op.Ticker,
 			InstrumentName: op.Instrument,
 			Category:       op.Category,
+			QuoteCurrency:  price.QuoteCurrency(op.Ticker),
 			Time:           op.Time,
 			Amount:         op.Amount,
 			Comment:        op.Comment,

@@ -30,3 +30,5 @@ sql:
             go_type: github.com/shopspring/decimal.NullDecimal
           - column: import_conflicts.check_closed_positions
             go_type: github.com/shopspring/decimal.NullDecimal
+          - column: prices.close
+            go_type: github.com/shopspring/decimal.Decimal

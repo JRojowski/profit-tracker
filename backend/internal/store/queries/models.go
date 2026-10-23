@@ -73,10 +73,11 @@ type ImportConflict struct {
 }
 
 type Instrument struct {
-	ID       int64
-	Ticker   string
-	Name     string
-	Category string
+	ID            int64
+	Ticker        string
+	Name          string
+	Category      string
+	QuoteCurrency sql.NullString
 }
 
 type Lot struct {
@@ -89,4 +90,14 @@ type Lot struct {
 type LotFill struct {
 	LotID           int64
 	CashOperationID int64
+}
+
+type Price struct {
+	ID           int64
+	InstrumentID int64
+	Date         string
+	Close        decimal.Decimal
+	Currency     string
+	Source       string
+	FetchedAt    string
 }

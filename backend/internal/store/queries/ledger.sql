@@ -32,8 +32,8 @@ DELETE FROM lots
 WHERE account_id = ? AND id NOT IN (SELECT lot_id FROM lot_fills);
 
 -- name: UpsertInstrument :one
-INSERT INTO instruments (ticker, name, category)
-VALUES (?, ?, ?)
+INSERT INTO instruments (ticker, name, category, quote_currency)
+VALUES (?, ?, ?, ?)
 ON CONFLICT (ticker) DO UPDATE SET ticker = excluded.ticker
 RETURNING id;
 

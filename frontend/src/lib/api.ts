@@ -206,21 +206,53 @@ export type AccountSummary = {
   currency: string
   cash: string
   netDeposits: string
-  // totalResult is the sum of the parts below. Unrealized Profit joins it in a later version.
+  // value is the cash plus the value of the Holdings that have a price.
+  value: string
+  // totalResult is the sum of the parts below.
   totalResult: string
   realizedProfit: string
+  unrealizedProfit: string
   netDividends: string
   netInterest: string
   fees: string
+  // priceDate is the oldest price date of the priced Holdings, as YYYY-MM-DD. It is null when no Holding has a price.
+  priceDate: string | null
+  // stalePrices tells that a Holding in the Account currency has no price, or that its price is not from today.
+  stalePrices: boolean
+  // unpricedHoldings is the count of Holdings with no value.
+  unpricedHoldings: number
 }
 
 // Holding holds all open Lots of one Instrument. Volumes and amounts are decimal text.
+// The price fields are null when the Holding has no value. Then note tells the user why.
 export type Holding = {
   ticker: string
   name: string
   volume: string
   cost: string
   averageCost: string
+  // quoteCurrency is null when the tool does not know the quote currency of the Instrument.
+  quoteCurrency: string | null
+  price: string | null
+  // priceDate is YYYY-MM-DD.
+  priceDate: string | null
+  value: string | null
+  unrealizedProfit: string | null
+  // unrealizedProfitPercent is the Unrealized Profit as a percentage of the cost, for example "8.85" for 8.85 %.
+  unrealizedProfitPercent: string | null
+  note: string | null
+}
+
+// PriceFailure is one Instrument that got no new price. The ticker is the broker ticker.
+export type PriceFailure = {
+  ticker: string
+  error: string
+}
+
+// PriceRefresh is the result of a price refresh.
+export type PriceRefresh = {
+  refreshed: number
+  failures: PriceFailure[]
 }
 
 // Sale is one sale with its Realized Profit. The time is RFC 3339 text in UTC.
@@ -276,4 +308,10 @@ export async function fetchSales(
 ): Promise<Sale[]> {
   const response = await fetch(`/api/accounts/${id}/sales`, { signal })
   return readJSON<Sale[]>(response)
+}
+
+// refreshPrices gets new prices for the Instruments in the Holdings of all Accounts.
+export async function refreshPrices(): Promise<PriceRefresh> {
+  const response = await fetch("/api/prices/refresh", { method: "POST" })
+  return readJSON<PriceRefresh>(response)
 }

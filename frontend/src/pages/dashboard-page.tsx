@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 
 import { AccountSummaryTiles } from "@/components/account-summary-tiles"
 import { HoldingsTable } from "@/components/holdings-table"
+import { PriceStatus } from "@/components/price-status"
 import { RenameAccountForm } from "@/components/rename-account-form"
 import { SalesTable } from "@/components/sales-table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -21,9 +22,11 @@ import {
   fetchAccountSummary,
   fetchHoldings,
   fetchSales,
+  refreshPrices,
   type Account,
   type AccountSummary,
   type Holding,
+  type PriceRefresh,
   type Sale,
 } from "@/lib/api"
 
@@ -48,6 +51,11 @@ export function DashboardPage() {
   const [renaming, setRenaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [valuesError, setValuesError] = useState<ValuesError | null>(null)
+  // reloadCount changes after a price refresh, so the values of the Account load again.
+  const [reloadCount, setReloadCount] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refresh, setRefresh] = useState<PriceRefresh | null>(null)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -80,7 +88,22 @@ export function DashboardPage() {
         setValuesError({ accountId: selectedId, message: errorMessage(err) })
       })
     return () => controller.abort()
-  }, [selectedId])
+  }, [selectedId, reloadCount])
+
+  function handleRefreshPrices() {
+    setRefreshing(true)
+    refreshPrices()
+      .then((result) => {
+        setRefresh(result)
+        setRefreshError(null)
+        setReloadCount((count) => count + 1)
+      })
+      .catch((err: unknown) => {
+        setRefresh(null)
+        setRefreshError(errorMessage(err))
+      })
+      .finally(() => setRefreshing(false))
+  }
 
   function handleRenamed(renamed: Account) {
     setAccounts(
@@ -158,6 +181,13 @@ export function DashboardPage() {
         </Alert>
       ) : current ? (
         <>
+          <PriceStatus
+            summary={current.summary}
+            refreshing={refreshing}
+            refresh={refresh}
+            refreshError={refreshError}
+            onRefresh={handleRefreshPrices}
+          />
           <AccountSummaryTiles summary={current.summary} />
           <Card>
             <CardHeader>

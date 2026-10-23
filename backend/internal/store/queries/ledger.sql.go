@@ -425,20 +425,26 @@ func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperati
 }
 
 const upsertInstrument = `-- name: UpsertInstrument :one
-INSERT INTO instruments (ticker, name, category)
-VALUES (?, ?, ?)
+INSERT INTO instruments (ticker, name, category, quote_currency)
+VALUES (?, ?, ?, ?)
 ON CONFLICT (ticker) DO UPDATE SET ticker = excluded.ticker
 RETURNING id
 `
 
 type UpsertInstrumentParams struct {
-	Ticker   string
-	Name     string
-	Category string
+	Ticker        string
+	Name          string
+	Category      string
+	QuoteCurrency sql.NullString
 }
 
 func (q *Queries) UpsertInstrument(ctx context.Context, arg UpsertInstrumentParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, upsertInstrument, arg.Ticker, arg.Name, arg.Category)
+	row := q.db.QueryRowContext(ctx, upsertInstrument,
+		arg.Ticker,
+		arg.Name,
+		arg.Category,
+		arg.QuoteCurrency,
+	)
 	var id int64
 	err := row.Scan(&id)
 	return id, err

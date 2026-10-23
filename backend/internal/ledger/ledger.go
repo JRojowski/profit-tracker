@@ -1,5 +1,6 @@
-// Package ledger calculates the state of one Account from its Ledger: the cash balance,
-// the Net Deposits, the Holdings, the sales with their Realized Profit, and the total result with its parts.
+// Package ledger calculates the state of one Account from its Ledger and the prices: the cash balance,
+// the Net Deposits, the Holdings with their value and Unrealized Profit, the sales with their Realized Profit,
+// and the total result with its parts.
 // It is a pure calculation with no I/O.
 // The tool calculates this state on each request and does not store it.
 package ledger
@@ -37,12 +38,15 @@ var (
 	ErrLotOverclosed = errors.New("the sales close more than the lot volume")
 )
 
-// Ledger is the input of Calculate: all Cash Operations of one Account and its Lots.
+// Ledger is the input of Calculate: all Cash Operations of one Account, its Lots and the prices.
 type Ledger struct {
 	// CashOperations are all Cash Operations of the Account, in time order.
 	CashOperations []CashOperation
 	// Lots are the Lots of the Account, each with its Fills.
 	Lots []Lot
+	// Prices are the close prices in the Account currency, by broker ticker.
+	// A Holding with no price has no value and no Unrealized Profit.
+	Prices map[string]decimal.Decimal
 }
 
 // CashOperation is one entry of the Ledger.
@@ -102,7 +106,11 @@ type State struct {
 	NetInterest decimal.Decimal
 	// Fees is the sum of the SEC fees and the corrections, with the sign of the export. It is usually negative.
 	Fees decimal.Decimal
-	// TotalResult is RealizedProfit + NetDividends + NetInterest + Fees.
+	// UnrealizedProfit is the sum of the Unrealized Profit of the Holdings that have a price.
+	UnrealizedProfit decimal.Decimal
+	// Value is the cash balance plus the value of the Holdings that have a price.
+	Value decimal.Decimal
+	// TotalResult is RealizedProfit + UnrealizedProfit + NetDividends + NetInterest + Fees.
 	TotalResult decimal.Decimal
 }
 
@@ -131,12 +139,31 @@ type Holding struct {
 	Volume decimal.Decimal
 	// Cost is the open cost in the Account currency. It is positive.
 	Cost decimal.Decimal
+	// HasPrice tells that the Ledger has a price for the Instrument. If it is false,
+	// Price, Value and UnrealizedProfit are zero.
+	HasPrice bool
+	// Price is the close price in the Account currency.
+	Price decimal.Decimal
+	// Value is the open volume × the price.
+	Value decimal.Decimal
+	// UnrealizedProfit is Value minus Cost. It can be negative.
+	UnrealizedProfit decimal.Decimal
 }
 
 // AverageCost returns the open cost per unit. The division keeps decimal.DivisionPrecision (16) decimal places.
 // It does not round to the cent. The frontend rounds for display.
 func (h Holding) AverageCost() decimal.Decimal {
 	return h.Cost.Div(h.Volume)
+}
+
+// UnrealizedProfitPercent returns the Unrealized Profit × 100 / the open cost. The multiplication comes first,
+// so an exact result stays exact. The division keeps decimal.DivisionPrecision (16) decimal places.
+// It returns false if the Holding has no price or no cost.
+func (h Holding) UnrealizedProfitPercent() (decimal.Decimal, bool) {
+	if !h.HasPrice || h.Cost.IsZero() {
+		return decimal.Zero, false
+	}
+	return h.UnrealizedProfit.Mul(decimal.NewFromInt(100)).Div(h.Cost), true
 }
 
 // Calculate returns the state of the Account from its Ledger. The values are exact. Calculate does not round.
@@ -159,12 +186,16 @@ func Calculate(l Ledger) (State, error) {
 		return State{}, err
 	}
 	s.Sales = sales
-	s.Holdings = holdings(l.Lots, lots)
+	s.Holdings = holdings(l.Lots, lots, l.Prices)
 	for _, sale := range sales {
 		s.RealizedProfit = s.RealizedProfit.Add(sale.RealizedProfit)
 	}
-	// Ticket 09 adds the Unrealized Profit to the total result.
-	s.TotalResult = s.RealizedProfit.Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
+	s.UnrealizedProfit, s.Value = decimal.Zero, s.Cash
+	for _, h := range s.Holdings {
+		s.UnrealizedProfit = s.UnrealizedProfit.Add(h.UnrealizedProfit)
+		s.Value = s.Value.Add(h.Value)
+	}
+	s.TotalResult = s.RealizedProfit.Add(s.UnrealizedProfit).Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
 	return s, nil
 }
 
@@ -268,7 +299,8 @@ func closeLots(ops []CashOperation, lots map[string]*lotState) ([]Sale, error) {
 }
 
 // holdings adds the open part of the Lots per Instrument. A fully closed Lot adds nothing.
-func holdings(lots []Lot, states map[string]*lotState) []Holding {
+// A Holding with a price gets its value and its Unrealized Profit.
+func holdings(lots []Lot, states map[string]*lotState, prices map[string]decimal.Decimal) []Holding {
 	byTicker := map[string]*Holding{}
 	for _, lot := range lots {
 		st := states[lot.PositionID]
@@ -286,6 +318,12 @@ func holdings(lots []Lot, states map[string]*lotState) []Holding {
 
 	result := make([]Holding, 0, len(byTicker))
 	for _, h := range byTicker {
+		h.Price, h.Value, h.UnrealizedProfit = decimal.Zero, decimal.Zero, decimal.Zero
+		if p, ok := prices[h.Instrument.Ticker]; ok {
+			h.HasPrice, h.Price = true, p
+			h.Value = h.Volume.Mul(p)
+			h.UnrealizedProfit = h.Value.Sub(h.Cost)
+		}
 		result = append(result, *h)
 	}
 	slices.SortFunc(result, func(a, b Holding) int { return cmp.Compare(a.Instrument.Ticker, b.Instrument.Ticker) })

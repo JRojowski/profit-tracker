@@ -6,8 +6,10 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/importer"
+	"github.com/jrojowski/profit-tracker/backend/internal/price"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
@@ -20,11 +22,21 @@ type Options struct {
 	Frontend fs.FS
 	// Logger receives the errors that the API cannot return to the client.
 	Logger *slog.Logger
+	// Prices gets and stores the prices. It is required.
+	// The caller shares it with the refresh at start, so that the two refreshes do not overlap.
+	Prices *price.Service
+	// Now is the clock that tells "today" for the stale-price warning. If it is nil, the API uses time.Now.
+	// Give it the same clock as Prices.
+	Now func() time.Time
 }
 
 // NewHandler returns the handler for the API routes and the frontend.
 func NewHandler(opts Options) http.Handler {
-	a := &api{store: opts.Store, importer: importer.NewService(opts.Store), logger: opts.Logger}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	a := &api{store: opts.Store, importer: importer.NewService(opts.Store), prices: opts.Prices, now: now, logger: opts.Logger}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", a.health)
@@ -38,6 +50,7 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/accounts/{id}/summary", a.accountSummary)
 	mux.HandleFunc("GET /api/accounts/{id}/holdings", a.accountHoldings)
 	mux.HandleFunc("GET /api/accounts/{id}/sales", a.accountSales)
+	mux.HandleFunc("POST /api/prices/refresh", a.refreshPrices)
 	mux.HandleFunc("/api/", notFound)
 	mux.Handle("/", frontendHandler(opts.Frontend))
 	return mux
@@ -47,6 +60,8 @@ func NewHandler(opts Options) http.Handler {
 type api struct {
 	store    *store.Store
 	importer *importer.Service
+	prices   *price.Service
+	now      func() time.Time
 	logger   *slog.Logger
 }
 
