@@ -221,6 +221,11 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 			wantError: []string{`"Magic bonus"`, "row 9"},
 		},
 		{
+			name:      "Transfer with a zero amount has no direction",
+			data:      withRow(xtbtest.CashOperation{Type: "IKZE deposit", Amount: "0.00", ID: "998", Comment: "Transfer in operation on account with id 56000001"}),
+			wantError: []string{"IKZE deposit", "row 9", "zero amount"},
+		},
+		{
 			name:      "text file",
 			data:      []byte("Type,Amount\nDeposit,100\n"),
 			wantError: []string{"not an XTB export"},

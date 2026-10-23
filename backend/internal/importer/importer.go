@@ -107,6 +107,8 @@ type Preview struct {
 	// State is "preview", or "needs-review" if there are Import Conflicts.
 	State     string
 	Conflicts []store.ImportConflict
+	// Warnings are the notes that do not stop the Import. It is empty, not nil, if there are no warnings.
+	Warnings []Warning
 }
 
 // NewAccount is the data that the user gives for a new Account.
@@ -118,6 +120,7 @@ type NewAccount struct {
 
 // Preview reads the file and saves an Import in preview. Nothing goes into the Ledger.
 // It runs the Realized Profit check of ADR 0001 on the Ledger as it is after the Import.
+// It looks for the other side of each Transfer of the file by ADR 0003. The tool does not store the warnings.
 // An error in the file is a *RejectedError.
 func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Preview, error) {
 	export, err := read(data)
@@ -165,6 +168,10 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 		return Preview{}, &RejectedError{Err: fmt.Errorf("%w: %w", errLedgerNotValid, err)}
 	}
 	c.conflicts = append(c.conflicts, checkRealizedProfit(after.Sales, export.ClosedPositions, newOps)...)
+	warnings, err := s.transferWarnings(ctx, account, export.CashOperations)
+	if err != nil {
+		return Preview{}, err
+	}
 
 	id, err := s.store.CreatePreview(ctx, store.NewPreview{
 		AccountNumber:         export.AccountNumber,
@@ -196,6 +203,7 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 		SkippedCashOperations: c.skipped,
 		State:                 state,
 		Conflicts:             conflicts,
+		Warnings:              warnings,
 	}, nil
 }
 

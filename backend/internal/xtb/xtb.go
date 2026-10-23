@@ -45,12 +45,25 @@ const (
 	TypeInterestTax    OperationType = "Free funds interest tax"
 	TypeSECFee         OperationType = "SEC fee"
 	TypeCorrection     OperationType = "Correction"
+	// TypeTransfer is a Transfer between two Accounts of the user. See ADR 0003.
+	TypeTransfer OperationType = "IKZE deposit"
+)
+
+// TransferDirection is the direction of a Transfer. ADR 0003: the sign of the amount gives it.
+type TransferDirection string
+
+// The directions of a Transfer.
+const (
+	// TransferIn is a Transfer with a positive amount. The Account gets the money.
+	TransferIn TransferDirection = "in"
+	// TransferOut is a Transfer with a negative amount. The Account sends the money.
+	TransferOut TransferDirection = "out"
 )
 
 // knownTypes are the types that the reader accepts.
 var knownTypes = []OperationType{
 	TypeDeposit, TypeWithdrawal, TypeStockPurchase, TypeStockSell,
-	TypeDividend, TypeWithholdingTax, TypeInterest, TypeInterestTax, TypeSECFee, TypeCorrection,
+	TypeDividend, TypeWithholdingTax, TypeInterest, TypeInterestTax, TypeSECFee, TypeCorrection, TypeTransfer,
 }
 
 // Sheet names of the export.
@@ -178,6 +191,8 @@ type CashOperation struct {
 	Purchase *Purchase
 	// Sale is the parsed Comment of a Stock sell. It is nil for the other types.
 	Sale *Sale
+	// Transfer is the direction of a Transfer. It is "" for the other types.
+	Transfer TransferDirection
 }
 
 // Purchase is the parsed Comment of a Stock purchase, for example "OPEN BUY FPS.US 1/1.27 @ 39.24".
@@ -444,6 +459,9 @@ func readCashOperation(row []string, rowNumber int, typ OperationType) (CashOper
 	}
 	op.Time = at
 
+	if typ == TypeTransfer {
+		return withTransferDirection(op)
+	}
 	if typ != TypeStockPurchase && typ != TypeStockSell {
 		return op, nil
 	}
@@ -463,6 +481,20 @@ func readCashOperation(row []string, rowNumber int, typ OperationType) (CashOper
 		return CashOperation{}, fmt.Errorf("%w: row %d: %w", ErrInvalidRow, rowNumber, err)
 	}
 	op.Sale = &Sale{Volume: volume, OrderVolume: orderVolume, Price: price}
+	return op, nil
+}
+
+// withTransferDirection returns the Transfer op with its direction from the sign of the amount. See ADR 0003.
+// A zero amount has no direction, so it is an invalid row.
+func withTransferDirection(op CashOperation) (CashOperation, error) {
+	switch op.Amount.Sign() {
+	case 1:
+		op.Transfer = TransferIn
+	case -1:
+		op.Transfer = TransferOut
+	default:
+		return CashOperation{}, fmt.Errorf("%w: the %s in row %d has a zero amount, so it has no direction", ErrInvalidRow, op.Type, op.Row)
+	}
 	return op, nil
 }
 

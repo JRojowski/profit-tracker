@@ -25,6 +25,8 @@ const (
 	TypeInterestTax    = "Free funds interest tax"
 	TypeSECFee         = "SEC fee"
 	TypeCorrection     = "Correction"
+	// TypeTransfer is a Transfer between two Accounts. See ADR 0003.
+	TypeTransfer = "IKZE deposit"
 )
 
 // Errors of Calculate. Each error that Calculate returns wraps one of them.
@@ -182,11 +184,11 @@ func (s *State) add(op CashOperation) {
 }
 
 // netDeposit returns the part of op that counts in the Net Deposits.
-// A Withdrawal has a negative amount in the export, so it decreases the Net Deposits.
-// ADR 0003 adds Transfers here when the reader accepts them.
+// A Withdrawal and a Transfer Out have a negative amount in the export, so they decrease the Net Deposits.
+// ADR 0003: a Transfer In counts as a deposit and a Transfer Out counts as a withdrawal.
 func netDeposit(op CashOperation) decimal.Decimal {
 	switch op.Type {
-	case TypeDeposit, TypeWithdrawal:
+	case TypeDeposit, TypeWithdrawal, TypeTransfer:
 		return op.Amount
 	default:
 		return decimal.Zero

@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react"
+import { TriangleAlertIcon } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -24,6 +26,7 @@ import {
   type ImportPreview,
   type NewAccount,
 } from "@/lib/api"
+import { formatAmount } from "@/lib/format"
 
 type ImportPreviewCardProps = {
   preview: ImportPreview
@@ -83,6 +86,37 @@ export function ImportPreviewCard({
             <dt className="text-muted-foreground">Import Conflicts</dt>
             <dd>{preview.conflicts.length}</dd>
           </dl>
+
+          {preview.warnings.length > 0 && (
+            <Alert>
+              <TriangleAlertIcon />
+              <AlertTitle>
+                Transfers with no other side in your other Accounts
+              </AlertTitle>
+              <AlertDescription>
+                <p>
+                  The total for all Accounts can be wrong until you import the
+                  other Account. You can still confirm this Import.
+                </p>
+                <ul className="flex flex-col gap-1">
+                  {preview.warnings.map((warning) => (
+                    <li key={warning.xtbId}>
+                      {new Date(warning.time).toLocaleString()} ·{" "}
+                      {warning.direction === "out"
+                        ? "Transfer Out"
+                        : "Transfer In"}{" "}
+                      ·{" "}
+                      {formatAmount(
+                        warning.amount,
+                        preview.account?.currency ?? currency
+                      )}{" "}
+                      · ID {warning.xtbId}
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {isNewAccount && (
             <FieldGroup>

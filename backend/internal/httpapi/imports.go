@@ -31,6 +31,19 @@ type previewResponse struct {
 	State string `json:"state"`
 	// Conflicts is an empty array, not null, if there are no Import Conflicts.
 	Conflicts []importConflictResponse `json:"conflicts"`
+	// Warnings is an empty array, not null, if there are no warnings. A warning never stops the Import.
+	Warnings []warningResponse `json:"warnings"`
+}
+
+// warningResponse is one warning of the Import preview.
+// The time is RFC 3339 text in UTC. The amount is decimal text with the sign of the export.
+type warningResponse struct {
+	Kind  string `json:"kind"`
+	XTBID string `json:"xtbId"`
+	Time  string `json:"time"`
+	// Direction is "in" for a Transfer In and "out" for a Transfer Out.
+	Direction string `json:"direction"`
+	Amount    string `json:"amount"`
 }
 
 // importConflictResponse is one Import Conflict.
@@ -129,9 +142,19 @@ func (a *api) previewImport(w http.ResponseWriter, r *http.Request) {
 		SkippedCashOperations: preview.SkippedCashOperations,
 		State:                 preview.State,
 		Conflicts:             make([]importConflictResponse, 0, len(preview.Conflicts)),
+		Warnings:              make([]warningResponse, 0, len(preview.Warnings)),
 	}
 	for _, c := range preview.Conflicts {
 		resp.Conflicts = append(resp.Conflicts, toImportConflictResponse(c))
+	}
+	for _, w := range preview.Warnings {
+		resp.Warnings = append(resp.Warnings, warningResponse{
+			Kind:      w.Kind,
+			XTBID:     w.XTBID,
+			Time:      w.Time.UTC().Format(time.RFC3339),
+			Direction: string(w.Direction),
+			Amount:    formatAmount(w.Amount),
+		})
 	}
 	if acc := preview.Account; acc != nil {
 		accResp := toAccountResponse(*acc)

@@ -342,6 +342,53 @@ func (q *Queries) SetLotInstruments(ctx context.Context, accountID int64) error 
 	return err
 }
 
+const transfersOfOtherAccounts = `-- name: TransfersOfOtherAccounts :many
+SELECT account_id, xtb_id, time, amount
+FROM cash_operations
+WHERE type = ? AND account_id <> ?
+ORDER BY time, id
+`
+
+type TransfersOfOtherAccountsParams struct {
+	Type      string
+	AccountID int64
+}
+
+type TransfersOfOtherAccountsRow struct {
+	AccountID int64
+	XtbID     string
+	Time      string
+	Amount    decimal.Decimal
+}
+
+func (q *Queries) TransfersOfOtherAccounts(ctx context.Context, arg TransfersOfOtherAccountsParams) ([]TransfersOfOtherAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, transfersOfOtherAccounts, arg.Type, arg.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TransfersOfOtherAccountsRow
+	for rows.Next() {
+		var i TransfersOfOtherAccountsRow
+		if err := rows.Scan(
+			&i.AccountID,
+			&i.XtbID,
+			&i.Time,
+			&i.Amount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateCashOperation = `-- name: UpdateCashOperation :exec
 UPDATE cash_operations
 SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, import_id = ?

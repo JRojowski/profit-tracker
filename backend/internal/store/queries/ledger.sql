@@ -88,3 +88,9 @@ SET instrument_id = (
     LIMIT 1
 )
 WHERE lots.account_id = ?;
+
+-- name: TransfersOfOtherAccounts :many
+SELECT account_id, xtb_id, time, amount
+FROM cash_operations
+WHERE type = ? AND account_id <> ?
+ORDER BY time, id;

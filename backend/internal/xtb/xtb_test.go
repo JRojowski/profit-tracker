@@ -250,3 +250,44 @@ func TestRead_NoOpenPositionsSheet_ReturnsNotExport(t *testing.T) {
 	require.ErrorIs(t, err, xtb.ErrNotExport)
 	assert.Contains(t, err.Error(), "Open Positions")
 }
+
+func TestRead_Transfer_GivesDirectionFromSign(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		amount string
+		want   xtb.TransferDirection
+	}{
+		{name: "positive amount", amount: "10000.00", want: xtb.TransferIn},
+		{name: "negative amount", amount: "-10000.00", want: xtb.TransferOut},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			data := xtbtest.Build(t, xtbtest.Export{CashOperations: []xtbtest.CashOperation{
+				{Type: "IKZE deposit", Amount: tc.amount, ID: "4001", Comment: "Transfer operation on account with id 12345678"},
+			}})
+
+			got, err := xtb.Read(data)
+
+			require.NoError(t, err)
+			require.Len(t, got.CashOperations, 1)
+			assert.Equal(t, xtb.TypeTransfer, got.CashOperations[0].Type)
+			assert.Equal(t, tc.want, got.CashOperations[0].Transfer)
+		})
+	}
+}
+
+func TestRead_OtherTypes_HaveNoTransferDirection(t *testing.T) {
+	t.Parallel()
+	data := xtbtest.Build(t, xtbtest.Export{CashOperations: []xtbtest.CashOperation{
+		{Type: "Deposit", Amount: "100.00", ID: "4002", Comment: "Blik deposit"},
+	}})
+
+	got, err := xtb.Read(data)
+
+	require.NoError(t, err)
+	require.Len(t, got.CashOperations, 1)
+	assert.Empty(t, got.CashOperations[0].Transfer)
+}

@@ -73,6 +73,16 @@ export type ImportConflict =
       decision: ConflictDecision | null
     }
 
+// ImportWarning tells the user about a possible problem. It does not stop the Import.
+// The kind "transfer-without-other-side" is a Transfer with no other side in the other Accounts (ADR 0003).
+export type ImportWarning = {
+  kind: "transfer-without-other-side"
+  direction: "in" | "out"
+  xtbId: string
+  time: string
+  amount: string
+}
+
 // ImportPreview is the result of an upload. The backend saves no Cash Operations before the confirmation.
 // The account is null when the account number is new.
 export type ImportPreview = {
@@ -85,6 +95,7 @@ export type ImportPreview = {
   skippedCashOperations: number
   state: ImportState
   conflicts: ImportConflict[]
+  warnings: ImportWarning[]
 }
 
 export type ImportSummary = {
