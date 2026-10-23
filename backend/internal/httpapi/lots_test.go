@@ -143,9 +143,6 @@ func TestLots_FillsThatMatchNoCase_RejectTheImport(t *testing.T) {
 	// The second Fill of the order is missing. The Fill volumes never add up to the order volume.
 	incomplete := adr0002ExampleB()
 	incomplete.CashOperations = append(incomplete.CashOperations[:1], incomplete.CashOperations[2:]...)
-	// The second Fill comes 11 seconds after the first Fill. It is not a part of the same order.
-	late := adr0002ExampleB()
-	late.CashOperations[1].Time = orderTime.Add(11 * time.Second)
 	// The Fill volumes add up to more than the order volume.
 	tooMuch := adr0002ExampleB()
 	tooMuch.CashOperations[1].Comment = "OPEN BUY 1.1/1.6169 @ 47.705"
@@ -161,7 +158,6 @@ func TestLots_FillsThatMatchNoCase_RejectTheImport(t *testing.T) {
 			wantError: []string{"LSMC.DE", "1.6169", "2026-02-03T09:30:00Z", "1851988998", "1.4396", "1851989133"},
 		},
 		{name: "order with a missing Fill", export: incomplete, wantError: []string{"LSMC.DE", "1.6169", "2026-02-03T09:30:00Z"}},
-		{name: "Fill more than 10 seconds later", export: late, wantError: []string{"LSMC.DE", "1.6169", "2026-02-03T09:30:00Z"}},
 		{name: "Fills with more than the order volume", export: tooMuch, wantError: []string{"LSMC.DE", "1.6169", "2026-02-03T09:30:00Z"}},
 	}
 	for _, tc := range tests {
@@ -180,6 +176,76 @@ func TestLots_FillsThatMatchNoCase_RejectTheImport(t *testing.T) {
 			assert.Empty(t, srv.imports(t))
 		})
 	}
+}
+
+func TestLots_ADR0002ExampleB_FillsMinutesApart_GiveOneMergedLot(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// ADR 0002, rule 1: the time between the Fills of one order has no limit.
+	export := adr0002ExampleB()
+	export.CashOperations[1].Time = orderTime.Add(3*time.Minute + 21*time.Second)
+	preview := srv.preview(t, export)
+	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
+	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
+
+	holdings := srv.holdings(t, accountID)
+
+	require.Len(t, holdings, 1)
+	assert.Equal(t, "1.1773", holdings[0].Volume)
+	assert.Equal(t, "240.96", cents(t, holdings[0].Cost))
+}
+
+// wholeUnitsFirstOrder is an order of 2.843 with invented values. The whole units come first, and the fractional
+// Fill comes 3 minutes and 21 seconds later. Purchases of other Instruments are between the two Fills.
+// Each Position ID has the observed volume of its own Fill (ADR 0002, case C).
+//
+//	Lot 3000000001: volume 2, purchase amount 12.00, closed. Profit = 13.00 − 12.00 = 1.00.
+//	Lot 3000000004: volume 0.843, purchase amount 5.14, open.
+func wholeUnitsFirstOrder() xtbtest.Export {
+	return xtbtest.Export{
+		AccountNumber: "50000005",
+		Currency:      "PLN",
+		CashOperations: []xtbtest.CashOperation{
+			{Type: "Stock sell", Ticker: "SLOW.UK", Time: saleTime(10), Amount: "13.00", ID: "807", Comment: "CLOSE BUY 2/2.843 @ 6.50", PositionID: "3000000001"},
+			{Type: "Stock purchase", Ticker: "SLOW.UK", Time: orderTime.Add(3*time.Minute + 21*time.Second), Amount: "-5.14", ID: "806", Comment: "OPEN BUY 0.843/2.843 @ 6.10", PositionID: "3000000004"},
+			{Type: "Stock purchase", Ticker: "QUIK.DE", Time: orderTime.Add(2 * time.Minute), Amount: "-30.00", ID: "805", Comment: "OPEN BUY 1/1.5 @ 20.00", PositionID: "3000000003"},
+			{Type: "Stock purchase", Ticker: "QUIK.DE", Time: orderTime.Add(2*time.Minute - time.Second), Amount: "-10.00", ID: "804", Comment: "OPEN BUY 0.5/1.5 @ 20.00", PositionID: "3000000003"},
+			{Type: "Stock purchase", Ticker: "MIDL.US", Time: orderTime.Add(time.Minute), Amount: "-25.00", ID: "803", Comment: "OPEN BUY 1 @ 25.00", PositionID: "3000000002"},
+			{Type: "Stock purchase", Ticker: "SLOW.UK", Time: orderTime, Amount: "-12.00", ID: "802", Comment: "OPEN BUY 2/2.843 @ 6.00", PositionID: "3000000001"},
+			{Type: "Deposit", Time: opTime(1), Amount: "100.00", ID: "801", Comment: "Blik deposit"},
+		},
+		ClosedPositions: []xtbtest.ClosedPosition{
+			{Ticker: "SLOW.UK", Volume: "2", OpenTime: orderTime, CloseTime: saleTime(10), ProfitLoss: "1.00", PositionID: "3000000001"},
+		},
+		OpenLots: []xtbtest.OpenLot{
+			{Ticker: "SLOW.UK", PositionID: "3000000004", Volume: "0.843"},
+			{Ticker: "QUIK.DE", PositionID: "3000000003", Volume: "1.5"},
+			{Ticker: "MIDL.US", PositionID: "3000000002", Volume: "1"},
+		},
+	}
+}
+
+func TestLots_WholeUnitsFirstAndFillsMinutesApart_GiveOneLotPerID(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	preview := srv.preview(t, wholeUnitsFirstOrder())
+	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
+	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
+
+	sales := srv.sales(t, accountID)
+	holdings := map[string]holdingResponse{}
+	for _, h := range srv.holdings(t, accountID) {
+		holdings[h.Ticker] = h
+	}
+
+	require.Len(t, sales, 1)
+	assert.Equal(t, "3000000001", sales[0].PositionID)
+	assert.Equal(t, "12.00", cents(t, sales[0].Cost), "the closed Lot holds only the whole-unit Fill")
+	assert.Equal(t, "1.00", cents(t, sales[0].RealizedProfit))
+	require.Contains(t, holdings, "SLOW.UK")
+	assert.Equal(t, "0.843", holdings["SLOW.UK"].Volume, "the open Lot holds only the fractional Fill")
+	assert.Equal(t, "5.14", cents(t, holdings["SLOW.UK"].Cost))
+	assert.Len(t, holdings, 3, "the purchases between the Fills give their own Holdings")
 }
 
 func TestLots_ADR0002ExampleB_SameFileAgain_GivesNoNewOperationsAndNoConflicts(t *testing.T) {

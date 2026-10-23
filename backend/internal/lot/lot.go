@@ -25,10 +25,6 @@ var (
 	ErrNoCase = errors.New("the lot volumes of the order match no case of ADR 0002")
 )
 
-// MaxFillGap is the largest time between two Fills of one order.
-// ADR 0002: the broker executes the whole units 1 to 2 seconds after the fractional part.
-const MaxFillGap = 10 * time.Second
-
 // Build returns the Lot ID of each purchase, by the XTB ID of the purchase.
 // purchases are the Stock purchase Cash Operations of the export. Other Cash Operations are ignored.
 // closed and open are the rows of the Closed Positions and Open Positions sheets of the same export.
@@ -72,8 +68,8 @@ func (o order) describe() string {
 func (o order) complete() bool { return o.volume.Equal(o.fills[0].Purchase.OrderVolume) }
 
 // groupOrders groups the purchases into orders. ADR 0002, rule 1: the Fills of one order have the same
-// Instrument and the same order volume. Each Fill follows the previous Fill of the order within MaxFillGap,
-// until the Fill volumes add up to the order volume.
+// Instrument and the same order volume. groupOrders takes them in time order until their volumes add up to
+// the order volume. The time between the Fills has no limit.
 func groupOrders(purchases []xtb.CashOperation) ([]order, error) {
 	fills := make([]xtb.CashOperation, 0, len(purchases))
 	for _, p := range purchases {
@@ -97,9 +93,6 @@ func groupOrders(purchases []xtb.CashOperation) ([]order, error) {
 		}
 		k := key{f.Ticker, f.Purchase.OrderVolume.String()}
 		o := pending[k]
-		if o != nil && f.Time.Sub(o.fills[len(o.fills)-1].Time) > MaxFillGap {
-			return nil, fmt.Errorf("%s: %w", o.describe(), ErrIncompleteOrder)
-		}
 		if o == nil {
 			o = &order{volume: decimal.Zero}
 		}

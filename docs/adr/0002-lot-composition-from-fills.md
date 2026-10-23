@@ -8,7 +8,7 @@ This decision changes one point of ADR 0001's context. The tool now reads the Op
 
 The data comes from three exports: USD, PLN and IKZE, 86 orders with more than one Fill in total.
 
-- The broker always executes the fractional part first and the whole units 1 to 2 seconds later.
+- The broker usually executes the fractional part first and the whole units 1 to 2 seconds later. But the order and the time between the Fills can change. In the PLN export, the whole units come first in 2 orders. In one of them, the Fills are 3 minutes and 21 seconds apart, and purchases of other Instruments are between them.
 - Each Fill has its own purchase Cash Operation. The Comment shows the Fill volume and the order volume: `OPEN BUY 0.6169/1.6169 @ 47.755`.
 - Older Comments omit the ticker (`OPEN BUY 1/1.4265 @ 32.005`). Newer Comments include it (`OPEN BUY FPS.US 1/1.27 @ 39.24`). The parser accepts both forms.
 
@@ -24,9 +24,13 @@ The case does not depend on a date or on an Account in a way that the tool can p
 
 The Open Positions sheet shows the state at the time of the report. Prices and open volumes change after that time. But for one Lot ID, the closed volume plus the open volume is always the full Lot volume. This sum does not change with the time of the report.
 
+## Why the Fills have no time limit
+
+A time limit gives no safety that the other checks do not give. The Fill volumes must add up to the order volume exactly. The observed volumes must then match case A, B or C. A wrong group fails one of these checks. A time limit only stops correct orders with slow Fills, as in the PLN example above.
+
 ## The rule
 
-1. Find the Fills of one order. The Fills have the same Instrument and the same order volume, and they follow each other within a few seconds.
+1. Find the Fills of one order. The Fills have the same Instrument and the same order volume. Take them in time order until their volumes add up to the order volume. The time between the Fills has no limit. A sum over the order volume, or an order that does not become complete, stops the Import with an error.
 2. For each `Position ID` in the group, calculate the observed volume: the sum of its volumes in Closed Positions plus its volume in Open Positions.
 3. Select the case:
    - All Fills have one ID: make one Lot (case A).
