@@ -8,7 +8,7 @@ This decision changes one point of ADR 0001's context. The tool now reads the Op
 
 The data comes from three exports: USD, PLN and IKZE, 86 orders with more than one Fill in total.
 
-- The broker usually executes the fractional part first and the whole units 1 to 2 seconds later. But the order and the time between the Fills can change. In the PLN export, the whole units come first in 2 orders. In one of them, the Fills are 3 minutes and 21 seconds apart, and purchases of other Instruments are between them.
+- The broker usually executes the fractional part first and the whole units 1 to 2 seconds later. But the order and the time between the Fills can change. In the PLN export, the whole units come first in 2 orders. In one of them, the Fills are 3 minutes and 21 seconds apart, and purchases of other Instruments are between them. The probable cause: the broker sends the whole units and the fractional part as two separate orders. Each order executes when the market has a seller at its price. Thus one Fill can wait for minutes, and the two Fills can have different prices.
 - Each Fill has its own purchase Cash Operation. The Comment shows the Fill volume and the order volume: `OPEN BUY 0.6169/1.6169 @ 47.755`.
 - Older Comments omit the ticker (`OPEN BUY 1/1.4265 @ 32.005`). Newer Comments include it (`OPEN BUY FPS.US 1/1.27 @ 39.24`). The parser accepts both forms.
 
