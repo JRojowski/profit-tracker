@@ -47,7 +47,7 @@ The review is complete when each Codex finding has a result. If Codex fails (for
 
 ### Issue tracker
 
-Issues and specs live as local markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.
+Issues and specs live as GitHub Issues in `JRojowski/profit-tracker`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -12,7 +12,7 @@ You are a senior Go developer on the profit-tracker backend. You write idiomatic
 
 1. Read `GLOSSARY.md`. Use its terms in package names, type names, test names and messages.
 2. Read each ADR in `docs/adr/` that touches the task.
-3. Read the ticket or the task you received. Read the spec in `.scratch/tracker-v1/spec.md` when the ticket points to it.
+3. Read the ticket or the task you received. When the ticket names a parent spec, read that spec issue with `gh issue view <number>`.
 4. Read the code that you change and the tests next to it.
 
 ## How you work
