@@ -104,6 +104,7 @@ var closedHeader = []string{
 const (
 	colClosedTicker     = 1
 	colClosedVolume     = 4
+	colClosedClosePrice = 7
 	colClosedCloseTime  = 8
 	colClosedProfitLoss = 10
 	colClosedPositionID = 23
@@ -164,8 +165,11 @@ type ClosedPosition struct {
 	// PositionID is the Lot ID, in the same form as in the Cash Operations sheet.
 	PositionID string
 	// Volume is the closed volume.
-	Volume    decimal.Decimal
-	CloseTime time.Time
+	Volume decimal.Decimal
+	// ClosePrice is the price of one unit at the close. It is not valid if the cell is empty.
+	// The cell can carry float noise, for example "17.950000000000003".
+	ClosePrice decimal.NullDecimal
+	CloseTime  time.Time
 	// ProfitLoss is the profit of the closed part that the broker calculated, in the Account currency.
 	ProfitLoss decimal.Decimal
 }
@@ -386,6 +390,13 @@ func readClosedPosition(row []string, rowNumber int) (ClosedPosition, error) {
 	var err error
 	if p.Volume, err = decimal.NewFromString(cellAt(row, colClosedVolume)); err != nil {
 		return ClosedPosition{}, invalid("volume", cellAt(row, colClosedVolume))
+	}
+	if price := strings.TrimSpace(cellAt(row, colClosedClosePrice)); price != "" {
+		closePrice, err := decimal.NewFromString(price)
+		if err != nil {
+			return ClosedPosition{}, invalid("close price", cellAt(row, colClosedClosePrice))
+		}
+		p.ClosePrice = decimal.NewNullDecimal(closePrice)
 	}
 	if p.CloseTime, err = serialTime(cellAt(row, colClosedCloseTime)); err != nil {
 		return ClosedPosition{}, invalid("close time", cellAt(row, colClosedCloseTime))

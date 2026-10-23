@@ -172,7 +172,7 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 	if err != nil {
 		return Preview{}, &RejectedError{Err: fmt.Errorf("%w: %w", errLedgerNotValid, err)}
 	}
-	c.conflicts = append(c.conflicts, checkRealizedProfit(after.Sales, export.ClosedPositions, newOps)...)
+	c.conflicts = append(c.conflicts, checkRealizedProfit(after.Sales, export.ClosedPositions, ops, newOps)...)
 	warnings, err := s.transferWarnings(ctx, account, export.CashOperations)
 	if err != nil {
 		return Preview{}, err

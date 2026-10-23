@@ -109,11 +109,17 @@ func withNewOperations(l ledger.Ledger, ops []store.CashOperation, newOps map[st
 // A difference of more than 0.01 is an Import Conflict of the kind "check-mismatch".
 // sales are all sales of the Ledger after the Import, in time order. A sale that is not in newOps
 // only takes its row, so that a new sale cannot take it. A sale with no row gives no conflict.
-func checkRealizedProfit(sales []ledger.Sale, rows []xtb.ClosedPosition, newOps map[string]store.CashOperation) []store.NewImportConflict {
+// ops are all Cash Operations of the file. They give the sale price of each sale in the file.
+func checkRealizedProfit(sales []ledger.Sale, rows []xtb.ClosedPosition, ops []store.CashOperation, newOps map[string]store.CashOperation) []store.NewImportConflict {
+	// A sale that is not in the file has no price, because the Ledger does not keep prices.
+	prices := make(map[string]decimal.NullDecimal, len(ops))
+	for _, op := range ops {
+		prices[op.XTBID] = op.Price
+	}
 	var conflicts []store.NewImportConflict
 	used := make([]bool, len(rows))
 	for _, sale := range sales {
-		i := matchClosedPosition(sale, rows, used)
+		i := matchClosedPosition(sale, prices[sale.XTBID], rows, used)
 		if i < 0 {
 			continue
 		}
@@ -138,18 +144,34 @@ func checkRealizedProfit(sales []ledger.Sale, rows []xtb.ClosedPosition, newOps 
 
 // matchClosedPosition returns the index of the unused Closed Positions row of the sale, or -1.
 // The row must have the position ID and the closed volume of the sale. If more than one row fits,
-// the row with the close time nearest to the sale time wins. The first such row wins a tie.
-func matchClosedPosition(sale ledger.Sale, rows []xtb.ClosedPosition, used []bool) int {
+// the row with the close time nearest to the sale time wins. On a tie, the row with the Close Price
+// nearest to the sale price wins. A difference, not equality, because the cell can carry float noise.
+// If the sale price or a Close Price is not known, the first row of the tie wins.
+func matchClosedPosition(sale ledger.Sale, price decimal.NullDecimal, rows []xtb.ClosedPosition, used []bool) int {
 	best := -1
 	for i, row := range rows {
 		if used[i] || row.PositionID != sale.PositionID || !row.Volume.Equal(sale.Volume) {
 			continue
 		}
-		if best < 0 || absDuration(row.CloseTime.Sub(sale.Time)) < absDuration(rows[best].CloseTime.Sub(sale.Time)) {
+		if best < 0 || nearer(row, rows[best], sale.Time, price) {
 			best = i
 		}
 	}
 	return best
+}
+
+// nearer tells that the row a fits the sale with the time at and the sale price better than the row b.
+func nearer(a, b xtb.ClosedPosition, at time.Time, price decimal.NullDecimal) bool {
+	da, db := absDuration(a.CloseTime.Sub(at)), absDuration(b.CloseTime.Sub(at))
+	if da != db {
+		return da < db
+	}
+	if !price.Valid || !a.ClosePrice.Valid || !b.ClosePrice.Valid {
+		return false
+	}
+	pa := a.ClosePrice.Decimal.Sub(price.Decimal).Abs()
+	pb := b.ClosePrice.Decimal.Sub(price.Decimal).Abs()
+	return pa.LessThan(pb)
 }
 
 func absDuration(d time.Duration) time.Duration {

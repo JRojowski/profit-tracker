@@ -243,6 +243,59 @@ func TestImportPreview_RealizedProfitCheck(t *testing.T) {
 	}
 }
 
+// TestImportPreview_RealizedProfitCheck_SameTimeAndVolume_ClosePriceDecides covers two sales of one Lot
+// with the same time and the same volume. Only the Close Price tells their Closed Positions rows apart.
+//
+//	Lot: OPEN BUY 4 @ 23.00, amount -92.00. The cost of 2 is 46.00.
+//	Sale 402: CLOSE BUY 2/8 @ 18.00, amount 36.00, profit 36.00 − 46.00 = −10.00
+//	Sale 403: CLOSE BUY 2/8 @ 17.95, amount 35.90, profit 35.90 − 46.00 = −10.10
+func TestImportPreview_RealizedProfitCheck_SameTimeAndVolume_ClosePriceDecides(t *testing.T) {
+	t.Parallel()
+
+	row402 := xtbtest.ClosedPosition{
+		Ticker: "DEF.PL", Volume: "2", OpenTime: opTime(3), ClosePrice: "18.00", CloseTime: saleTime(4),
+		ProfitLoss: "-10.00", PositionID: "2700000001",
+	}
+	// The Excel cell of the Close Price can carry float noise.
+	row403 := xtbtest.ClosedPosition{
+		Ticker: "DEF.PL", Volume: "2", OpenTime: opTime(3), ClosePrice: "17.950000000000003", CloseTime: saleTime(4),
+		ProfitLoss: "-10.10", PositionID: "2700000001",
+	}
+	tests := []struct {
+		name string
+		rows []xtbtest.ClosedPosition
+	}{
+		{name: "row of the second sale first", rows: []xtbtest.ClosedPosition{row403, row402}},
+		{name: "row of the first sale first", rows: []xtbtest.ClosedPosition{row402, row403}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := startServer(t)
+			export := xtbtest.Export{
+				AccountNumber: "50000002",
+				Currency:      "PLN",
+				CashOperations: []xtbtest.CashOperation{
+					{Type: "Stock sell", Ticker: "DEF.PL", Instrument: "DEF", Time: saleTime(4), Amount: "35.90", ID: "403", Comment: "CLOSE BUY 2/8 @ 17.95", PositionID: "2700000001"},
+					{Type: "Stock sell", Ticker: "DEF.PL", Instrument: "DEF", Time: saleTime(4), Amount: "36.00", ID: "402", Comment: "CLOSE BUY 2/8 @ 18.00", PositionID: "2700000001"},
+					{Type: "Stock purchase", Ticker: "DEF.PL", Instrument: "DEF", Time: opTime(3), Amount: "-92.00", ID: "401", Comment: "OPEN BUY 4 @ 23.00", PositionID: "2700000001"},
+					{Type: "Deposit", Time: opTime(1), Amount: "100.00", ID: "400", Comment: "Blik deposit"},
+				},
+				ClosedPositions: tc.rows,
+			}
+
+			status, body := srv.upload(t, export.FileName(), xtbtest.Build(t, export))
+
+			require.Equal(t, http.StatusOK, status, "body %q", body)
+			var got checkPreview
+			decode(t, body, &got)
+			assert.Equal(t, 4, got.NewCashOperations)
+			assert.Equal(t, "preview", got.State)
+			assert.Empty(t, got.Conflicts)
+		})
+	}
+}
+
 // roundedCheck returns the check with the Closed Positions value rounded to cents, for a short table.
 func roundedCheck(t *testing.T, c *checkData) *checkData {
 	t.Helper()
