@@ -31,10 +31,15 @@ type renameRequest struct {
 
 // summaryResponse is the body of GET /api/accounts/{id}/summary. Amounts are decimal text.
 type summaryResponse struct {
-	AccountID   int64  `json:"accountId"`
-	Currency    string `json:"currency"`
-	Cash        string `json:"cash"`
-	NetDeposits string `json:"netDeposits"`
+	AccountID      int64  `json:"accountId"`
+	Currency       string `json:"currency"`
+	Cash           string `json:"cash"`
+	NetDeposits    string `json:"netDeposits"`
+	RealizedProfit string `json:"realizedProfit"`
+	NetDividends   string `json:"netDividends"`
+	NetInterest    string `json:"netInterest"`
+	Fees           string `json:"fees"`
+	TotalResult    string `json:"totalResult"`
 }
 
 // holdingResponse is one row of GET /api/accounts/{id}/holdings. Amounts and the volume are decimal text.
@@ -101,17 +106,22 @@ func (a *api) renameAccount(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toAccountResponse(acc))
 }
 
-// accountSummary returns the cash balance and the Net Deposits of the Account.
+// accountSummary returns the cash balance, the Net Deposits, and the total result with its parts of the Account.
 func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 	acc, state, ok := a.accountState(w, r)
 	if !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, summaryResponse{
-		AccountID:   acc.ID,
-		Currency:    acc.Currency,
-		Cash:        formatAmount(state.Cash),
-		NetDeposits: formatAmount(state.NetDeposits),
+		AccountID:      acc.ID,
+		Currency:       acc.Currency,
+		Cash:           formatAmount(state.Cash),
+		NetDeposits:    formatAmount(state.NetDeposits),
+		RealizedProfit: formatAmount(state.RealizedProfit),
+		NetDividends:   formatAmount(state.NetDividends),
+		NetInterest:    formatAmount(state.NetInterest),
+		Fees:           formatAmount(state.Fees),
+		TotalResult:    formatAmount(state.TotalResult),
 	})
 }
 
@@ -215,8 +225,10 @@ func toAccountResponse(acc store.Account) accountResponse {
 
 // formatAmount writes an amount with at least 2 decimal places, for example "5000.00".
 // It does not round: an amount with more decimal places keeps all of them.
+// A result of a division can be exact to the cent, but with 16 decimal places in its internal form,
+// so the check uses the value and not the exponent.
 func formatAmount(d decimal.Decimal) string {
-	if d.Exponent() < -2 {
+	if !d.Equal(d.Truncate(2)) {
 		return d.String()
 	}
 	return d.StringFixed(2)

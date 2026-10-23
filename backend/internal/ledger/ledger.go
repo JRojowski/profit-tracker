@@ -1,5 +1,6 @@
 // Package ledger calculates the state of one Account from its Ledger: the cash balance,
-// the Net Deposits, the Holdings and the sales with their Realized Profit. It is a pure calculation with no I/O.
+// the Net Deposits, the Holdings, the sales with their Realized Profit, and the total result with its parts.
+// It is a pure calculation with no I/O.
 // The tool calculates this state on each request and does not store it.
 package ledger
 
@@ -15,8 +16,15 @@ import (
 
 // The Cash Operation types that the calculator uses, as the broker export writes them.
 const (
-	TypeDeposit   = "Deposit"
-	TypeStockSell = "Stock sell"
+	TypeDeposit        = "Deposit"
+	TypeWithdrawal     = "Withdrawal"
+	TypeStockSell      = "Stock sell"
+	TypeDividend       = "Dividend"
+	TypeWithholdingTax = "Withholding tax"
+	TypeInterest       = "Free funds interest"
+	TypeInterestTax    = "Free funds interest tax"
+	TypeSECFee         = "SEC fee"
+	TypeCorrection     = "Correction"
 )
 
 // Errors of Calculate. Each error that Calculate returns wraps one of them.
@@ -84,6 +92,16 @@ type State struct {
 	Holdings []Holding
 	// Sales are the Stock sell operations with their Realized Profit, in time order and then in XTB ID order.
 	Sales []Sale
+	// RealizedProfit is the sum of the Realized Profit of the sales.
+	RealizedProfit decimal.Decimal
+	// NetDividends is the sum of the dividends and the withholding tax. The tax is negative.
+	NetDividends decimal.Decimal
+	// NetInterest is the sum of the free funds interest and its tax. The tax is negative.
+	NetInterest decimal.Decimal
+	// Fees is the sum of the SEC fees and the corrections, with the sign of the export. It is usually negative.
+	Fees decimal.Decimal
+	// TotalResult is RealizedProfit + NetDividends + NetInterest + Fees.
+	TotalResult decimal.Decimal
 }
 
 // Sale is one Stock sell: the close of a part of one Lot. See ADR 0001.
@@ -122,10 +140,12 @@ func (h Holding) AverageCost() decimal.Decimal {
 // Calculate returns the state of the Account from its Ledger. The values are exact. Calculate does not round.
 // It returns an error that wraps ErrUnknownLot or ErrLotOverclosed if a sale does not fit the Lots.
 func Calculate(l Ledger) (State, error) {
-	s := State{Cash: decimal.Zero, NetDeposits: decimal.Zero}
+	s := State{
+		Cash: decimal.Zero, NetDeposits: decimal.Zero, RealizedProfit: decimal.Zero,
+		NetDividends: decimal.Zero, NetInterest: decimal.Zero, Fees: decimal.Zero,
+	}
 	for _, op := range l.CashOperations {
-		s.Cash = s.Cash.Add(op.Amount)
-		s.NetDeposits = s.NetDeposits.Add(netDeposit(op))
+		s.add(op)
 	}
 
 	lots := make(map[string]*lotState, len(l.Lots))
@@ -138,14 +158,35 @@ func Calculate(l Ledger) (State, error) {
 	}
 	s.Sales = sales
 	s.Holdings = holdings(l.Lots, lots)
+	for _, sale := range sales {
+		s.RealizedProfit = s.RealizedProfit.Add(sale.RealizedProfit)
+	}
+	// Ticket 09 adds the Unrealized Profit to the total result.
+	s.TotalResult = s.RealizedProfit.Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
 	return s, nil
 }
 
+// add adds the amount of op to the cash balance and to the parts of the state that op counts in.
+// The amounts keep the sign of the export: a tax, a fee and a Withdrawal are negative.
+func (s *State) add(op CashOperation) {
+	s.Cash = s.Cash.Add(op.Amount)
+	s.NetDeposits = s.NetDeposits.Add(netDeposit(op))
+	switch op.Type {
+	case TypeDividend, TypeWithholdingTax:
+		s.NetDividends = s.NetDividends.Add(op.Amount)
+	case TypeInterest, TypeInterestTax:
+		s.NetInterest = s.NetInterest.Add(op.Amount)
+	case TypeSECFee, TypeCorrection:
+		s.Fees = s.Fees.Add(op.Amount)
+	}
+}
+
 // netDeposit returns the part of op that counts in the Net Deposits.
-// ADR 0003 adds Transfers and withdrawals here when the reader accepts them.
+// A Withdrawal has a negative amount in the export, so it decreases the Net Deposits.
+// ADR 0003 adds Transfers here when the reader accepts them.
 func netDeposit(op CashOperation) decimal.Decimal {
 	switch op.Type {
-	case TypeDeposit:
+	case TypeDeposit, TypeWithdrawal:
 		return op.Amount
 	default:
 		return decimal.Zero

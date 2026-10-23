@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,10 +49,15 @@ func depositOnlyExport(accountNumber, currency string) xtbtest.Export {
 
 // summaryResponse is the body of GET /api/accounts/{id}/summary.
 type summaryResponse struct {
-	AccountID   int64  `json:"accountId"`
-	Currency    string `json:"currency"`
-	Cash        string `json:"cash"`
-	NetDeposits string `json:"netDeposits"`
+	AccountID      int64  `json:"accountId"`
+	Currency       string `json:"currency"`
+	Cash           string `json:"cash"`
+	NetDeposits    string `json:"netDeposits"`
+	RealizedProfit string `json:"realizedProfit"`
+	NetDividends   string `json:"netDividends"`
+	NetInterest    string `json:"netInterest"`
+	Fees           string `json:"fees"`
+	TotalResult    string `json:"totalResult"`
 }
 
 // holdingResponse is one row of GET /api/accounts/{id}/holdings.
@@ -96,7 +102,81 @@ func TestAccountSummary_DepositsAndPurchases_ReturnsCashAndNetDeposits(t *testin
 	status := srv.getJSON(t, fmt.Sprintf("/api/accounts/%d/summary", id), &got)
 
 	require.Equal(t, http.StatusOK, status)
-	assert.Equal(t, summaryResponse{AccountID: id, Currency: "USD", Cash: "5763.65", NetDeposits: "6500.50"}, got)
+	assert.Equal(t, noResultSummary(id, "5763.65", "6500.50"), got)
+}
+
+// incomeAndCostsExport is an export with each Cash Operation type of the total result:
+// a Deposit, a purchase, a sale, a Withdrawal, and the income and cost types.
+// The Dividend and the Withholding tax have a ticker, but no Position ID, like in a real export.
+//
+//	Cash:            2000.00 - 500.00 + 320.00 + 12.50 - 1.88 + 3.40 - 0.65 - 0.03 - 0.10 - 300.00 = 1533.24
+//	Net Deposits:    2000.00 - 300.00                                                              = 1700.00
+//	Realized Profit: 320.00 - 500.00 × 4 / 10                                                      =  120.00
+//	Net dividends:   12.50 - 1.88                                                                  =   10.62
+//	Net interest:    3.40 - 0.65                                                                   =    2.75
+//	Fees:            -0.03 - 0.10                                                                  =   -0.13
+//	Total result:    120.00 + 10.62 + 2.75 - 0.13                                                  =  133.24
+func incomeAndCostsExport() xtbtest.Export {
+	return xtbtest.Export{
+		AccountNumber: "56000003",
+		Currency:      "USD",
+		CashOperations: []xtbtest.CashOperation{
+			{Type: "Withdrawal", Time: opTime(9), Amount: "-300.00", ID: "510", Comment: "Withdrawal to bank account"},
+			{Type: "Correction", Time: opTime(7), Amount: "-0.10", ID: "509", Comment: "Correction of interest"},
+			{Type: "SEC fee", Ticker: "ABC.US", Instrument: "ABC", Time: opTime(3).Add(time.Second), Amount: "-0.03", ID: "508", Comment: "SEC fee ABC.US"},
+			{Type: "Free funds interest tax", Time: opTime(5).Add(time.Second), Amount: "-0.65", ID: "507", Comment: "Free-funds Interest Tax 2026-02"},
+			{Type: "Free funds interest", Time: opTime(5), Amount: "3.40", ID: "506", Comment: "Free-funds Interest 2026-02"},
+			{Type: "Withholding tax", Ticker: "ABC.US", Instrument: "ABC", Time: opTime(4).Add(time.Second), Amount: "-1.88", ID: "505", Comment: "ABC.US USD WHT 15%"},
+			{Type: "Dividend", Ticker: "ABC.US", Instrument: "ABC", Time: opTime(4), Amount: "12.50", ID: "504", Comment: "ABC.US USD 2.0833/ SHR"},
+			{Type: "Stock sell", Ticker: "ABC.US", Instrument: "ABC", Time: opTime(3), Amount: "320.00", ID: "503", Comment: "CLOSE BUY 4/10 @ 80.00", PositionID: "4000000001"},
+			{Type: "Stock purchase", Ticker: "ABC.US", Instrument: "ABC", Time: opTime(2), Amount: "-500.00", ID: "502", Comment: "OPEN BUY 10 @ 50.00", PositionID: "4000000001"},
+			{Type: "Deposit", Time: opTime(1), Amount: "2000.00", ID: "501", Comment: "Blik deposit"},
+		},
+		ClosedPositions: []xtbtest.ClosedPosition{
+			{Ticker: "ABC.US", Volume: "4", OpenTime: opTime(2), CloseTime: opTime(3), ProfitLoss: "120.00", PositionID: "4000000001"},
+		},
+	}
+}
+
+func TestAccountSummary_IncomeAndCosts_ReturnsEachPartAndTotalResult(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	id := srv.importAccount(t, incomeAndCostsExport(), "XTB USD")
+
+	var got summaryResponse
+	status := srv.getJSON(t, fmt.Sprintf("/api/accounts/%d/summary", id), &got)
+
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, incomeAndCostsSummary(id), got)
+}
+
+func TestImport_IncomeAndCosts_SameFileAgain_GivesNoNewOperationsAndNoConflicts(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	id := srv.importAccount(t, incomeAndCostsExport(), "XTB USD")
+
+	again := srv.preview(t, incomeAndCostsExport())
+
+	assert.Equal(t, 0, again.NewCashOperations)
+	assert.Equal(t, 10, again.SkippedCashOperations)
+	assert.Empty(t, again.Conflicts, "a Dividend with an empty Position ID is the same operation again")
+	srv.confirm(t, again.ID, nil)
+	assert.Equal(t, incomeAndCostsSummary(id), srv.summary(t, id))
+}
+
+// incomeAndCostsSummary is the summary of the Account with the ID after the import of incomeAndCostsExport.
+func incomeAndCostsSummary(accountID int64) summaryResponse {
+	return summaryResponse{
+		AccountID:      accountID,
+		Currency:       "USD",
+		Cash:           "1533.24",
+		NetDeposits:    "1700.00",
+		RealizedProfit: "120.00",
+		NetDividends:   "10.62",
+		NetInterest:    "2.75",
+		Fees:           "-0.13",
+		TotalResult:    "133.24",
+	}
 }
 
 func TestAccountHoldings_TwoInstruments_ReturnsOpenVolumeAndAverageCost(t *testing.T) {

@@ -35,13 +35,23 @@ type OperationType string
 
 // The Cash Operation types that the reader knows.
 const (
-	TypeDeposit       OperationType = "Deposit"
-	TypeStockPurchase OperationType = "Stock purchase"
-	TypeStockSell     OperationType = "Stock sell"
+	TypeDeposit        OperationType = "Deposit"
+	TypeWithdrawal     OperationType = "Withdrawal"
+	TypeStockPurchase  OperationType = "Stock purchase"
+	TypeStockSell      OperationType = "Stock sell"
+	TypeDividend       OperationType = "Dividend"
+	TypeWithholdingTax OperationType = "Withholding tax"
+	TypeInterest       OperationType = "Free funds interest"
+	TypeInterestTax    OperationType = "Free funds interest tax"
+	TypeSECFee         OperationType = "SEC fee"
+	TypeCorrection     OperationType = "Correction"
 )
 
-// knownTypes are the types that the reader accepts. A later ticket adds the other types of the spec.
-var knownTypes = []OperationType{TypeDeposit, TypeStockPurchase, TypeStockSell}
+// knownTypes are the types that the reader accepts.
+var knownTypes = []OperationType{
+	TypeDeposit, TypeWithdrawal, TypeStockPurchase, TypeStockSell,
+	TypeDividend, TypeWithholdingTax, TypeInterest, TypeInterestTax, TypeSECFee, TypeCorrection,
+}
 
 // Sheet names of the export.
 const (

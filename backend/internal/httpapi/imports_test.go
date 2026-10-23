@@ -212,8 +212,8 @@ func TestImportPreview_RejectedFile_ReturnsErrorAndSavesNothing(t *testing.T) {
 	}{
 		{
 			name:      "unknown type names the type and the row",
-			data:      withRow(xtbtest.CashOperation{Type: "Dividend", Ticker: "FPS.US", Amount: "1.20", ID: "999", Comment: "FPS.US USD 0.12/ SHR"}),
-			wantError: []string{"unknown cash operation type", `"Dividend"`, "row 9"},
+			data:      withRow(xtbtest.CashOperation{Type: "Stock split", Ticker: "FPS.US", Amount: "0.00", ID: "999", Comment: "FPS.US 1:10 split"}),
+			wantError: []string{"unknown cash operation type", `"Stock split"`, "row 9"},
 		},
 		{
 			name:      "type that no broker has",
@@ -526,7 +526,16 @@ func withChange(t *testing.T, xtbID string, change func(*xtbtest.CashOperation))
 
 // usdSummary is the summary of the Account with the ID after the import of usdExport.
 func usdSummary(accountID int64) summaryResponse {
-	return summaryResponse{AccountID: accountID, Currency: "USD", Cash: "774.02", NetDeposits: "1000.00"}
+	return noResultSummary(accountID, "774.02", "1000.00")
+}
+
+// noResultSummary is the summary of a USD Account with no sales, no income and no costs.
+// Each part of the result and the total result are zero.
+func noResultSummary(accountID int64, cash, netDeposits string) summaryResponse {
+	return summaryResponse{
+		AccountID: accountID, Currency: "USD", Cash: cash, NetDeposits: netDeposits,
+		RealizedProfit: "0.00", NetDividends: "0.00", NetInterest: "0.00", Fees: "0.00", TotalResult: "0.00",
+	}
 }
 
 // usdHoldings are the Holdings of the Account after the import of usdExport.
@@ -581,7 +590,7 @@ func TestImport_OverlappingNewerFile_AddsOnlyNewCashOperations(t *testing.T) {
 
 	assert.Equal(t, 2, saved.NewCashOperations)
 	assert.Equal(t, 3, saved.SkippedCashOperations)
-	assert.Equal(t, summaryResponse{AccountID: accountID, Currency: "USD", Cash: "1252.14", NetDeposits: "1500.00"}, srv.summary(t, accountID))
+	assert.Equal(t, noResultSummary(accountID, "1252.14", "1500.00"), srv.summary(t, accountID))
 	assert.Equal(t, []holdingResponse{
 		{Ticker: "FPS.US", Name: "FPS.US", Volume: "12", Cost: "131.28", AverageCost: "10.94"},
 		{Ticker: "PENG.US", Name: "PENG.US", Volume: "2", Cost: "116.58", AverageCost: "58.29"},
@@ -746,7 +755,7 @@ func TestImportConfirm_UseNew_ReplacesStoredCashOperation(t *testing.T) {
 
 	assert.Equal(t, 1, saved.NewCashOperations)
 	assert.Equal(t, 2, saved.SkippedCashOperations)
-	assert.Equal(t, summaryResponse{AccountID: accountID, Currency: "USD", Cash: "974.02", NetDeposits: "1200.00"}, srv.summary(t, accountID))
+	assert.Equal(t, noResultSummary(accountID, "974.02", "1200.00"), srv.summary(t, accountID))
 
 	again := srv.preview(t, withChange(t, "101", func(op *xtbtest.CashOperation) { op.Amount = "1200.00" }))
 	assert.Equal(t, "preview", again.State, "the stored Cash Operation has the new data")

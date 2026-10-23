@@ -195,6 +195,12 @@ export type AccountSummary = {
   currency: string
   cash: string
   netDeposits: string
+  // totalResult is the sum of the parts below. Unrealized Profit joins it in a later version.
+  totalResult: string
+  realizedProfit: string
+  netDividends: string
+  netInterest: string
+  fees: string
 }
 
 // Holding holds all open Lots of one Instrument. Volumes and amounts are decimal text.
