@@ -40,6 +40,8 @@ type testServer struct {
 	prices *price.Service
 	// clock is the clock of the server. A test moves it to change "today".
 	clock *testClock
+	// db is the database of the server. Only a test that needs data that no endpoint shows reads it.
+	db *store.Store
 }
 
 // startServer starts the backend with a new SQLite file in a temporary folder.
@@ -82,7 +84,7 @@ func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *tes
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return &testServer{URL: srv.URL, client: srv.Client(), prices: prices, clock: clock}
+	return &testServer{URL: srv.URL, client: srv.Client(), prices: prices, clock: clock, db: db}
 }
 
 // testToday is the time of the server clock at the start of a test.

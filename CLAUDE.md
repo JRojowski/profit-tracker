@@ -7,6 +7,7 @@ Run these commands from the repository root.
 | Task | Command |
 |---|---|
 | Run all backend tests | `make test` |
+| Run the real-export tests (they skip when `exports/` has no xlsx file) | `cd backend && go test -count=1 -run TestRealExports -v ./internal/httpapi/` |
 | Lint the backend | `make lint` |
 | Install the frontend packages | `make frontend-install` |
 | Typecheck and build the frontend | `make frontend-check` |
