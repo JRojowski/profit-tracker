@@ -36,12 +36,16 @@ func TestOpen_InstrumentsFromOlderSchema_GetQuoteCurrencyFromTickerSuffix(t *tes
 	db, err := store.Open(t.Context(), path)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	got, err := db.QuoteCurrencies(t.Context())
+	got, err := db.Instruments(t.Context())
 
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{
-		"AAPL.US": "USD", "VUSA.UK": "GBP", "PKO.PL": "PLN", "SAP.DE": "EUR", "GHI.FR": "",
-	}, got)
+	assert.Equal(t, map[string]store.Instrument{
+		"AAPL.US": {Ticker: "AAPL.US", QuoteCurrency: "USD"},
+		"VUSA.UK": {Ticker: "VUSA.UK", QuoteCurrency: "GBP"},
+		"PKO.PL":  {Ticker: "PKO.PL", QuoteCurrency: "PLN"},
+		"SAP.DE":  {Ticker: "SAP.DE", QuoteCurrency: "EUR"},
+		"GHI.FR":  {Ticker: "GHI.FR"},
+	}, got, "the suffix gives a quote currency that is not manual, and no Instrument has a manual price ticker")
 }
 
 func TestLastPrices_SavedPrices_ReturnsNewestDateWithAllFields(t *testing.T) {

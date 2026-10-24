@@ -61,8 +61,7 @@ type holdingResponse struct {
 	Volume      string `json:"volume"`
 	Cost        string `json:"cost"`
 	AverageCost string `json:"averageCost"`
-	// QuoteCurrency is nil when the quote currency of the Instrument is not known.
-	QuoteCurrency *string `json:"quoteCurrency"`
+	priceSourceResponse
 	// Price is the close price. PriceDate is its date as YYYY-MM-DD.
 	Price     *string `json:"price"`
 	PriceDate *string `json:"priceDate"`
@@ -218,7 +217,7 @@ func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountVi
 	if err != nil {
 		return accountView{}, err
 	}
-	quoteCurrencies, err := a.store.QuoteCurrencies(ctx)
+	instruments, err := a.store.Instruments(ctx)
 	if err != nil {
 		return accountView{}, err
 	}
@@ -226,12 +225,12 @@ func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountVi
 	if err != nil {
 		return accountView{}, err
 	}
-	l.Prices = accountPrices(acc.Currency, quoteCurrencies, prices)
+	l.Prices = accountPrices(acc.Currency, instruments, prices)
 	state, err := ledger.Calculate(l)
 	if err != nil {
 		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)
 	}
-	return accountView{account: acc, state: state, quoteCurrencies: quoteCurrencies, prices: prices}, nil
+	return accountView{account: acc, state: state, instruments: instruments, prices: prices}, nil
 }
 
 // accountID returns the Account ID of the path. An ID that is not a number is an unknown Account.

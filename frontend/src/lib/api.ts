@@ -231,8 +231,6 @@ export type Holding = {
   volume: string
   cost: string
   averageCost: string
-  // quoteCurrency is null when the tool does not know the quote currency of the Instrument.
-  quoteCurrency: string | null
   price: string | null
   // priceDate is YYYY-MM-DD.
   priceDate: string | null
@@ -241,7 +239,7 @@ export type Holding = {
   // unrealizedProfitPercent is the Unrealized Profit as a percentage of the cost, for example "8.85" for 8.85 %.
   unrealizedProfitPercent: string | null
   note: string | null
-}
+} & PriceSource
 
 // PriceFailure is one Instrument that got no new price. The ticker is the broker ticker.
 export type PriceFailure = {
@@ -314,4 +312,51 @@ export async function fetchSales(
 export async function refreshPrices(): Promise<PriceRefresh> {
   const response = await fetch("/api/prices/refresh", { method: "POST" })
   return readJSON<PriceRefresh>(response)
+}
+
+// PriceSource tells where the tool gets the price of an Instrument.
+export type PriceSource = {
+  // priceTicker is the ticker at the price source: the manual ticker, or the default mapping.
+  priceTicker: string
+  // priceTickerManual tells that the user set the price ticker.
+  priceTickerManual: boolean
+  // quoteCurrency is null when the tool does not know the quote currency of the Instrument.
+  quoteCurrency: string | null
+  // quoteCurrencyManual tells that the user set the quote currency.
+  quoteCurrencyManual: boolean
+}
+
+// Instrument is the price source of one Instrument. The ticker is the broker ticker.
+export type Instrument = { ticker: string } & PriceSource
+
+// setPriceTicker sets the manual price ticker of the Instrument. An empty value removes it.
+export async function setPriceTicker(
+  ticker: string,
+  priceTicker: string
+): Promise<Instrument> {
+  const response = await fetch(
+    `/api/instruments/${encodeURIComponent(ticker)}/price-ticker`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priceTicker }),
+    }
+  )
+  return readJSON<Instrument>(response)
+}
+
+// setQuoteCurrency sets the manual quote currency of the Instrument. An empty value removes it.
+export async function setQuoteCurrency(
+  ticker: string,
+  quoteCurrency: string
+): Promise<Instrument> {
+  const response = await fetch(
+    `/api/instruments/${encodeURIComponent(ticker)}/quote-currency`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quoteCurrency }),
+    }
+  )
+  return readJSON<Instrument>(response)
 }

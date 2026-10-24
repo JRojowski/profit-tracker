@@ -44,18 +44,19 @@ func (a *api) refreshPrices(w http.ResponseWriter, r *http.Request) {
 type accountView struct {
 	account store.Account
 	state   ledger.State
-	// quoteCurrencies are the quote currencies by broker ticker. A value is empty if it is not known.
-	quoteCurrencies map[string]string
+	// instruments are the price sources of the Instruments by broker ticker.
+	instruments map[string]store.Instrument
 	// prices are the last stored prices by broker ticker, in any currency.
 	prices map[string]store.Price
 }
 
 // accountPrices returns the close prices of the Instruments that are quoted in the Account currency.
 // The spec puts the other Instruments out of scope: the tool does no currency conversion.
-func accountPrices(currency string, quoteCurrencies map[string]string, last map[string]store.Price) map[string]decimal.Decimal {
+// The check of the price currency also ignores a stored price from before a change of the quote currency.
+func accountPrices(currency string, instruments map[string]store.Instrument, last map[string]store.Price) map[string]decimal.Decimal {
 	prices := make(map[string]decimal.Decimal, len(last))
 	for ticker, p := range last {
-		if quoteCurrencies[ticker] == currency && p.Currency == currency {
+		if instruments[ticker].QuoteCurrency == currency && p.Currency == currency {
 			prices[ticker] = p.Close
 		}
 	}
@@ -82,7 +83,7 @@ func (v accountView) priceDate() *string {
 // stalePrices tells if a Holding in the Account currency has no price, or its price was fetched before today.
 func (v accountView) stalePrices(today time.Time) bool {
 	for _, h := range v.state.Holdings {
-		if v.quoteCurrencies[h.Instrument.Ticker] != v.account.Currency {
+		if v.instruments[h.Instrument.Ticker].QuoteCurrency != v.account.Currency {
 			continue
 		}
 		if !h.HasPrice || v.prices[h.Instrument.Ticker].FetchedAt.Before(today) {
@@ -106,16 +107,17 @@ func (v accountView) unpricedHoldings() int {
 // holdingRow returns the response row of the Holding.
 func (v accountView) holdingRow(h ledger.Holding) holdingResponse {
 	ticker := h.Instrument.Ticker
+	// An Instrument of a Holding is always in the map. The zero value gives the default mapping and no quote currency.
+	inst := v.instruments[ticker]
+	inst.Ticker = ticker
 	row := holdingResponse{
 		Ticker: ticker,
 		Name:   h.Instrument.Name,
 		Volume: h.Volume.String(),
 		Cost:   formatAmount(h.Cost),
 		// The frontend rounds for display. ADR 0001: the tool rounds only for display.
-		AverageCost: h.AverageCost().String(),
-	}
-	if qc := v.quoteCurrencies[ticker]; qc != "" {
-		row.QuoteCurrency = new(qc)
+		AverageCost:         h.AverageCost().String(),
+		priceSourceResponse: toPriceSourceResponse(inst),
 	}
 	if !h.HasPrice {
 		row.Note = new(v.noValueNote(ticker))
@@ -133,9 +135,9 @@ func (v accountView) holdingRow(h ledger.Holding) holdingResponse {
 
 // noValueNote returns the sentence that tells the user why the Holding of the Instrument has no value.
 func (v accountView) noValueNote(ticker string) string {
-	switch qc := v.quoteCurrencies[ticker]; qc {
+	switch qc := v.instruments[ticker].QuoteCurrency; qc {
 	case "":
-		return "The quote currency of the Instrument is unknown."
+		return "The quote currency of the Instrument is unknown. Set it in the price source of the Instrument."
 	case v.account.Currency:
 		return "There is no price for the Instrument. Refresh the prices."
 	default:

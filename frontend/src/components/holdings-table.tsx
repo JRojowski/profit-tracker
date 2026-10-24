@@ -6,6 +6,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { PriceSourceDialog } from "@/components/price-source-dialog"
+import { Badge } from "@/components/ui/badge"
 import type { Holding } from "@/lib/api"
 import {
   formatAmount,
@@ -17,9 +19,15 @@ import {
 type HoldingsTableProps = {
   holdings: Holding[]
   currency: string
+  // onPriceSourceChanged runs after the user changed the price source of an Instrument.
+  onPriceSourceChanged: () => void
 }
 
-export function HoldingsTable({ holdings, currency }: HoldingsTableProps) {
+export function HoldingsTable({
+  holdings,
+  currency,
+  onPriceSourceChanged,
+}: HoldingsTableProps) {
   if (holdings.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -33,6 +41,7 @@ export function HoldingsTable({ holdings, currency }: HoldingsTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead>Instrument</TableHead>
+          <TableHead>Price source</TableHead>
           <TableHead className="text-right">Volume</TableHead>
           <TableHead className="text-right">Average cost</TableHead>
           <TableHead className="text-right">Cost</TableHead>
@@ -56,6 +65,26 @@ export function HoldingsTable({ holdings, currency }: HoldingsTableProps) {
                     {holding.note}
                   </span>
                 )}
+              </div>
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <span>
+                  {holding.priceTicker}
+                  {holding.quoteCurrency && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      {holding.quoteCurrency}
+                    </span>
+                  )}
+                </span>
+                {(holding.priceTickerManual || holding.quoteCurrencyManual) && (
+                  <Badge variant="secondary">manual</Badge>
+                )}
+                <PriceSourceDialog
+                  holding={holding}
+                  onChanged={onPriceSourceChanged}
+                />
               </div>
             </TableCell>
             <TableCell className="text-right tabular-nums">

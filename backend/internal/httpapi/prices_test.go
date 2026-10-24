@@ -103,6 +103,8 @@ func noValue(ticker string, quoteCurrency *string, note string) holdingPrices {
 
 const noPriceNote = "There is no price for the Instrument. Refresh the prices."
 
+const unknownQuoteCurrencyNote = "The quote currency of the Instrument is unknown. Set it in the price source of the Instrument."
+
 // TestRefreshPrices_HoldingsInAccountCurrency_ReturnsValueAndUnrealizedProfit checks the values after a refresh.
 //
 //	ABC.US: value 2 × 125.50 = 251.00, Unrealized Profit 251.00 - 200.00 = 51.00, 51.00 × 100 / 200.00 = 25.5 %
@@ -238,7 +240,7 @@ func TestAccountHoldings_OtherOrUnknownQuoteCurrency_ShowsNoValueAndNote(t *test
 	holdings := srv.holdingPrices(t, id)
 	require.Len(t, holdings, 4)
 	assert.Equal(t, noValue("DEF.DE", ptr("EUR"), "The Instrument is quoted in EUR. The tool shows no value in USD."), holdings[1])
-	assert.Equal(t, noValue("GHI.FR", nil, "The quote currency of the Instrument is unknown."), holdings[2])
+	assert.Equal(t, noValue("GHI.FR", nil, unknownQuoteCurrencyNote), holdings[2])
 	assert.Equal(t, summaryPrices{
 		Cash: "660.00", Value: "966.00", UnrealizedProfit: "46.00", TotalResult: "46.00",
 		PriceDate: ptr("2026-10-22"), StalePrices: false, UnpricedHoldings: 2,

@@ -197,6 +197,7 @@ export function DashboardPage() {
               <HoldingsTable
                 holdings={current.holdings}
                 currency={current.summary.currency}
+                onPriceSourceChanged={handleRefreshPrices}
               />
             </CardContent>
           </Card>

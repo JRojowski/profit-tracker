@@ -65,6 +65,15 @@ func Ticker(brokerTicker string) string {
 	return base + m.priceSuffix
 }
 
+// EffectiveTicker returns the price ticker that the tool uses.
+// It is the manual price ticker, or the default mapping if manual is empty.
+func EffectiveTicker(brokerTicker, manual string) string {
+	if manual != "" {
+		return manual
+	}
+	return Ticker(brokerTicker)
+}
+
 // marketOf returns the market of the broker ticker and the ticker with no suffix.
 func marketOf(brokerTicker string) (market, string, bool) {
 	dot := strings.LastIndexByte(brokerTicker, '.')

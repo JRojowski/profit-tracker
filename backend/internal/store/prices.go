@@ -28,20 +28,6 @@ type Price struct {
 	FetchedAt time.Time
 }
 
-// QuoteCurrencies returns the quote currency of each Instrument, by broker ticker.
-// The value is empty for an Instrument with no known quote currency.
-func (s *Store) QuoteCurrencies(ctx context.Context) (map[string]string, error) {
-	rows, err := queries.New(s.db).InstrumentQuoteCurrencies(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read quote currencies: %w", err)
-	}
-	currencies := make(map[string]string, len(rows))
-	for _, row := range rows {
-		currencies[row.Ticker] = row.QuoteCurrency.String
-	}
-	return currencies, nil
-}
-
 // SavePrice stores the price. It replaces a stored price of the same Instrument and price date.
 // The Instrument must exist.
 func (s *Store) SavePrice(ctx context.Context, p Price) error {

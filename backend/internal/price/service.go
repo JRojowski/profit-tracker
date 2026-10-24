@@ -120,7 +120,7 @@ func (s *Service) refresh(ctx context.Context, held []heldInstrument) (Result, e
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("refresh prices: %w", err)
 		}
-		q, err := s.quote(ctx, h.ticker, h.quoteCurrency)
+		q, err := s.quote(ctx, h)
 		if err != nil {
 			// A provider error that comes from the end of ctx is not a failure of the Instrument.
 			if ctxErr := ctx.Err(); ctxErr != nil {
@@ -140,21 +140,24 @@ func (s *Service) refresh(ctx context.Context, held []heldInstrument) (Result, e
 	return result, nil
 }
 
-// quote gets the price of the Instrument with the broker ticker and checks its currency.
-func (s *Service) quote(ctx context.Context, ticker, quoteCurrency string) (Quote, error) {
-	q, err := s.provider.LastClose(ctx, Ticker(ticker))
+// quote gets the price of the held Instrument with its price ticker and checks its currency.
+func (s *Service) quote(ctx context.Context, h heldInstrument) (Quote, error) {
+	q, err := s.provider.LastClose(ctx, h.priceTicker)
 	if err != nil {
 		return Quote{}, err
 	}
-	if q.Currency != quoteCurrency {
-		return Quote{}, &CurrencyError{Got: q.Currency, Want: quoteCurrency}
+	if q.Currency != h.quoteCurrency {
+		return Quote{}, &CurrencyError{Got: q.Currency, Want: h.quoteCurrency}
 	}
 	return q, nil
 }
 
 // heldInstrument is an Instrument in a Holding of an Account, with a known quote currency.
 type heldInstrument struct {
-	ticker        string
+	// ticker is the broker ticker.
+	ticker string
+	// priceTicker is the manual price ticker, or the default mapping if the Instrument has no manual price ticker.
+	priceTicker   string
 	quoteCurrency string
 }
 
@@ -165,15 +168,19 @@ func (s *Service) heldInstruments(ctx context.Context) ([]heldInstrument, error)
 	if err != nil {
 		return nil, err
 	}
-	currencies, err := s.store.QuoteCurrencies(ctx)
+	instruments, err := s.store.Instruments(ctx)
 	if err != nil {
 		return nil, err
 	}
 	held := make([]heldInstrument, 0, len(tickers))
 	for _, ticker := range tickers {
-		if qc := currencies[ticker]; qc != "" {
-			held = append(held, heldInstrument{ticker: ticker, quoteCurrency: qc})
+		inst := instruments[ticker]
+		if inst.QuoteCurrency == "" {
+			continue
 		}
+		held = append(held, heldInstrument{
+			ticker: ticker, priceTicker: EffectiveTicker(ticker, inst.PriceTicker), quoteCurrency: inst.QuoteCurrency,
+		})
 	}
 	return held, nil
 }

@@ -5,10 +5,9 @@ VALUES ((SELECT i.id FROM instruments i WHERE i.ticker = sqlc.arg(ticker)),
 ON CONFLICT (instrument_id, date) DO UPDATE
 SET close = excluded.close, currency = excluded.currency, source = excluded.source, fetched_at = excluded.fetched_at;
 
--- name: InstrumentQuoteCurrencies :many
-SELECT ticker, quote_currency
-FROM instruments
-ORDER BY ticker;
+-- name: DeleteInstrumentPrices :exec
+DELETE FROM prices
+WHERE instrument_id = (SELECT i.id FROM instruments i WHERE i.ticker = ?);
 
 -- name: LastPrices :many
 SELECT i.ticker, p.date, p.close, p.currency, p.source, p.fetched_at

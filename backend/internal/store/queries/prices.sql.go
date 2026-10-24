@@ -7,43 +7,18 @@ package queries
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/shopspring/decimal"
 )
 
-const instrumentQuoteCurrencies = `-- name: InstrumentQuoteCurrencies :many
-SELECT ticker, quote_currency
-FROM instruments
-ORDER BY ticker
+const deleteInstrumentPrices = `-- name: DeleteInstrumentPrices :exec
+DELETE FROM prices
+WHERE instrument_id = (SELECT i.id FROM instruments i WHERE i.ticker = ?)
 `
 
-type InstrumentQuoteCurrenciesRow struct {
-	Ticker        string
-	QuoteCurrency sql.NullString
-}
-
-func (q *Queries) InstrumentQuoteCurrencies(ctx context.Context) ([]InstrumentQuoteCurrenciesRow, error) {
-	rows, err := q.db.QueryContext(ctx, instrumentQuoteCurrencies)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []InstrumentQuoteCurrenciesRow
-	for rows.Next() {
-		var i InstrumentQuoteCurrenciesRow
-		if err := rows.Scan(&i.Ticker, &i.QuoteCurrency); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) DeleteInstrumentPrices(ctx context.Context, ticker string) error {
+	_, err := q.db.ExecContext(ctx, deleteInstrumentPrices, ticker)
+	return err
 }
 
 const lastPrices = `-- name: LastPrices :many

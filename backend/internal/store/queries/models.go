@@ -73,11 +73,13 @@ type ImportConflict struct {
 }
 
 type Instrument struct {
-	ID            int64
-	Ticker        string
-	Name          string
-	Category      string
-	QuoteCurrency sql.NullString
+	ID                  int64
+	Ticker              string
+	Name                string
+	Category            string
+	QuoteCurrency       sql.NullString
+	PriceTicker         sql.NullString
+	QuoteCurrencyManual int64
 }
 
 type Lot struct {
