@@ -94,6 +94,27 @@ export function formatTime(time: Date): string {
   return time.toLocaleTimeString()
 }
 
+// polishTimeZone is the time zone of the calendar year of a sale and of an IKZE Contribution.
+const polishTimeZone = "Europe/Warsaw"
+
+// polishYear gives the calendar year of an RFC 3339 time in Polish time, not in the time zone of the browser.
+export function polishYear(time: string): number {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: polishTimeZone,
+      year: "numeric",
+    }).format(new Date(time))
+  )
+}
+
+// formatPolishDate shows the date of an RFC 3339 time in Polish time, in the local format.
+// Then the date always agrees with polishYear.
+export function formatPolishDate(time: string): string {
+  return new Date(time).toLocaleDateString(undefined, {
+    timeZone: polishTimeZone,
+  })
+}
+
 // formatDate shows a YYYY-MM-DD date in the local format. It reads the date as a calendar date, with no time zone shift.
 export function formatDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number)
