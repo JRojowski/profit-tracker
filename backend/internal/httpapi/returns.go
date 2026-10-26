@@ -21,7 +21,7 @@ func returnNote(r returns.Rate) *string {
 	case returns.ReasonNoNetDeposits:
 		note = "The Net Deposits are 0 or less."
 	case returns.ReasonNoFlows:
-		note = "The Account has no deposits."
+		note = "There are no deposits."
 	case returns.ReasonShortHistory:
 		note = "The first deposit is less than one year old."
 	case returns.ReasonHoldingNoValue:
@@ -30,6 +30,8 @@ func returnNote(r returns.Rate) *string {
 		note = "No yearly rate gives the current value."
 	case returns.ReasonNoConvergence:
 		note = "The Annual Return does not converge."
+	case returns.ReasonMissingExchangeRate:
+		note = "An Exchange Rate is missing. Refresh the prices."
 	}
 	return &note
 }

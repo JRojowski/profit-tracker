@@ -59,7 +59,7 @@ func TestAnnual(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := returns.Annual(tc.flows, decimal.RequireFromString(tc.value), today)
+			got := returns.Annual(tc.flows, decimal.RequireFromString(tc.value), true, today)
 
 			assert.Equal(t, tc.want.Reason, got.Reason)
 			assert.True(t, tc.want.Percent.Equal(got.Percent.Round(6)), "want %s, got %s", tc.want.Percent, got.Percent)
@@ -99,6 +99,6 @@ func BenchmarkAnnual(b *testing.B) {
 	}
 	value := decimal.RequireFromString("180000.00")
 	for b.Loop() {
-		returns.Annual(flows, value, today)
+		returns.Annual(flows, value, true, today)
 	}
 }

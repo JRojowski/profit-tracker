@@ -31,6 +31,9 @@ const (
 	// ReasonNoConvergence tells that the calculation of the Annual Return does not converge: the solver does not
 	// get to the tolerance, or it cannot calculate a power.
 	ReasonNoConvergence
+	// ReasonMissingExchangeRate tells that the Exchange Rate of the day of a flow is missing, so the flows in PLN
+	// are not known. The caller that converts the flows sets this reason. ADR 0004, rule 7.
+	ReasonMissingExchangeRate
 )
 
 // Rate is a rate of return as a percentage, or the reason why the tool cannot calculate it.
@@ -70,7 +73,7 @@ type Flow struct {
 const minHistoryDays = 365
 
 // Annual returns the Annual Return: the yearly rate r that makes the flows grow to value today.
-// value counts as money that the user takes from the Account today. Thus r is the root of
+// value is the current value. It counts as money that the user takes from the Account today. Thus r is the root of
 //
 //	Σ Amount_i × (1 + r)^(days_i / 365) − value = 0
 //
@@ -80,18 +83,22 @@ const minHistoryDays = 365
 // Annual counts days between calendar days in the location of today, so the time of day has no effect.
 // The result keeps 8 decimal places of the percentage.
 //
-// The Annual Return is not available in these cases:
+// allHoldingsHaveValue tells that the current value includes each Holding. It is false when the tool cannot
+// calculate the amount of a Holding, for example because the Holding has no price.
+//
+// The Annual Return is not available in these cases. Annual checks them in this order:
 //   - There is no flow.
 //   - The first flow is less than 365 days before today.
+//   - The current value does not include each Holding. A short history comes first,
+//     because a price refresh does not change it.
 //   - No rate in the bracket of the solver is a root.
 //   - The calculation does not converge.
-func Annual(flows []Flow, value decimal.Decimal, today time.Time) Rate {
-	if len(flows) == 0 {
-		return Rate{Reason: ReasonNoFlows}
+func Annual(flows []Flow, value decimal.Decimal, allHoldingsHaveValue bool, today time.Time) Rate {
+	if reason := history(flows, today); reason != ReasonNone {
+		return Rate{Reason: reason}
 	}
-	first := slices.MinFunc(flows, func(a, b Flow) int { return a.Time.Compare(b.Time) })
-	if days(first.Time, today) < minHistoryDays {
-		return Rate{Reason: ReasonShortHistory}
+	if !allHoldingsHaveValue {
+		return Rate{Reason: ReasonHoldingNoValue}
 	}
 
 	terms := make([]term, 0, len(flows))
@@ -107,6 +114,19 @@ func Annual(flows []Flow, value decimal.Decimal, today time.Time) Rate {
 		return Rate{Reason: reason}
 	}
 	return Rate{Percent: growth.Sub(decimal.NewFromInt(1)).Mul(hundred).Round(8)}
+}
+
+// history returns ReasonNoFlows if there is no flow, ReasonShortHistory if the first flow is less than
+// 365 days before today, and ReasonNone otherwise.
+func history(flows []Flow, today time.Time) Reason {
+	if len(flows) == 0 {
+		return ReasonNoFlows
+	}
+	first := slices.MinFunc(flows, func(a, b Flow) int { return a.Time.Compare(b.Time) })
+	if days(first.Time, today) < minHistoryDays {
+		return ReasonShortHistory
+	}
+	return ReasonNone
 }
 
 // days returns the number of calendar days from the day of from to the day of to, in the location of to.

@@ -5,6 +5,7 @@ import {
   unpricedNote,
   type Tile,
 } from "@/components/account-summary-tiles"
+import { ReturnTile } from "@/components/return-tile"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -74,7 +75,7 @@ export function AllAccountsSummaryView({
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {totalTiles.map((tile) => (
           <SummaryTile
             key={tile.label}
@@ -83,6 +84,7 @@ export function AllAccountsSummaryView({
             titleClassName="text-2xl"
           />
         ))}
+        <ReturnTile returns={summary} />
       </div>
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">

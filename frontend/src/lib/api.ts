@@ -449,18 +449,20 @@ export type AllAccountsRow = AllAccountsAmounts & {
 
 // AllAccountsSummary holds the totals of all Accounts in PLN. When available is false, the totals are null
 // and warnings tell why.
-export type AllAccountsSummary = AllAccountsAmounts & {
-  available: boolean
-  // stalePrices and staleRates have the meaning of the AccountSummary fields, over all Accounts.
-  stalePrices: boolean
-  staleRates: boolean
-  // priceDate and exchangeRateDate are YYYY-MM-DD, or null.
-  priceDate: string | null
-  exchangeRateDate: string | null
-  unpricedHoldings: number
-  warnings: string[]
-  accounts: AllAccountsRow[]
-}
+// The returns of all Accounts use the Net Deposits flows in PLN, by ADR 0004.
+export type AllAccountsSummary = AllAccountsAmounts &
+  Returns & {
+    available: boolean
+    // stalePrices and staleRates have the meaning of the AccountSummary fields, over all Accounts.
+    stalePrices: boolean
+    staleRates: boolean
+    // priceDate and exchangeRateDate are YYYY-MM-DD, or null.
+    priceDate: string | null
+    exchangeRateDate: string | null
+    unpricedHoldings: number
+    warnings: string[]
+    accounts: AllAccountsRow[]
+  }
 
 export async function fetchAllAccountsSummary(
   signal?: AbortSignal

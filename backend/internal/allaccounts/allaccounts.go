@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
+	"github.com/jrojowski/profit-tracker/backend/internal/returns"
 )
 
 // Account is the input of one Account: its currency and the result of the Ledger calculator.
@@ -59,6 +60,10 @@ type Row struct {
 	// MissingFlows are the times of the Net Deposits flows with no rate on their day, in the order of the Ledger.
 	// The row is not available if there is one.
 	MissingFlows []time.Time
+	// Flows are the Net Deposits flows in PLN, each at the rate of its day. They are empty if the row is not available.
+	Flows []returns.Flow
+	// AllHoldingsHaveValue tells if each Holding of the Account has a value. See ledger.State.AllHoldingsHaveValue.
+	AllHoldingsHaveValue bool
 }
 
 // Result is the view of all Accounts.
@@ -69,6 +74,11 @@ type Result struct {
 	Totals Amounts
 	// Rows are in the order of the input.
 	Rows []Row
+	// SimpleReturn is Totals.TotalResult × 100 / Totals.NetDeposits.
+	SimpleReturn returns.Rate
+	// AnnualReturn is the yearly rate that makes the flows of all Accounts in PLN grow to Totals.Value today.
+	// ADR 0004, rule 7.
+	AnnualReturn returns.Rate
 }
 
 // Calculate returns the view of all Accounts in PLN, by ADR 0004.
@@ -81,8 +91,9 @@ type Result struct {
 // When each Holding has a value, this Total Result is equal to the value minus the Net Deposits (ADR 0004, rule 4).
 // When a Holding has no value, the parts count it at its cost, as on the dashboard of the Account.
 //
-// The totals are not available if a row is not available.
-func Calculate(accounts []Account, rates Rates) Result {
+// The totals are not available if a row is not available. Then the returns are not available too.
+// The Annual Return counts days in the location of today. Give today in Polish time.
+func Calculate(accounts []Account, rates Rates, today time.Time) Result {
 	result := Result{Available: true, Rows: make([]Row, 0, len(accounts))}
 	for _, acc := range accounts {
 		row := convert(acc, rates)
@@ -95,16 +106,28 @@ func Calculate(accounts []Account, rates Rates) Result {
 	}
 	if !result.Available {
 		result.Totals = Amounts{}
+		missing := returns.Rate{Reason: returns.ReasonMissingExchangeRate}
+		result.SimpleReturn, result.AnnualReturn = missing, missing
+		return result
 	}
+
+	var flows []returns.Flow
+	allHoldingsHaveValue := true
+	for _, row := range result.Rows {
+		flows = append(flows, row.Flows...)
+		allHoldingsHaveValue = allHoldingsHaveValue && row.AllHoldingsHaveValue
+	}
+	result.SimpleReturn = returns.Simple(result.Totals.TotalResult, result.Totals.NetDeposits)
+	result.AnnualReturn = returns.Annual(flows, result.Totals.Value, allHoldingsHaveValue, today)
 	return result
 }
 
 // convert returns the row of the Account in PLN.
 func convert(acc Account, rates Rates) Row {
 	s := acc.State
-	row := Row{AccountID: acc.ID}
+	row := Row{AccountID: acc.ID, AllHoldingsHaveValue: s.AllHoldingsHaveValue()}
 	if acc.Currency == ledger.PLN {
-		row.Available = true
+		row.Available, row.Flows = true, s.Flows
 		row.Amounts = Amounts{
 			Value: s.Value, Cash: s.Cash, NetDeposits: s.NetDeposits, TotalResult: s.TotalResult,
 			RealizedProfit: s.RealizedProfit, UnrealizedProfit: s.UnrealizedProfit, NetDividends: s.NetDividends,
@@ -120,6 +143,7 @@ func convert(acc Account, rates Rates) Row {
 	row.ExchangeRate, row.HasExchangeRate = latest, true
 
 	netDeposits, currencyResult := decimal.Zero, decimal.Zero
+	flows := make([]returns.Flow, 0, len(s.Flows))
 	for _, f := range s.Flows {
 		rate, ok := rates.On(acc.Currency, f.Time)
 		if !ok {
@@ -127,12 +151,15 @@ func convert(acc Account, rates Rates) Row {
 			continue
 		}
 		// ADR 0004, rules 3 and 6.
-		netDeposits = netDeposits.Add(f.Amount.Mul(rate))
+		inPLN := f.Amount.Mul(rate)
+		flows = append(flows, returns.Flow{Time: f.Time, Amount: inPLN})
+		netDeposits = netDeposits.Add(inPLN)
 		currencyResult = currencyResult.Add(f.Amount.Mul(latest.Sub(rate)))
 	}
 	if len(row.MissingFlows) > 0 {
 		return row
 	}
+	row.Flows = flows
 
 	// ADR 0004, rules 2 and 5.
 	a := Amounts{

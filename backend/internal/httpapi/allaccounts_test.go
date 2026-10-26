@@ -37,6 +37,21 @@ type allAccountsResponse struct {
 	UnpricedHoldings int                 `json:"unpricedHoldings"`
 	Warnings         []string            `json:"warnings"`
 	Accounts         []allAccountsRowDTO `json:"accounts"`
+	allReturns
+}
+
+// allReturns are the return fields of the All Accounts response.
+type allReturns struct {
+	SimpleReturn     *string `json:"simpleReturn"`
+	SimpleReturnNote *string `json:"simpleReturnNote"`
+	AnnualReturn     *string `json:"annualReturn"`
+	AnnualReturnNote *string `json:"annualReturnNote"`
+}
+
+// missingRateReturns are the return fields when a rate for a flow is missing.
+func missingRateReturns() allReturns {
+	note := "An Exchange Rate is missing. Refresh the prices."
+	return allReturns{SimpleReturnNote: &note, AnnualReturnNote: &note}
 }
 
 // allAccountsRowDTO is one row of the All Accounts response.
@@ -72,8 +87,8 @@ func cashAmounts(cash, netDeposits, totalResult, interest, currencyResult string
 	}
 }
 
-// usdDeposit is a Deposit of the amount at the time.
-func usdDeposit(id, amount string, at time.Time) xtbtest.CashOperation {
+// cashDeposit is a Deposit of the amount at the time, in the Account currency.
+func cashDeposit(id, amount string, at time.Time) xtbtest.CashOperation {
 	return xtbtest.CashOperation{Type: "Deposit", Time: at, Amount: amount, ID: id, Comment: "Blik deposit"}
 }
 
@@ -83,7 +98,7 @@ func adr0004Export(extra ...xtbtest.CashOperation) xtbtest.Export {
 	ops := append([]xtbtest.CashOperation(nil), extra...)
 	ops = append(ops,
 		xtbtest.CashOperation{Type: "Free funds interest", Time: time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC), Amount: "1000.00", ID: "9002", Comment: "Free-funds Interest"},
-		usdDeposit("9001", "10000.00", time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)),
+		cashDeposit("9001", "10000.00", time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)),
 	)
 	return xtbtest.Export{AccountNumber: "58000001", Currency: "USD", CashOperations: ops}
 }
@@ -108,6 +123,8 @@ func TestAllAccounts_ADR0004Example(t *testing.T) {
 	want := cashAmounts("39600.00", "40000.00", "-400.00", "3600.00", "-4000.00")
 	assert.Equal(t, allAccountsResponse{
 		Available: true, plnAmounts: want, ExchangeRateDate: ptr("2026-10-22"), Warnings: []string{},
+		// Simple Return: −400 × 100 / 40000 = −1 %. The first flow is less than one year old.
+		allReturns: allReturns{SimpleReturn: ptr("-1"), AnnualReturnNote: ptr("The first deposit is less than one year old.")},
 		Accounts: []allAccountsRowDTO{{
 			AccountID: id, Name: "XTB USD", Type: "regular", Currency: "USD", Available: true,
 			ExchangeRate: ptr("3.6"), plnAmounts: want,
@@ -125,7 +142,7 @@ func TestAllAccounts_FlowOnSaturday_UsesTheRateOfTheFridayBefore(t *testing.T) {
 	srv.rateProvider.set(t, "USD", "2026-10-22", "3.60")
 	// Saturday 2026-10-10, 12:00 in Polish time.
 	srv.importAccount(t, xtbtest.Export{AccountNumber: "58000002", Currency: "USD", CashOperations: []xtbtest.CashOperation{
-		usdDeposit("9011", "1000.00", time.Date(2026, 10, 10, 10, 0, 0, 0, time.UTC)),
+		cashDeposit("9011", "1000.00", time.Date(2026, 10, 10, 10, 0, 0, 0, time.UTC)),
 	}}, "XTB USD")
 
 	srv.refreshPrices(t)
@@ -147,6 +164,7 @@ func TestAllAccounts_TransfersBetweenPLNAccounts_CancelInTheNetDeposits(t *testi
 	ikze := cashAmounts("10000.00", "10000.00", "0.00", "0.00", "0.00")
 	assert.Equal(t, allAccountsResponse{
 		Available: true, plnAmounts: ikze, Warnings: []string{},
+		allReturns: allReturns{SimpleReturn: ptr("0"), AnnualReturnNote: ptr("The first deposit is less than one year old.")},
 		Accounts: []allAccountsRowDTO{
 			{AccountID: ikzeID, Name: "XTB IKZE", Type: "IKZE", Currency: "PLN", Available: true, plnAmounts: ikze},
 			{AccountID: plnID, Name: "XTB PLN", Type: "regular", Currency: "PLN", Available: true, plnAmounts: zero},
@@ -170,14 +188,14 @@ func TestAllAccounts_EarlierFlowAfterRefresh_RateMissingUntilTheSeriesExtends(t 
 	srv.refreshPrices(t)
 	require.True(t, srv.allAccounts(t).Available)
 
-	earlier := usdDeposit("9000", "1000.00", time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC))
+	earlier := cashDeposit("9000", "1000.00", time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC))
 	srv.confirm(t, srv.preview(t, adr0004Export(earlier)).ID, nil)
 	got := srv.allAccounts(t)
 
 	note := "No Exchange Rate for USD on 2026-06-01. Refresh the prices."
 	pln := cashAmounts("250.00", "250.00", "0.00", "0.00", "0.00")
 	assert.Equal(t, allAccountsResponse{
-		Available: false, ExchangeRateDate: ptr("2026-10-22"), Warnings: []string{note},
+		Available: false, ExchangeRateDate: ptr("2026-10-22"), Warnings: []string{note}, allReturns: missingRateReturns(),
 		Accounts: []allAccountsRowDTO{
 			{AccountID: plnID, Name: "XTB PLN", Type: "regular", Currency: "PLN", Available: true, plnAmounts: pln},
 			{AccountID: usdID, Name: "XTB USD", Type: "regular", Currency: "USD", Available: false, ExchangeRate: ptr("3.6"), Note: &note},
@@ -253,7 +271,7 @@ func TestAllAccounts_HoldingsOfAllAccounts_PriceDateAndUnpricedHoldings(t *testi
 	srv.importAccount(t, plnExport(), "XTB PLN")
 	srv.importAccount(t, xtbtest.Export{AccountNumber: "58000004", Currency: "USD", CashOperations: []xtbtest.CashOperation{
 		{Type: "Stock purchase", Ticker: "XYZ.US", Instrument: "XYZ", Amount: "-60.00", ID: "9022", Comment: "OPEN BUY 0.5 @ 120.00", PositionID: "9000000002"},
-		usdDeposit("9021", "1000.00", time.Time{}),
+		cashDeposit("9021", "1000.00", time.Time{}),
 	}}, "XTB USD")
 
 	srv.refreshPrices(t)
@@ -282,6 +300,90 @@ func TestAllAccounts_NoAccounts_ZeroTotalsAndNoRows(t *testing.T) {
 		"available": true, "value": "0.00", "cash": "0.00", "netDeposits": "0.00", "totalResult": "0.00",
 		"realizedProfit": "0.00", "unrealizedProfit": "0.00", "netDividends": "0.00", "netInterest": "0.00",
 		"fees": "0.00", "currencyResult": "0.00", "priceDate": null, "exchangeRateDate": null,
-		"stalePrices": false, "staleRates": false, "unpricedHoldings": 0, "warnings": [], "accounts": []
+		"stalePrices": false, "staleRates": false, "unpricedHoldings": 0, "warnings": [], "accounts": [],
+		"simpleReturn": null, "simpleReturnNote": "The Net Deposits are 0 or less.",
+		"annualReturn": null, "annualReturnNote": "There are no deposits."
 	}`, body)
+}
+
+// TestAllAccounts_AnnualReturn_UsesTheFlowsInPLN checks ADR 0004, rule 7. The Annual Return of all Accounts
+// converts each flow at the rate of its day. At the latest rate, the result is +10 %. At the rate of the day, it is −1 %.
+//
+//	Flow:          10000 USD × 4.00 = 40000 PLN, exactly 365 days before today
+//	Value:         11000 USD × 3.60 = 39600 PLN
+//	Annual Return: 40000 × (1 + r) = 39600, so r = −1 %
+//	Simple Return: (39600 − 40000) × 100 / 40000 = −1 %
+func TestAllAccounts_AnnualReturn_UsesTheFlowsInPLN(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	srv.rateProvider.set(t, "USD", "2025-10-23", "4.00")
+	srv.rateProvider.set(t, "USD", "2026-10-22", "3.60")
+	srv.importAccount(t, xtbtest.Export{AccountNumber: "58000005", Currency: "USD", CashOperations: []xtbtest.CashOperation{
+		{Type: "Free funds interest", Time: daysBeforeToday(300), Amount: "1000.00", ID: "9032", Comment: "Free-funds Interest"},
+		cashDeposit("9031", "10000.00", daysBeforeToday(365)),
+	}}, "XTB USD")
+	srv.refreshPrices(t)
+
+	got := srv.allAccounts(t)
+
+	require.True(t, got.Available)
+	assertPercent(t, "-1", got.SimpleReturn)
+	assert.Nil(t, got.SimpleReturnNote)
+	assertPercent(t, "-1", got.AnnualReturn)
+	assert.Nil(t, got.AnnualReturnNote)
+}
+
+// TestAllAccounts_NetDepositsZero_SimpleReturnNotAvailable checks the Simple Return of all Accounts when the
+// Net Deposits in PLN are 0: the Deposit and the Transfer Out of the ADR 0003 PLN Account cancel.
+func TestAllAccounts_NetDepositsZero_SimpleReturnNotAvailable(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	srv.importWithWarnings(t, adr0003PLNExport(), "XTB PLN", "regular")
+
+	got := srv.allAccounts(t)
+
+	assert.Equal(t, ptr("0.00"), got.NetDeposits)
+	assert.Nil(t, got.SimpleReturn)
+	assert.Equal(t, ptr("The Net Deposits are 0 or less."), got.SimpleReturnNote)
+}
+
+// TestAllAccounts_HoldingWithNoValue_AnnualReturnNotAvailable checks that a Holding with no value in an Account
+// stops the Annual Return of all Accounts, as on the dashboard of the Account.
+func TestAllAccounts_HoldingWithNoValue_AnnualReturnNotAvailable(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	deposit := daysBeforeToday(730)
+	srv.importAccount(t, xtbtest.Export{AccountNumber: "58000006", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		{Type: "Stock purchase", Ticker: "PKO.PL", Instrument: "PKO", Time: deposit.Add(time.Hour), Amount: "-600.00", ID: "9042", Comment: "OPEN BUY 6 @ 100.00", PositionID: "9000000003"},
+		cashDeposit("9041", "1000.00", deposit),
+	}}, "XTB PLN")
+
+	got := srv.allAccounts(t)
+
+	assert.Equal(t, 1, got.UnpricedHoldings)
+	assertPercent(t, "0", got.SimpleReturn)
+	assert.Nil(t, got.AnnualReturn)
+	assert.Equal(t, ptr("A Holding has no value."), got.AnnualReturnNote)
+}
+
+// TestAllAccounts_NegativeValue_NoYearlyRate checks the "no root" reason at the HTTP API seam.
+// A Correction makes the cash, and thus the value, negative. A Deposit that grows at any yearly rate stays positive,
+// so no yearly rate gives the value. The Account holds no Instrument, so each Holding has a value.
+//
+//	Value:         1000.00 − 1100.00 = −100.00 PLN
+//	Simple Return: −1100.00 × 100 / 1000.00 = −110 %
+func TestAllAccounts_NegativeValue_NoYearlyRate(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	srv.importAccount(t, xtbtest.Export{AccountNumber: "58000007", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		{Type: "Correction", Time: daysBeforeToday(300), Amount: "-1100.00", ID: "9052", Comment: "Correction"},
+		cashDeposit("9051", "1000.00", daysBeforeToday(400)),
+	}}, "XTB PLN")
+
+	got := srv.allAccounts(t)
+
+	assert.Equal(t, ptr("-100.00"), got.Value)
+	assertPercent(t, "-110", got.SimpleReturn)
+	assert.Nil(t, got.AnnualReturn)
+	assert.Equal(t, ptr("No yearly rate gives the current value."), got.AnnualReturnNote)
 }

@@ -279,21 +279,14 @@ func Calculate(l Ledger) (State, error) {
 	s.TotalResult = s.RealizedProfit.Add(s.UnrealizedProfit).Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
 	s.Flows = flows(l.CashOperations)
 	s.SimpleReturn = returns.Simple(s.TotalResult, s.NetDeposits)
-	s.AnnualReturn = s.annualReturn(l)
+	s.AnnualReturn = returns.Annual(s.Flows, s.Value, s.AllHoldingsHaveValue(), l.Today)
 	return s, nil
 }
 
-// annualReturn returns the Annual Return of the state, or the reason why it is not available.
-// A short history comes before a Holding with no value, because a price refresh does not change it.
-func (s *State) annualReturn(l Ledger) returns.Rate {
-	rate := returns.Annual(s.Flows, s.Value, l.Today)
-	if rate.Reason == returns.ReasonNoFlows || rate.Reason == returns.ReasonShortHistory {
-		return rate
-	}
-	if slices.ContainsFunc(s.Holdings, func(h Holding) bool { return !h.HasValue() }) {
-		return returns.Rate{Reason: returns.ReasonHoldingNoValue}
-	}
-	return rate
+// AllHoldingsHaveValue tells if each Holding has a price and, if necessary, an Exchange Rate.
+// If it is false, Value does not include each Holding.
+func (s *State) AllHoldingsHaveValue() bool {
+	return !slices.ContainsFunc(s.Holdings, func(h Holding) bool { return !h.HasValue() })
 }
 
 // flows returns the Net Deposits flows of the Cash Operations.

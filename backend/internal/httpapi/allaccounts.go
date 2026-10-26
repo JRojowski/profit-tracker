@@ -48,6 +48,12 @@ type allAccountsResponse struct {
 	// It is empty if there is nothing to say.
 	Warnings []string                 `json:"warnings"`
 	Accounts []allAccountsRowResponse `json:"accounts"`
+	// SimpleReturn and AnnualReturn have the formats of the Account summary. They use the amounts and the
+	// Net Deposits flows in PLN (ADR 0004, rule 7). A note tells why a return is nil.
+	SimpleReturn     *string `json:"simpleReturn"`
+	SimpleReturnNote *string `json:"simpleReturnNote"`
+	AnnualReturn     *string `json:"annualReturn"`
+	AnnualReturnNote *string `json:"annualReturnNote"`
 }
 
 // allAccountsRowResponse is one Account in PLN, in the order of GET /api/accounts.
@@ -97,6 +103,7 @@ func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 	for _, v := range views {
 		input = append(input, allaccounts.Account{ID: v.account.ID, Currency: v.account.Currency, State: v.state})
 	}
+	today := exchange.StartOfDayInWarsaw(a.now())
 	result := allaccounts.Calculate(input, allaccounts.Rates{
 		On: func(currency string, t time.Time) (decimal.Decimal, bool) {
 			rate, ok := series[currency].On(t)
@@ -106,16 +113,20 @@ func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 			rate, ok := latest[currency]
 			return rate.Mid, ok
 		},
-	})
+	}, today)
 
 	resp := allAccountsResponse{
 		Available:        result.Available,
 		PriceDate:        allPriceDate(views),
 		ExchangeRateDate: allExchangeRateDate(views, latest),
 		StalePrices:      slices.ContainsFunc(views, func(v accountView) bool { return v.stalePrices(a.today()) }),
-		StaleRates:       allStaleRates(views, latest, exchange.StartOfDayInWarsaw(a.now())),
+		StaleRates:       allStaleRates(views, latest, today),
 		Warnings:         rateWarnings(views, result.Rows, latest),
 		Accounts:         make([]allAccountsRowResponse, 0, len(views)),
+		SimpleReturn:     percent(result.SimpleReturn),
+		SimpleReturnNote: returnNote(result.SimpleReturn),
+		AnnualReturn:     percent(result.AnnualReturn),
+		AnnualReturnNote: returnNote(result.AnnualReturn),
 	}
 	if result.Available {
 		resp.plnAmountsResponse = toPLNAmounts(result.Totals)
