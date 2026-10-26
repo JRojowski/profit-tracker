@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -78,19 +79,10 @@ type allAccountsRowResponse struct {
 // allAccountsSummary returns all Accounts together in PLN, with one row per Account.
 func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	accounts, err := a.store.Accounts(ctx)
+	views, err := a.allAccountViews(ctx)
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
-	}
-	views := make([]accountView, 0, len(accounts))
-	for _, acc := range accounts {
-		view, err := a.readAccountView(ctx, acc)
-		if err != nil {
-			a.writeInternalError(w, r, err)
-			return
-		}
-		views = append(views, view)
 	}
 	series, err := a.rates.Series(ctx)
 	if err != nil {
@@ -266,4 +258,21 @@ func allExchangeRateDate(views []accountView, latest map[string]exchange.Latest)
 		}
 	}
 	return oldestDate(dates)
+}
+
+// allAccountViews reads all Accounts and calculates the state of each one, in the order of GET /api/accounts.
+func (a *api) allAccountViews(ctx context.Context) ([]accountView, error) {
+	accounts, err := a.store.Accounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]accountView, 0, len(accounts))
+	for _, acc := range accounts {
+		view, err := a.readAccountView(ctx, acc)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
+	}
+	return views, nil
 }

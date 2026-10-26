@@ -474,3 +474,66 @@ export async function fetchAllAccountsSummary(
   const response = await fetch("/api/all-accounts/summary", { signal })
   return readJSON<AllAccountsSummary>(response)
 }
+
+// AllocationPart is one part of the Allocation. The value is decimal text in the currency of the Allocation.
+// The share is the exact percentage of the total, for example "33.3333333333333333". The frontend rounds it for display.
+// The cash part has the ticker "" and the name "Cash".
+export type AllocationPart = {
+  ticker: string
+  name: string
+  value: string
+  share: string
+}
+
+// AllocationOther holds the Holdings after the 8 largest, taken together as one part.
+export type AllocationOther = {
+  count: number
+  value: string
+  share: string
+  holdings: AllocationPart[]
+}
+
+// AllocationCurrencyPart is the value of one Quote Currency in the Allocation.
+export type AllocationCurrencyPart = {
+  currency: string
+  value: string
+  share: string
+}
+
+// Allocation is the share of each part in the value of one Account or of all Accounts.
+// When available is false, total, cash and other are null, the lists are empty and warnings tell why.
+export type Allocation = {
+  available: boolean
+  warnings: string[]
+  // currency is the Account currency, or "PLN" for all Accounts.
+  currency: string
+  total: string | null
+  byInstrument: {
+    // holdings are at most 8 parts, largest value first.
+    holdings: AllocationPart[]
+    // cash is null when the cash is zero or less.
+    cash: AllocationPart | null
+    // other is null when there are 8 Holdings or fewer.
+    other: AllocationOther | null
+  }
+  byQuoteCurrency: AllocationCurrencyPart[]
+  // unpricedHoldings is the count of Holdings with no known value. They are not parts.
+  unpricedHoldings: number
+}
+
+// fetchAccountAllocation loads the Allocation of one Account, in the Account currency.
+export async function fetchAccountAllocation(
+  id: number,
+  signal?: AbortSignal
+): Promise<Allocation> {
+  const response = await fetch(`/api/accounts/${id}/allocation`, { signal })
+  return readJSON<Allocation>(response)
+}
+
+// fetchAllAccountsAllocation loads the Allocation of all Accounts, in PLN by ADR 0004.
+export async function fetchAllAccountsAllocation(
+  signal?: AbortSignal
+): Promise<Allocation> {
+  const response = await fetch("/api/all-accounts/allocation", { signal })
+  return readJSON<Allocation>(response)
+}

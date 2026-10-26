@@ -1,7 +1,10 @@
 import type { ReactNode } from "react"
 
+import { AllocationDonut } from "@/components/allocation-donut"
+import { FigureLabel } from "@/components/figure-label"
 import { Card, CardContent } from "@/components/ui/card"
-import type { Returns } from "@/lib/api"
+import type { Loaded } from "@/hooks/use-load"
+import type { Allocation, Returns } from "@/lib/api"
 import { amountSign, formatAmount, formatPercent } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -18,34 +21,36 @@ export type OverviewFigures = Returns & {
 
 type OverviewHeroProps = {
   figures: OverviewFigures
+  // allocation is the load of the Allocation that the right column shows.
+  allocation: Loaded<Allocation>
 }
 
 // OverviewHero shows the value, the Total Result and the Annual Return at the top of an Overview.
 // A second row shows the Simple Return, the cash and the Net Deposits.
-// The right column keeps the place of the Allocation chart.
-export function OverviewHero({ figures }: OverviewHeroProps) {
+// The right column shows the Allocation by Instrument.
+export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
   const unpriced = unpricedNote(figures.unpricedHoldings)
 
   return (
     <div className="flex flex-col gap-4">
       <Card className="py-0">
-        <CardContent className="grid gap-6 p-5 md:p-7 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
+        <CardContent className="grid gap-6 p-5 md:p-7 xl:grid-cols-[minmax(0,1fr)_20rem] xl:gap-8">
           <div className="flex min-w-0 flex-col gap-6">
             <div className="flex flex-col gap-2">
               <FigureLabel>Value</FigureLabel>
-              <p className="num text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl lg:text-4xl xl:text-6xl">
+              <p className="num text-3xl font-semibold tracking-tight sm:text-4xl md:text-5xl xl:text-6xl">
                 {amountText(figures.value, figures.currency)}
               </p>
               {unpriced && (
                 <p className="text-sm text-muted-foreground">{unpriced}</p>
               )}
             </div>
-            <div className="grid gap-4 border-t pt-6 sm:grid-cols-2">
+            <div className="grid gap-4 border-t pt-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
               <FigureBox label="Total Result" note={unpriced}>
                 <SignedAmount
                   amount={figures.totalResult}
                   currency={figures.currency}
-                  className="text-2xl md:text-3xl"
+                  className="text-2xl md:text-3xl xl:text-2xl 2xl:text-3xl"
                 />
               </FigureBox>
               <FigureBox
@@ -58,12 +63,12 @@ export function OverviewHero({ figures }: OverviewHeroProps) {
               >
                 <SignedPercent
                   percent={figures.annualReturn}
-                  className="text-2xl md:text-3xl"
+                  className="text-2xl md:text-3xl xl:text-2xl 2xl:text-3xl"
                 />
               </FigureBox>
             </div>
           </div>
-          <AllocationSlot />
+          <AllocationDonut allocation={allocation} />
         </CardContent>
       </Card>
       <div className="grid gap-4 md:grid-cols-3">
@@ -89,28 +94,6 @@ export function OverviewHero({ figures }: OverviewHeroProps) {
         </DetailCard>
       </div>
     </div>
-  )
-}
-
-// AllocationSlot keeps the place of the Allocation chart in the hero.
-function AllocationSlot() {
-  return (
-    <section
-      aria-label="Allocation"
-      className="flex min-h-28 flex-col gap-3 border-t pt-6 lg:min-h-48 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8"
-    >
-      <FigureLabel>Allocation</FigureLabel>
-      <div className="flex-1 rounded-lg border border-dashed" />
-    </section>
-  )
-}
-
-// FigureLabel is the small section label above a figure.
-function FigureLabel({ children }: { children: ReactNode }) {
-  return (
-    <p className="font-mono text-xs tracking-wider text-muted-foreground uppercase">
-      {children}
-    </p>
   )
 }
 

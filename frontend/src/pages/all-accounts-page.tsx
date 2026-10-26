@@ -9,7 +9,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useLoad } from "@/hooks/use-load"
-import { fetchAllAccountsSummary, type AllAccountsSummary } from "@/lib/api"
+import {
+  fetchAllAccountsAllocation,
+  fetchAllAccountsSummary,
+  type Allocation,
+  type AllAccountsSummary,
+} from "@/lib/api"
+import type { Loaded } from "@/hooks/use-load"
 import { useAppState } from "@/lib/app-state"
 import { paths } from "@/lib/routes"
 
@@ -17,6 +23,7 @@ import { paths } from "@/lib/routes"
 export function AllAccountsPage() {
   const { accounts, accountsError, valuesVersion } = useAppState()
   const summary = useLoad("all", valuesVersion, fetchAllAccountsSummary)
+  const allocation = useLoad("all", valuesVersion, fetchAllAccountsAllocation)
 
   if (accountsError) {
     return (
@@ -42,13 +49,19 @@ export function AllAccountsPage() {
 
   return (
     <LoadedView loaded={summary} errorTitle="Cannot load the Account values">
-      {(data) => <AllAccountsOverview summary={data} />}
+      {(data) => <AllAccountsOverview summary={data} allocation={allocation} />}
     </LoadedView>
   )
 }
 
 // AllAccountsOverview shows the totals of all Accounts in PLN, the parts of the Total Result and one row for each Account.
-function AllAccountsOverview({ summary }: { summary: AllAccountsSummary }) {
+function AllAccountsOverview({
+  summary,
+  allocation,
+}: {
+  summary: AllAccountsSummary
+  allocation: Loaded<Allocation>
+}) {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       {summary.warnings.length > 0 && (
@@ -68,7 +81,10 @@ function AllAccountsOverview({ summary }: { summary: AllAccountsSummary }) {
           </AlertDescription>
         </Alert>
       )}
-      <OverviewHero figures={{ ...summary, currency: "PLN" }} />
+      <OverviewHero
+        figures={{ ...summary, currency: "PLN" }}
+        allocation={allocation}
+      />
       {/* This full-width row under the hero is for the Total Result breakdown in v3. */}
       <TotalResultWaterfall
         currency="PLN"
