@@ -145,9 +145,15 @@ func (e Export) FileName() string {
 func Build(tb testing.TB, e Export) []byte {
 	tb.Helper()
 
-	data, err := build(e.withDefaults())
+	data, err := BuildFile(e)
 	require.NoError(tb, err, "build xtb export fixture")
 	return data
+}
+
+// BuildFile builds the xlsx file of the export, with defaults for the fields that e leaves empty.
+// Code outside tests, for example the demo data command, calls it.
+func BuildFile(e Export) ([]byte, error) {
+	return build(e.withDefaults())
 }
 
 func (e Export) withDefaults() Export {

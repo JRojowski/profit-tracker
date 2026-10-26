@@ -10,9 +10,10 @@ Run these commands from the repository root.
 | Run the real-export tests (they skip when `exports/` has no xlsx file) | `cd backend && go test -count=1 -run TestRealExports -v ./internal/httpapi/` |
 | Lint the backend | `make lint` |
 | Install the frontend packages | `make frontend-install` |
-| Typecheck and build the frontend | `make frontend-check` |
+| Typecheck, lint, check the format of and build the frontend | `make frontend-check` |
 | Build one binary with the embedded frontend | `make build` (output: `bin/profit-tracker`) |
 | Start the backend for development | `make backend-dev` |
+| Start the binary with a new database of synthetic demo data | `make demo` (It needs network access for the prices. It prints the URL and the stop command. `DEMO_ADDR` sets the address, default `127.0.0.1:8099`.) |
 | Start the frontend for development | `make frontend-dev` (Vite sends `/api` to `PROFIT_TRACKER_ADDR`, default `127.0.0.1:8088`) |
 
 The binary reads the flags `-addr` and `-db`, or the variables `PROFIT_TRACKER_ADDR` and `PROFIT_TRACKER_DB`. The default database is `profit-tracker/profit-tracker.db` in the user configuration directory.
@@ -21,6 +22,15 @@ The binary reads the flags `-addr` and `-db`, or the variables `PROFIT_TRACKER_A
 
 - `backend/`: the Go module.
 - `frontend/`: the Vite + React + TypeScript + shadcn/ui application.
+- `scripts/`: the scripts of the Makefile, for example `demo.sh`.
+- `docs/adr/`: the decisions. `docs/design/v3/`: the mockups of v3. `docs/checklists/`: the manual test checklists.
+- `exports/`: the real XTB exports of the user. They hold personal data. Never commit them and never copy their content.
+
+## Frontend
+
+- Delegate frontend implementation work to the `frontend-developer` subagent.
+- When you write or review frontend code yourself, load the `frontend-standard` skill first.
+- After the subagent reports, check the changed pages in the browser yourself. The frontend has no automatic tests.
 
 ## Go backend
 

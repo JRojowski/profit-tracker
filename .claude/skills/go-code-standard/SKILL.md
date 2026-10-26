@@ -45,10 +45,11 @@ Add a new module only when the standard library cannot do the job in a few lines
 ```
 backend/
   cmd/profit-tracker/   main: config, wiring, start
+  cmd/demo-exports/     writes the synthetic exports for `make demo`
   internal/<package>/   one package per domain concept
 ```
 
-- Name packages after the domain concept, with the `GLOSSARY.md` term: `xtb`, `lot`, `ledger`, `importer`, `price`, `exchange`, `store`, `httpapi`.
+- Name packages after the domain concept, with the `GLOSSARY.md` term. The packages now are `xtb`, `lot`, `ledger`, `importer`, `price`, `exchange`, `returns`, `ikze`, `allaccounts`, `store`, `httpapi`, `web` and `demo`.
 - Give a package a name that tells what it holds. `util`, `common`, `models` and `helpers` tell nothing.
 - Use names that do not repeat the package: `ledger.Calculate`, `price.Provider`.
 - Keep the domain packages free of HTTP and SQL. `httpapi` and `store` are the adapters.
@@ -79,7 +80,8 @@ backend/
 
 ## Tests
 
-- Test external behaviour at the HTTP API seam (see the spec). Use `package httpapi_test`, a real SQLite file in `t.TempDir()`, a fake `price.Provider` and a fake `exchange.Provider`.
+- Test external behaviour at the HTTP API seam (see the spec). Use `package httpapi_test`, a real SQLite file in `t.TempDir()`, a fake `price.Provider`, a fake `exchange.Provider` and the fixed clock.
+- Build the xlsx fixtures in code with `xtbtest`. Never copy data from the files in `exports/`. They hold personal data.
 - Use `require` when the test cannot continue after a failure. Use `assert` for the checks after that.
 - Compare decimals with `assert.True(t, want.Equal(got), "want %s, got %s", want, got)`, or compare their `String()` values. `assert.Equal` on two `decimal.Decimal` values compares the internal form and can fail for equal numbers.
 - Write table tests as a slice of named cases with `t.Run(tc.name, ...)`.
