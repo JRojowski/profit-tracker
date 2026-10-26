@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store/queries"
 )
 
@@ -121,4 +122,41 @@ func (s *Store) LatestExchangeRates(ctx context.Context) (map[string]ExchangeRat
 		}
 	}
 	return rates, nil
+}
+
+// ExchangeRateSeries returns all stored rates of each currency in date order, by currency.
+func (s *Store) ExchangeRateSeries(ctx context.Context) (map[string][]ExchangeRate, error) {
+	rows, err := queries.New(s.db).ExchangeRates(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read exchange rates: %w", err)
+	}
+	series := map[string][]ExchangeRate{}
+	for _, row := range rows {
+		date, err := time.Parse(dateLayout, row.Date)
+		if err != nil {
+			return nil, fmt.Errorf("exchange rate of %s: parse date %q: %w", row.Currency, row.Date, err)
+		}
+		series[row.Currency] = append(series[row.Currency], ExchangeRate{
+			Currency: row.Currency, Date: date, Rate: row.Rate, TableNumber: row.TableNumber,
+		})
+	}
+	return series, nil
+}
+
+// EarliestFlowTimes returns the time of the earliest Net Deposits flow of the Accounts of each currency,
+// by currency. A currency with no flow is not in the map.
+func (s *Store) EarliestFlowTimes(ctx context.Context) (map[string]time.Time, error) {
+	rows, err := queries.New(s.db).EarliestFlowTimes(ctx, ledger.NetDepositsTypes())
+	if err != nil {
+		return nil, fmt.Errorf("read earliest net deposits flows: %w", err)
+	}
+	times := make(map[string]time.Time, len(rows))
+	for _, row := range rows {
+		t, err := time.Parse(timeLayout, row.FirstTime)
+		if err != nil {
+			return nil, fmt.Errorf("earliest net deposits flow of %s: parse time %q: %w", row.Currency, row.FirstTime, err)
+		}
+		times[row.Currency] = t.UTC()
+	}
+	return times, nil
 }

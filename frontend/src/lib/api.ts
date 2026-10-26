@@ -417,3 +417,54 @@ export async function fetchIkzeLimit(
   const response = await fetch(`/api/accounts/${id}/ikze-limit`, { signal })
   return readJSON<IkzeLimit>(response)
 }
+
+// AllAccountsAmounts are the values of one Account or of all Accounts in PLN, by ADR 0004.
+// An amount is null when the tool cannot convert it.
+export type AllAccountsAmounts = {
+  value: string | null
+  cash: string | null
+  netDeposits: string | null
+  totalResult: string | null
+  realizedProfit: string | null
+  unrealizedProfit: string | null
+  netDividends: string | null
+  netInterest: string | null
+  fees: string | null
+  // currencyResult is the part of the Total Result that comes from the change of the Exchange Rates.
+  currencyResult: string | null
+}
+
+// AllAccountsRow is one Account in PLN. When available is false, the amounts are null and note tells why.
+export type AllAccountsRow = AllAccountsAmounts & {
+  accountId: number
+  name: string
+  type: AccountType
+  currency: string
+  available: boolean
+  // exchangeRate is the latest Exchange Rate of the Account currency. It is null for an Account in PLN.
+  exchangeRate: string | null
+  unpricedHoldings: number
+  note: string | null
+}
+
+// AllAccountsSummary holds the totals of all Accounts in PLN. When available is false, the totals are null
+// and warnings tell why.
+export type AllAccountsSummary = AllAccountsAmounts & {
+  available: boolean
+  // stalePrices and staleRates have the meaning of the AccountSummary fields, over all Accounts.
+  stalePrices: boolean
+  staleRates: boolean
+  // priceDate and exchangeRateDate are YYYY-MM-DD, or null.
+  priceDate: string | null
+  exchangeRateDate: string | null
+  unpricedHoldings: number
+  warnings: string[]
+  accounts: AllAccountsRow[]
+}
+
+export async function fetchAllAccountsSummary(
+  signal?: AbortSignal
+): Promise<AllAccountsSummary> {
+  const response = await fetch("/api/all-accounts/summary", { signal })
+  return readJSON<AllAccountsSummary>(response)
+}

@@ -12,7 +12,9 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
-// newSeriesDays is the number of days before the refresh day where the series of a new currency starts.
+// newSeriesDays is the number of days before the first needed day where a series starts.
+// The first needed day is the day of the earliest Net Deposits flow of an Account in the currency.
+// For a currency that is only a Quote Currency, it is the day of the first refresh.
 // Thus the series has a table before the first day that a lookup asks for, also after a weekend or a holiday.
 const newSeriesDays = 7
 
@@ -67,6 +69,8 @@ type Latest struct {
 
 // Refresh gets the missing rates of each needed currency: the days from the last asked day to today.
 // The last asked day comes again, because the NBP publishes the table of a day at about 12:00 in Polish time.
+// When a new Import added an earlier Net Deposits flow, the first day of a series can be after the first day
+// that the tool needs. Then Refresh also gets the days from the needed first day to the stored first day.
 // A second refresh on the same day asks for nothing. A failure of one currency does not stop the others.
 // The result names each needed currency that has no stored rate after the refresh.
 // Refresh returns an error if it cannot read or store data, or if ctx ends. Then the result holds the rates
@@ -88,8 +92,10 @@ func (s *Service) Refresh(ctx context.Context) (Result, error) {
 	return s.refresh(ctx, needed, ranges)
 }
 
-// RefreshIfStale runs a refresh if the last fetch of a needed currency is before today, in Polish time,
-// or if the tool never asked for a needed currency. It tells if the refresh ran.
+// RefreshIfStale runs a refresh in these cases, and it tells if the refresh ran:
+//   - The last fetch of a needed currency is before today, in Polish time.
+//   - The tool never asked for a needed currency.
+//   - The first day of a series is after the first day that the tool needs.
 func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 	if err := s.acquire(ctx); err != nil {
 		return Result{}, false, err
@@ -105,9 +111,9 @@ func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 		return Result{}, false, err
 	}
 	today := StartOfDayInWarsaw(s.now())
-	stale := slices.ContainsFunc(needed, func(currency string) bool {
-		r, ok := ranges[currency]
-		return !ok || r.FetchedAt.Before(today)
+	stale := slices.ContainsFunc(needed, func(n neededCurrency) bool {
+		r, ok := ranges[n.currency]
+		return !ok || r.FetchedAt.Before(today) || n.hasFirstDay && n.firstDay.Before(r.FirstDay)
 	})
 	if !stale {
 		return Result{}, false, nil
@@ -154,40 +160,70 @@ func (s *Service) release() {
 }
 
 // refresh gets and stores the missing rates of each needed currency. It stops when ctx ends.
-func (s *Service) refresh(ctx context.Context, needed []string, ranges map[string]store.ExchangeRateRange) (Result, error) {
+func (s *Service) refresh(ctx context.Context, needed []neededCurrency, ranges map[string]store.ExchangeRateRange) (Result, error) {
 	var result Result
 	now := s.now()
 	today := DayInWarsaw(now)
-	for _, currency := range needed {
+	currencies := make([]string, 0, len(needed))
+	for _, n := range needed {
+		currencies = append(currencies, n.currency)
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("refresh exchange rates: %w", err)
 		}
-		from := today.AddDate(0, 0, -newSeriesDays)
-		if r, ok := ranges[currency]; ok {
-			if !r.LastDay.Before(today) {
-				continue
+		for _, asked := range missingDays(n, ranges, today, now) {
+			rates, err := s.provider.Rates(ctx, n.currency, asked.FirstDay, asked.LastDay)
+			if err != nil {
+				// A provider error that comes from the end of ctx is not a failure of the currency.
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return result, fmt.Errorf("refresh exchange rates: %w", ctxErr)
+				}
+				result.Failures = append(result.Failures, Failure{Currency: n.currency, Err: err})
+				break
 			}
-			from = r.LastDay
-		}
-		rates, err := s.provider.Rates(ctx, currency, from, today)
-		if err != nil {
-			// A provider error that comes from the end of ctx is not a failure of the currency.
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return result, fmt.Errorf("refresh exchange rates: %w", ctxErr)
+			if err := s.store.SaveExchangeRates(ctx, asked, toStored(n.currency, rates, now)); err != nil {
+				return result, err
 			}
-			result.Failures = append(result.Failures, Failure{Currency: currency, Err: err})
-			continue
+			result.Stored += len(rates)
 		}
-		asked := store.ExchangeRateRange{Currency: currency, FirstDay: from, LastDay: today, FetchedAt: now}
-		if err := s.store.SaveExchangeRates(ctx, asked, toStored(currency, rates, now)); err != nil {
-			return result, err
-		}
-		result.Stored += len(rates)
 	}
-	if err := s.addMissingRates(ctx, needed, &result); err != nil {
+	if err := s.addMissingRates(ctx, currencies, &result); err != nil {
 		return result, err
 	}
 	return result, nil
+}
+
+// missingDays returns the ranges of days that the series of the currency needs and that the tool did not ask for.
+//
+//   - A new series goes from the needed first day, or from 7 days before today, to today.
+//   - When the stored first day is after the needed first day, the tool asks for the days between them.
+//     This range keeps the time of the last fetch, because it does not make the end of the series current.
+//   - When the stored last day is before today, the tool asks again for the last day and the days after it.
+//
+// The range before the stored first day comes first. Thus the range to today sets the time of the last fetch.
+func missingDays(n neededCurrency, ranges map[string]store.ExchangeRateRange, today, now time.Time) []store.ExchangeRateRange {
+	firstDay := today.AddDate(0, 0, -newSeriesDays)
+	if n.hasFirstDay {
+		firstDay = n.firstDay
+	}
+	// The data can have a flow that is later than the clock of the tool, for example in a test.
+	// The tool does not ask for days after today.
+	if firstDay.After(today) {
+		firstDay = today
+	}
+	r, ok := ranges[n.currency]
+	if !ok {
+		return []store.ExchangeRateRange{{Currency: n.currency, FirstDay: firstDay, LastDay: today, FetchedAt: now}}
+	}
+	var missing []store.ExchangeRateRange
+	if n.hasFirstDay && firstDay.Before(r.FirstDay) {
+		missing = append(missing, store.ExchangeRateRange{
+			Currency: n.currency, FirstDay: firstDay, LastDay: r.FirstDay.AddDate(0, 0, -1), FetchedAt: r.FetchedAt,
+		})
+	}
+	if r.LastDay.Before(today) {
+		missing = append(missing, store.ExchangeRateRange{Currency: n.currency, FirstDay: r.LastDay, LastDay: today, FetchedAt: now})
+	}
+	return missing
 }
 
 // addMissingRates adds a failure for each needed currency that has no stored rate and no failure yet.
@@ -219,26 +255,48 @@ func toStored(currency string, rates []Rate, fetchedAt time.Time) []store.Exchan
 	return stored
 }
 
-// neededCurrencies returns the currencies that need a rate, in order: the Quote Currency that is not PLN of each
-// Instrument in a Holding, and the Account currency that is not PLN of each Account that holds an Instrument
-// quoted in PLN.
-func (s *Service) neededCurrencies(ctx context.Context) ([]string, error) {
+// neededCurrency is one currency that needs a rate, with the first day that its series needs.
+type neededCurrency struct {
+	currency string
+	// firstDay is 7 days before the day of the earliest Net Deposits flow of an Account in the currency,
+	// in Polish time at midnight UTC. hasFirstDay is false if no Account in the currency has a flow.
+	firstDay    time.Time
+	hasFirstDay bool
+}
+
+// neededCurrencies returns the currencies that need a rate, in currency order:
+//   - the Account currency that is not PLN of each Account, for the view of all Accounts (ADR 0004)
+//   - the Quote Currency that is not PLN of each Instrument in a Holding
+func (s *Service) neededCurrencies(ctx context.Context) ([]neededCurrency, error) {
+	accounts, err := s.store.Accounts(ctx)
+	if err != nil {
+		return nil, err
+	}
 	held, err := price.HeldInstruments(ctx, s.store)
 	if err != nil {
 		return nil, err
 	}
-	var needed []string
-	for _, h := range held {
-		if h.QuoteCurrency != ledger.PLN {
-			needed = append(needed, h.QuoteCurrency)
-			continue
-		}
-		for _, account := range h.AccountCurrencies {
-			if account != ledger.PLN {
-				needed = append(needed, account)
-			}
-		}
+	firstFlows, err := s.store.EarliestFlowTimes(ctx)
+	if err != nil {
+		return nil, err
 	}
-	slices.Sort(needed)
-	return slices.Compact(needed), nil
+	var currencies []string
+	for _, acc := range accounts {
+		currencies = append(currencies, acc.Currency)
+	}
+	for _, h := range held {
+		currencies = append(currencies, h.QuoteCurrency)
+	}
+	slices.Sort(currencies)
+	currencies = slices.DeleteFunc(slices.Compact(currencies), func(c string) bool { return c == ledger.PLN })
+
+	needed := make([]neededCurrency, 0, len(currencies))
+	for _, currency := range currencies {
+		n := neededCurrency{currency: currency}
+		if first, ok := firstFlows[currency]; ok {
+			n.firstDay, n.hasFirstDay = DayInWarsaw(first).AddDate(0, 0, -newSeriesDays), true
+		}
+		needed = append(needed, n)
+	}
+	return needed, nil
 }

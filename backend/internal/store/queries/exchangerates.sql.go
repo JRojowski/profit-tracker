@@ -7,9 +7,59 @@ package queries
 
 import (
 	"context"
+	"strings"
 
 	"github.com/shopspring/decimal"
 )
+
+const earliestFlowTimes = `-- name: EarliestFlowTimes :many
+SELECT a.currency, CAST(MIN(c.time) AS TEXT) AS first_time
+FROM cash_operations c
+JOIN accounts a ON a.id = c.account_id
+WHERE c.type IN (/*SLICE:types*/?)
+GROUP BY a.currency
+ORDER BY a.currency
+`
+
+type EarliestFlowTimesRow struct {
+	Currency  string
+	FirstTime string
+}
+
+// The time of the earliest Net Deposits flow of the Accounts of each currency, as RFC 3339 text in UTC.
+// The text has no fraction of a second, so the text order is the time order.
+func (q *Queries) EarliestFlowTimes(ctx context.Context, types []string) ([]EarliestFlowTimesRow, error) {
+	query := earliestFlowTimes
+	var queryParams []interface{}
+	if len(types) > 0 {
+		for _, v := range types {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:types*/?", strings.Repeat(",?", len(types))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:types*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EarliestFlowTimesRow
+	for rows.Next() {
+		var i EarliestFlowTimesRow
+		if err := rows.Scan(&i.Currency, &i.FirstTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const exchangeRateRanges = `-- name: ExchangeRateRanges :many
 SELECT currency, first_day, last_day, fetched_at
@@ -31,6 +81,47 @@ func (q *Queries) ExchangeRateRanges(ctx context.Context) ([]ExchangeRateRange, 
 			&i.FirstDay,
 			&i.LastDay,
 			&i.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exchangeRates = `-- name: ExchangeRates :many
+SELECT currency, date, rate, table_number
+FROM exchange_rates
+ORDER BY currency, date
+`
+
+type ExchangeRatesRow struct {
+	Currency    string
+	Date        string
+	Rate        decimal.Decimal
+	TableNumber string
+}
+
+func (q *Queries) ExchangeRates(ctx context.Context) ([]ExchangeRatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, exchangeRates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExchangeRatesRow
+	for rows.Next() {
+		var i ExchangeRatesRow
+		if err := rows.Scan(
+			&i.Currency,
+			&i.Date,
+			&i.Rate,
+			&i.TableNumber,
 		); err != nil {
 			return nil, err
 		}
@@ -132,7 +223,8 @@ type UpsertExchangeRateRangeParams struct {
 }
 
 // The new range is the union of the stored range and the asked days. The asked days always touch
-// the stored range, because a refresh asks from the stored last day to today.
+// the stored range: a refresh asks from the stored last day to today, or from an earlier start
+// to the day before the stored first day.
 func (q *Queries) UpsertExchangeRateRange(ctx context.Context, arg UpsertExchangeRateRangeParams) error {
 	_, err := q.db.ExecContext(ctx, upsertExchangeRateRange,
 		arg.Currency,

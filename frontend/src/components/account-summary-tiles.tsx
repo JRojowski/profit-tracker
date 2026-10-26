@@ -13,9 +13,10 @@ type AccountSummaryTilesProps = {
   summary: AccountSummary
 }
 
-type Tile = {
+export type Tile = {
   label: string
-  amount: string
+  // amount is null when the tool cannot calculate it. The tile then shows "—".
+  amount: string | null
   // note is a short text under the amount, or undefined.
   note?: string
 }
@@ -26,7 +27,7 @@ export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
     { label: "Value", amount: summary.value, note: unpriced },
     { label: "Cash", amount: summary.cash },
     { label: "Net Deposits", amount: summary.netDeposits },
-    { label: "Total result", amount: summary.totalResult, note: unpriced },
+    { label: "Total Result", amount: summary.totalResult, note: unpriced },
   ]
   const resultParts: Tile[] = [
     { label: "Realized Profit", amount: summary.realizedProfit },
@@ -78,13 +79,17 @@ type SummaryTileProps = {
   titleClassName: string
 }
 
-function SummaryTile({ tile, currency, titleClassName }: SummaryTileProps) {
+export function SummaryTile({
+  tile,
+  currency,
+  titleClassName,
+}: SummaryTileProps) {
   return (
     <Card>
       <CardHeader>
         <CardDescription>{tile.label}</CardDescription>
         <CardTitle className={cn("tabular-nums", titleClassName)}>
-          {formatAmount(tile.amount, currency)}
+          {tile.amount === null ? "—" : formatAmount(tile.amount, currency)}
         </CardTitle>
         {tile.note && <CardDescription>{tile.note}</CardDescription>}
       </CardHeader>
@@ -93,7 +98,7 @@ function SummaryTile({ tile, currency, titleClassName }: SummaryTileProps) {
 }
 
 // unpricedNote tells that the amount leaves out the Holdings with no value.
-function unpricedNote(count: number): string | undefined {
+export function unpricedNote(count: number): string | undefined {
   if (count === 0) return undefined
   return count === 1
     ? "Without 1 Holding that has no value."

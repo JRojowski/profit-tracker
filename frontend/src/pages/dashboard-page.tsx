@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { AccountSummaryTiles } from "@/components/account-summary-tiles"
+import { AllAccountsSummaryView } from "@/components/all-accounts-summary"
 import { HoldingsTable } from "@/components/holdings-table"
 import { IkzeLimitCard } from "@/components/ikze-limit-card"
 import { PriceStatus } from "@/components/price-status"
@@ -13,6 +14,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -21,11 +23,13 @@ import {
   errorMessage,
   fetchAccounts,
   fetchAccountSummary,
+  fetchAllAccountsSummary,
   fetchHoldings,
   fetchSales,
   refreshPrices,
   type Account,
   type AccountSummary,
+  type AllAccountsSummary,
   type Holding,
   type PriceRefresh,
   type Sale,
@@ -39,16 +43,30 @@ type AccountState = {
   sales: Sale[]
 }
 
-// ValuesError holds the error of the last failed load of Account values.
+// allAccounts is the value of the "All Accounts" item in the Account selector.
+const allAccounts = "all"
+
+// Selection is the id of the selected Account, or allAccounts for the view of all Accounts.
+type Selection = number | typeof allAccounts
+
+// AllAccountsState holds the values of the view of all Accounts.
+type AllAccountsState = {
+  accountId: typeof allAccounts
+  summary: AllAccountsSummary
+}
+
+// ValuesError holds the error of the last failed load of the values of a selection.
 type ValuesError = {
-  accountId: number
+  accountId: Selection
   message: string
 }
 
 export function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[] | null>(null)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [state, setState] = useState<AccountState | null>(null)
+  const [selectedId, setSelectedId] = useState<Selection | null>(null)
+  const [state, setState] = useState<AccountState | AllAccountsState | null>(
+    null
+  )
   const [renaming, setRenaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [valuesError, setValuesError] = useState<ValuesError | null>(null)
@@ -66,7 +84,8 @@ export function DashboardPage() {
     fetchAccounts(controller.signal)
       .then((list) => {
         setAccounts(list)
-        setSelectedId(list[0]?.id ?? null)
+        // The tool opens the view of all Accounts at start.
+        setSelectedId(list.length > 0 ? allAccounts : null)
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return
@@ -78,6 +97,18 @@ export function DashboardPage() {
   useEffect(() => {
     if (selectedId === null) return
     const controller = new AbortController()
+    if (selectedId === allAccounts) {
+      fetchAllAccountsSummary(controller.signal)
+        .then((summary) => {
+          setState({ accountId: allAccounts, summary })
+          setValuesError(null)
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return
+          setValuesError({ accountId: allAccounts, message: errorMessage(err) })
+        })
+      return () => controller.abort()
+    }
     Promise.all([
       fetchAccountSummary(selectedId, controller.signal),
       fetchHoldings(selectedId, controller.signal),
@@ -143,6 +174,16 @@ export function DashboardPage() {
   }
 
   const selected = accounts.find((account) => account.id === selectedId)
+  const priceStatus = (summary: AccountSummary | AllAccountsSummary) => (
+    <PriceStatus
+      summary={summary}
+      refreshing={refreshing}
+      refresh={refresh}
+      refreshedAt={refreshedAt}
+      refreshError={refreshError}
+      onRefresh={handleRefreshPrices}
+    />
+  )
   // Show the values only when they belong to the selected Account.
   const current = state?.accountId === selectedId ? state : null
   const currentError =
@@ -161,12 +202,16 @@ export function DashboardPage() {
         <div className="flex items-center gap-2">
           <Select
             value={selectedId === null ? undefined : String(selectedId)}
-            onValueChange={(value) => setSelectedId(Number(value))}
+            onValueChange={(value) =>
+              setSelectedId(value === allAccounts ? allAccounts : Number(value))
+            }
           >
             <SelectTrigger className="w-64" aria-label="Account">
               <SelectValue placeholder="Select an Account" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={allAccounts}>All Accounts</SelectItem>
+              <SelectSeparator />
               {accounts.map((account) => (
                 <SelectItem key={account.id} value={String(account.id)}>
                   {account.name} ({account.currency})
@@ -174,9 +219,11 @@ export function DashboardPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => setRenaming(true)}>
-            Rename
-          </Button>
+          {selected && (
+            <Button variant="outline" onClick={() => setRenaming(true)}>
+              Rename
+            </Button>
+          )}
         </div>
       )}
 
@@ -185,16 +232,14 @@ export function DashboardPage() {
           <AlertTitle>Cannot load the Account values</AlertTitle>
           <AlertDescription>{currentError}</AlertDescription>
         </Alert>
+      ) : current?.accountId === allAccounts ? (
+        <>
+          {priceStatus(current.summary)}
+          <AllAccountsSummaryView summary={current.summary} />
+        </>
       ) : current ? (
         <>
-          <PriceStatus
-            summary={current.summary}
-            refreshing={refreshing}
-            refresh={refresh}
-            refreshedAt={refreshedAt}
-            refreshError={refreshError}
-            onRefresh={handleRefreshPrices}
-          />
+          {priceStatus(current.summary)}
           <AccountSummaryTiles summary={current.summary} />
           {selected?.type === "IKZE" && (
             <IkzeLimitCard accountId={current.accountId} />

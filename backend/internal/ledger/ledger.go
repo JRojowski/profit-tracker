@@ -152,6 +152,8 @@ type State struct {
 	Cash decimal.Decimal
 	// NetDeposits is the money that the user put into the Account. See GLOSSARY.md, "Net Deposits".
 	NetDeposits decimal.Decimal
+	// Flows are the Net Deposits flows in the order of the Ledger. Their sum is NetDeposits.
+	Flows []returns.Flow
 	// Holdings has one Holding per Instrument with an open volume, in ticker order.
 	Holdings []Holding
 	// Sales are the Stock sell operations with their Realized Profit, in time order and then in XTB ID order.
@@ -275,6 +277,7 @@ func Calculate(l Ledger) (State, error) {
 		s.Value = s.Value.Add(h.Value)
 	}
 	s.TotalResult = s.RealizedProfit.Add(s.UnrealizedProfit).Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
+	s.Flows = flows(l.CashOperations)
 	s.SimpleReturn = returns.Simple(s.TotalResult, s.NetDeposits)
 	s.AnnualReturn = s.annualReturn(l)
 	return s, nil
@@ -283,7 +286,7 @@ func Calculate(l Ledger) (State, error) {
 // annualReturn returns the Annual Return of the state, or the reason why it is not available.
 // A short history comes before a Holding with no value, because a price refresh does not change it.
 func (s *State) annualReturn(l Ledger) returns.Rate {
-	rate := returns.Annual(flows(l.CashOperations), s.Value, l.Today)
+	rate := returns.Annual(s.Flows, s.Value, l.Today)
 	if rate.Reason == returns.ReasonNoFlows || rate.Reason == returns.ReasonShortHistory {
 		return rate
 	}
@@ -319,16 +322,24 @@ func (s *State) add(op CashOperation) {
 	}
 }
 
+// netDepositsTypes are the Cash Operation types of the Net Deposits flows:
+// a Deposit, a Withdrawal and a Transfer (ADR 0003).
+var netDepositsTypes = []string{TypeDeposit, TypeWithdrawal, TypeTransfer}
+
+// NetDepositsTypes returns a copy of the Cash Operation types of the Net Deposits flows:
+// a Deposit, a Withdrawal and a Transfer (ADR 0003).
+func NetDepositsTypes() []string {
+	return slices.Clone(netDepositsTypes)
+}
+
 // netDeposit returns the part of op that counts in the Net Deposits.
 // A Withdrawal and a Transfer Out have a negative amount in the export, so they decrease the Net Deposits.
 // ADR 0003: a Transfer In counts as a deposit and a Transfer Out counts as a withdrawal.
 func netDeposit(op CashOperation) decimal.Decimal {
-	switch op.Type {
-	case TypeDeposit, TypeWithdrawal, TypeTransfer:
+	if slices.Contains(netDepositsTypes, op.Type) {
 		return op.Amount
-	default:
-		return decimal.Zero
 	}
+	return decimal.Zero
 }
 
 // lotState is one Lot with the volume and the cost that its sales closed.

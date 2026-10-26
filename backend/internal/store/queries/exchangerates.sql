@@ -6,7 +6,8 @@ SET rate = excluded.rate, table_number = excluded.table_number, fetched_at = exc
 
 -- name: UpsertExchangeRateRange :exec
 -- The new range is the union of the stored range and the asked days. The asked days always touch
--- the stored range, because a refresh asks from the stored last day to today.
+-- the stored range: a refresh asks from the stored last day to today, or from an earlier start
+-- to the day before the stored first day.
 INSERT INTO exchange_rate_ranges (currency, first_day, last_day, fetched_at)
 VALUES (sqlc.arg(currency), sqlc.arg(first_day), sqlc.arg(last_day), sqlc.arg(fetched_at))
 ON CONFLICT (currency) DO UPDATE
@@ -24,3 +25,18 @@ SELECT r.currency, r.date, r.rate, r.table_number, r.fetched_at
 FROM exchange_rates r
 WHERE r.date = (SELECT MAX(last.date) FROM exchange_rates last WHERE last.currency = r.currency)
 ORDER BY r.currency;
+
+-- name: ExchangeRates :many
+SELECT currency, date, rate, table_number
+FROM exchange_rates
+ORDER BY currency, date;
+
+-- name: EarliestFlowTimes :many
+-- The time of the earliest Net Deposits flow of the Accounts of each currency, as RFC 3339 text in UTC.
+-- The text has no fraction of a second, so the text order is the time order.
+SELECT a.currency, CAST(MIN(c.time) AS TEXT) AS first_time
+FROM cash_operations c
+JOIN accounts a ON a.id = c.account_id
+WHERE c.type IN (sqlc.slice(types))
+GROUP BY a.currency
+ORDER BY a.currency;

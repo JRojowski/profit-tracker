@@ -2,11 +2,19 @@ import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import type { AccountSummary, PriceRefresh } from "@/lib/api"
+import type { PriceRefresh } from "@/lib/api"
 import { formatDate, formatTime } from "@/lib/format"
 
+// PriceDates tells how current the prices and the Exchange Rates of a view are.
+export type PriceDates = {
+  priceDate: string | null
+  exchangeRateDate: string | null
+  stalePrices: boolean
+  staleRates: boolean
+}
+
 type PriceStatusProps = {
-  summary: AccountSummary
+  summary: PriceDates
   refreshing: boolean
   // refresh is the result of the last price refresh, or null before the first refresh.
   refresh: PriceRefresh | null
@@ -92,7 +100,7 @@ export function PriceStatus({
           <AlertDescription>
             {summary.exchangeRateDate
               ? "The tool did not get the Exchange Rates today. The values use the last stored Exchange Rates."
-              : "A Holding needs an Exchange Rate that the tool does not have. Refresh the prices."}
+              : "The tool has no Exchange Rate that the values need. Refresh the prices."}
           </AlertDescription>
         </Alert>
       )}

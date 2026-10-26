@@ -87,7 +87,8 @@ func TestRefreshPrices_PLNHoldingOnUSDAccount_ValueDividedByExchangeRate(t *test
 		Cash: "80.00", Value: "111.25", UnrealizedProfit: "11.25", TotalResult: "11.25",
 		PriceDate: ptr("2026-10-22"), ExchangeRateDate: ptr("2026-10-22"), UnpricedHoldings: 0,
 	}, srv.summaryPrices(t, id))
-	assert.Equal(t, []rateRequest{{Currency: "USD", From: "2026-10-16", To: "2026-10-23"}}, srv.rateProvider.requestedRanges(),
+	// The Deposit has the default time 2026-01-02, so the series of the Account currency starts 7 days before it.
+	assert.Equal(t, []rateRequest{{Currency: "USD", From: "2025-12-26", To: "2026-10-23"}}, srv.rateProvider.requestedRanges(),
 		"the USD Account holds an Instrument quoted in PLN, so the tool needs the USD rate")
 }
 
