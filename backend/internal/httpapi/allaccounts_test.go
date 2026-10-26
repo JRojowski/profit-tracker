@@ -65,6 +65,8 @@ type allAccountsRowDTO struct {
 	plnAmounts
 	UnpricedHoldings int     `json:"unpricedHoldings"`
 	Note             *string `json:"note"`
+	AnnualReturn     *string `json:"annualReturn"`
+	AnnualReturnNote *string `json:"annualReturnNote"`
 }
 
 // allAccounts returns the All Accounts summary. It stops the test if the status is not 200.
@@ -127,7 +129,7 @@ func TestAllAccounts_ADR0004Example(t *testing.T) {
 		allReturns: allReturns{SimpleReturn: ptr("-1"), AnnualReturnNote: ptr("The first deposit is less than one year old.")},
 		Accounts: []allAccountsRowDTO{{
 			AccountID: id, Name: "XTB USD", Type: "regular", Currency: "USD", Available: true,
-			ExchangeRate: ptr("3.6"), plnAmounts: want,
+			ExchangeRate: ptr("3.6"), plnAmounts: want, AnnualReturnNote: ptr("The first deposit is less than one year old."),
 		}},
 	}, got)
 	assert.Equal(t, []rateRequest{{Currency: "USD", From: "2026-09-28", To: "2026-10-23"}}, srv.rateProvider.requestedRanges(),
@@ -162,12 +164,13 @@ func TestAllAccounts_TransfersBetweenPLNAccounts_CancelInTheNetDeposits(t *testi
 
 	zero := cashAmounts("0.00", "0.00", "0.00", "0.00", "0.00")
 	ikze := cashAmounts("10000.00", "10000.00", "0.00", "0.00", "0.00")
+	young := ptr("The first deposit is less than one year old.")
 	assert.Equal(t, allAccountsResponse{
 		Available: true, plnAmounts: ikze, Warnings: []string{},
-		allReturns: allReturns{SimpleReturn: ptr("0"), AnnualReturnNote: ptr("The first deposit is less than one year old.")},
+		allReturns: allReturns{SimpleReturn: ptr("0"), AnnualReturnNote: young},
 		Accounts: []allAccountsRowDTO{
-			{AccountID: ikzeID, Name: "XTB IKZE", Type: "IKZE", Currency: "PLN", Available: true, plnAmounts: ikze},
-			{AccountID: plnID, Name: "XTB PLN", Type: "regular", Currency: "PLN", Available: true, plnAmounts: zero},
+			{AccountID: ikzeID, Name: "XTB IKZE", Type: "IKZE", Currency: "PLN", Available: true, plnAmounts: ikze, AnnualReturnNote: young},
+			{AccountID: plnID, Name: "XTB PLN", Type: "regular", Currency: "PLN", Available: true, plnAmounts: zero, AnnualReturnNote: young},
 		},
 	}, got)
 	assert.Empty(t, srv.rateProvider.requestedRanges(), "PLN Accounts need no Exchange Rate")
@@ -197,8 +200,14 @@ func TestAllAccounts_EarlierFlowAfterRefresh_RateMissingUntilTheSeriesExtends(t 
 	assert.Equal(t, allAccountsResponse{
 		Available: false, ExchangeRateDate: ptr("2026-10-22"), Warnings: []string{note}, allReturns: missingRateReturns(),
 		Accounts: []allAccountsRowDTO{
-			{AccountID: plnID, Name: "XTB PLN", Type: "regular", Currency: "PLN", Available: true, plnAmounts: pln},
-			{AccountID: usdID, Name: "XTB USD", Type: "regular", Currency: "USD", Available: false, ExchangeRate: ptr("3.6"), Note: &note},
+			{
+				AccountID: plnID, Name: "XTB PLN", Type: "regular", Currency: "PLN", Available: true, plnAmounts: pln,
+				AnnualReturnNote: ptr("The first deposit is less than one year old."),
+			},
+			{
+				AccountID: usdID, Name: "XTB USD", Type: "regular", Currency: "USD", Available: false, ExchangeRate: ptr("3.6"), Note: &note,
+				AnnualReturnNote: missingRateReturns().AnnualReturnNote,
+			},
 		},
 	}, got)
 
@@ -235,6 +244,8 @@ func TestAllAccounts_NoLatestRate_RowNotAvailable(t *testing.T) {
 	assert.False(t, got.Accounts[0].Available)
 	assert.Nil(t, got.Accounts[0].ExchangeRate)
 	assert.Equal(t, &note, got.Accounts[0].Note)
+	assert.Nil(t, got.Accounts[0].AnnualReturn)
+	assert.Equal(t, ptr("An Exchange Rate is missing. Refresh the prices."), got.Accounts[0].AnnualReturnNote)
 }
 
 // TestAllAccounts_RateOfAccountCurrencyFetchedBeforeToday_StaleRates checks the stale-rate flag for the rate of
@@ -386,4 +397,52 @@ func TestAllAccounts_NegativeValue_NoYearlyRate(t *testing.T) {
 	assertPercent(t, "-110", got.SimpleReturn)
 	assert.Nil(t, got.AnnualReturn)
 	assert.Equal(t, ptr("No yearly rate gives the current value."), got.AnnualReturnNote)
+}
+
+// TestAllAccounts_RowAnnualReturn_UsesTheFlowsInPLN checks ADR 0004, rule 7, for the row of a USD Account.
+// The Account summary gives the Annual Return in USD. The row gives the Annual Return in PLN.
+//
+//	In USD: 10000 × (1 + r) = 11000 after 365 days, so r = +10 %
+//	In PLN: 10000 × 4.00 = 40000 grows to 11000 × 3.60 = 39600 after 365 days, so r = −1 %
+func TestAllAccounts_RowAnnualReturn_UsesTheFlowsInPLN(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	srv.rateProvider.set(t, "USD", "2025-10-23", "4.00")
+	srv.rateProvider.set(t, "USD", "2026-10-22", "3.60")
+	id := srv.importAccount(t, xtbtest.Export{AccountNumber: "58000008", Currency: "USD", CashOperations: []xtbtest.CashOperation{
+		{Type: "Free funds interest", Time: daysBeforeToday(300), Amount: "1000.00", ID: "9062", Comment: "Free-funds Interest"},
+		cashDeposit("9061", "10000.00", daysBeforeToday(365)),
+	}}, "XTB USD")
+	srv.refreshPrices(t)
+
+	got := srv.allAccounts(t)
+
+	assertPercent(t, "10", srv.summaryReturns(t, id).AnnualReturn)
+	require.Len(t, got.Accounts, 1)
+	assertPercent(t, "-1", got.Accounts[0].AnnualReturn)
+	assert.Nil(t, got.Accounts[0].AnnualReturnNote)
+}
+
+// TestAllAccounts_PLNRowAnnualReturn_EqualsTheAccountSummary checks that the tool does not convert a PLN row
+// (ADR 0004, rule 1). A PLN Account and a USD Account give two rows.
+//
+//	PLN row: 1000 × (1 + r) = 1100 after 365 days, so r = +10 %
+func TestAllAccounts_PLNRowAnnualReturn_EqualsTheAccountSummary(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	srv.rateProvider.set(t, "USD", "2026-10-05", "4.00")
+	srv.rateProvider.set(t, "USD", "2026-10-22", "3.60")
+	plnID := srv.importAccount(t, xtbtest.Export{AccountNumber: "58000009", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		{Type: "Free funds interest", Time: daysBeforeToday(300), Amount: "100.00", ID: "9072", Comment: "Free-funds Interest"},
+		cashDeposit("9071", "1000.00", daysBeforeToday(365)),
+	}}, "XTB PLN")
+	srv.importAccount(t, adr0004Export(), "XTB USD")
+	srv.refreshPrices(t)
+
+	got := srv.allAccounts(t)
+
+	require.Len(t, got.Accounts, 2)
+	assertPercent(t, "10", got.Accounts[0].AnnualReturn)
+	assert.Equal(t, srv.summaryReturns(t, plnID).AnnualReturn, got.Accounts[0].AnnualReturn)
+	assert.Nil(t, got.Accounts[0].AnnualReturnNote)
 }

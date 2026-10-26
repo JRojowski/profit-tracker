@@ -69,6 +69,10 @@ type allAccountsRowResponse struct {
 	plnAmountsResponse
 	UnpricedHoldings int     `json:"unpricedHoldings"`
 	Note             *string `json:"note"`
+	// AnnualReturn has the format of the Account summary. It uses the Net Deposits flows of the Account in PLN
+	// (ADR 0004, rule 7). AnnualReturnNote tells why it is nil.
+	AnnualReturn     *string `json:"annualReturn"`
+	AnnualReturnNote *string `json:"annualReturnNote"`
 }
 
 // allAccountsSummary returns all Accounts together in PLN, with one row per Account.
@@ -137,6 +141,7 @@ func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 		dto := allAccountsRowResponse{
 			AccountID: v.account.ID, Name: v.account.Name, Type: v.account.Type, Currency: v.account.Currency,
 			Available: row.Available, UnpricedHoldings: v.unpricedHoldings(),
+			AnnualReturn: percent(row.AnnualReturn), AnnualReturnNote: returnNote(row.AnnualReturn),
 		}
 		if row.HasExchangeRate {
 			dto.ExchangeRate = new(row.ExchangeRate.String())

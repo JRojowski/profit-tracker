@@ -17,13 +17,7 @@ export function formatAmount(
   const value = Number(amount)
   const signDisplay = signed ? "exceptZero" : "auto"
   if (!/^[A-Z]{3}$/.test(currency)) {
-    return withMinusSign(
-      new Intl.NumberFormat(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-        signDisplay,
-      }).format(value)
-    )
+    return formatNumber(amount, { signed })
   }
   return withMinusSign(
     new Intl.NumberFormat(undefined, {
@@ -32,6 +26,31 @@ export function formatAmount(
       signDisplay,
     }).format(value)
   )
+}
+
+// formatNumber shows a decimal amount with 2 decimal places and no currency, for example a label on a chart.
+// The conversion to a float is for display only. A value below zero always shows "−" (U+2212).
+export function formatNumber(
+  amount: string,
+  { signed = false }: FormatOptions = {}
+): string {
+  return withMinusSign(
+    new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      signDisplay: signed ? "exceptZero" : "auto",
+    }).format(Number(amount))
+  )
+}
+
+// Sign tells if a decimal amount is below zero, zero or above zero.
+export type Sign = "negative" | "zero" | "positive"
+
+// amountSign reads the sign of a decimal amount from its text, with no conversion to a float.
+export function amountSign(amount: string): Sign {
+  const text = amount.trim()
+  if (/^[-+]?0*\.?0*$/.test(text)) return "zero"
+  return text.startsWith("-") ? "negative" : "positive"
 }
 
 // formatVolume shows a decimal volume with all its digits.

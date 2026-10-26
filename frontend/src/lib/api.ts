@@ -435,7 +435,11 @@ export type AllAccountsAmounts = {
 }
 
 // AllAccountsRow is one Account in PLN. When available is false, the amounts are null and note tells why.
+// The Annual Return uses the Net Deposits flows of the Account in PLN, by ADR 0004. It is null when the tool
+// cannot calculate it. Then annualReturnNote tells the user why.
 export type AllAccountsRow = AllAccountsAmounts & {
+  annualReturn: string | null
+  annualReturnNote: string | null
   accountId: number
   name: string
   type: AccountType

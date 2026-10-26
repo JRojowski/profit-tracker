@@ -64,6 +64,10 @@ type Row struct {
 	Flows []returns.Flow
 	// AllHoldingsHaveValue tells if each Holding of the Account has a value. See ledger.State.AllHoldingsHaveValue.
 	AllHoldingsHaveValue bool
+	// AnnualReturn is the yearly rate that makes Flows grow to Amounts.Value today. ADR 0004, rule 7.
+	// For a PLN row, it is equal to the Annual Return of the Account. If the row is not available,
+	// the reason is returns.ReasonMissingExchangeRate.
+	AnnualReturn returns.Rate
 }
 
 // Result is the view of all Accounts.
@@ -97,11 +101,14 @@ func Calculate(accounts []Account, rates Rates, today time.Time) Result {
 	result := Result{Available: true, Rows: make([]Row, 0, len(accounts))}
 	for _, acc := range accounts {
 		row := convert(acc, rates)
-		result.Rows = append(result.Rows, row)
 		if !row.Available {
+			row.AnnualReturn = returns.Rate{Reason: returns.ReasonMissingExchangeRate}
+			result.Rows = append(result.Rows, row)
 			result.Available = false
 			continue
 		}
+		row.AnnualReturn = returns.Annual(row.Flows, row.Amounts.Value, row.AllHoldingsHaveValue, today)
+		result.Rows = append(result.Rows, row)
 		result.Totals = result.Totals.add(row.Amounts)
 	}
 	if !result.Available {
