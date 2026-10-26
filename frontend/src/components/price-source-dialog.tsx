@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react"
+import { useState, type FormEvent, type ReactNode } from "react"
 import { PencilIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -33,23 +33,32 @@ type PriceSourceDialogProps = {
   onChanged: () => void
 }
 
+type PriceSourceDialogTriggerProps = PriceSourceDialogProps & {
+  // trigger is the element that opens the dialog. It must accept a ref and a click handler, for example a button.
+  // Without it, a small edit button opens the dialog.
+  trigger?: ReactNode
+}
+
 // PriceSourceDialog lets the user set the price ticker and the quote currency of the Instrument of a Holding.
 export function PriceSourceDialog({
   holding,
   onChanged,
-}: PriceSourceDialogProps) {
+  trigger,
+}: PriceSourceDialogTriggerProps) {
   const [open, setOpen] = useState(false)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={`Edit the price source of ${holding.ticker}`}
-        >
-          <PencilIcon data-icon="inline-start" />
-        </Button>
+        {trigger ?? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Edit the price source of ${holding.ticker}`}
+          >
+            <PencilIcon data-icon="inline-start" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

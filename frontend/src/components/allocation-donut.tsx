@@ -20,16 +20,16 @@ import type { Allocation, AllocationPart } from "@/lib/api"
 import { formatAmount, formatPercent } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-// chartConfig gives each part its colour: the Holdings in order of value, then the cash and "Other".
+// chartConfig gives each part its colour: the parts in order of value, then the cash and "Other".
 const chartConfig = {
-  holding1: { label: "Holding 1", color: "var(--chart-1)" },
-  holding2: { label: "Holding 2", color: "var(--chart-2)" },
-  holding3: { label: "Holding 3", color: "var(--chart-3)" },
-  holding4: { label: "Holding 4", color: "var(--chart-4)" },
-  holding5: { label: "Holding 5", color: "var(--chart-5)" },
-  holding6: { label: "Holding 6", color: "var(--chart-6)" },
-  holding7: { label: "Holding 7", color: "var(--chart-7)" },
-  holding8: { label: "Holding 8", color: "var(--chart-8)" },
+  part1: { label: "Part 1", color: "var(--chart-1)" },
+  part2: { label: "Part 2", color: "var(--chart-2)" },
+  part3: { label: "Part 3", color: "var(--chart-3)" },
+  part4: { label: "Part 4", color: "var(--chart-4)" },
+  part5: { label: "Part 5", color: "var(--chart-5)" },
+  part6: { label: "Part 6", color: "var(--chart-6)" },
+  part7: { label: "Part 7", color: "var(--chart-7)" },
+  part8: { label: "Part 8", color: "var(--chart-8)" },
   cash: { label: "Cash", color: "var(--chart-cash)" },
   other: { label: "Other", color: "var(--chart-other)" },
 } satisfies ChartConfig
@@ -45,9 +45,14 @@ type DonutPart = {
   size: number
   share: string
   value: string
+  // detail is a short text after the name, for example "with cash". It is undefined for most parts.
+  detail?: string
   // others are the Holdings in "Other". They are empty for the other parts.
   others: AllocationPart[]
 }
+
+// AllocationView selects the parts of a chart: the Instruments with the cash and "Other", or the Quote Currencies.
+export type AllocationView = "instrument" | "quoteCurrency"
 
 type AllocationDonutProps = {
   allocation: Loaded<Allocation>
@@ -63,14 +68,20 @@ export function AllocationDonut({ allocation }: AllocationDonutProps) {
     >
       <FigureLabel>Allocation</FigureLabel>
       <LoadedView loaded={allocation} errorTitle="Cannot load the Allocation">
-        {(data) => <AllocationContent allocation={data} />}
+        {(data) => <AllocationChart allocation={data} view="instrument" />}
       </LoadedView>
     </section>
   )
 }
 
-// AllocationContent shows the chart and the legend, or a note when there is nothing to show.
-function AllocationContent({ allocation }: { allocation: Allocation }) {
+type AllocationChartProps = {
+  allocation: Allocation
+  view: AllocationView
+}
+
+// AllocationChart shows a donut chart of the Allocation and its legend, or a note when there is nothing to show.
+// The legend is the text alternative of the chart. It shows the name, the share and the value of each part.
+export function AllocationChart({ allocation, view }: AllocationChartProps) {
   if (!allocation.available) {
     return (
       <Alert>
@@ -89,7 +100,10 @@ function AllocationContent({ allocation }: { allocation: Allocation }) {
     )
   }
 
-  const parts = donutParts(allocation)
+  const parts =
+    view === "instrument"
+      ? instrumentParts(allocation)
+      : quoteCurrencyParts(allocation)
   const unpriced = unpricedAllocationNote(allocation.unpricedHoldings)
   if (parts.length === 0) {
     return (
@@ -227,8 +241,15 @@ function Legend({ parts, currency }: LegendProps) {
 function PartName({ part }: { part: DonutPart }) {
   if (part.others.length === 0) {
     return (
-      <span className="truncate" title={part.name}>
-        {part.name}
+      <span className="flex min-w-0 items-baseline gap-1.5">
+        <span className="truncate" title={part.name}>
+          {part.name}
+        </span>
+        {part.detail && (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {part.detail}
+          </span>
+        )}
       </span>
     )
   }
@@ -256,14 +277,14 @@ function PartName({ part }: { part: DonutPart }) {
 
 // swatchClass holds the literal background class of each colour key, so that Tailwind finds them.
 const swatchClass: Record<ColourKey, string> = {
-  holding1: "bg-chart-1",
-  holding2: "bg-chart-2",
-  holding3: "bg-chart-3",
-  holding4: "bg-chart-4",
-  holding5: "bg-chart-5",
-  holding6: "bg-chart-6",
-  holding7: "bg-chart-7",
-  holding8: "bg-chart-8",
+  part1: "bg-chart-1",
+  part2: "bg-chart-2",
+  part3: "bg-chart-3",
+  part4: "bg-chart-4",
+  part5: "bg-chart-5",
+  part6: "bg-chart-6",
+  part7: "bg-chart-7",
+  part8: "bg-chart-8",
   cash: "bg-chart-cash",
   other: "bg-chart-other",
 }
@@ -277,11 +298,11 @@ function Note({ children }: { children: ReactNode }) {
   )
 }
 
-// donutParts builds the parts in the order of the chart: the Holdings, the cash and "Other".
-function donutParts(allocation: Allocation): DonutPart[] {
+// instrumentParts builds the parts of the Allocation by Instrument, in the order of the chart: the Holdings, the cash and "Other".
+function instrumentParts(allocation: Allocation): DonutPart[] {
   const { holdings, cash, other } = allocation.byInstrument
   const parts = holdings.map((holding, index) =>
-    donutPart(holding.ticker, `holding${index + 1}` as ColourKey, holding)
+    donutPart(holding.ticker, partColour(index), holding)
   )
   if (cash) parts.push(donutPart("cash", "cash", { ...cash, name: "Cash" }))
   if (other) {
@@ -290,6 +311,27 @@ function donutParts(allocation: Allocation): DonutPart[] {
     )
   }
   return parts
+}
+
+// quoteCurrencyParts builds the parts of the Allocation by Quote Currency, largest value first.
+// The cash counts in the Account currency, so that part tells "with cash".
+function quoteCurrencyParts(allocation: Allocation): DonutPart[] {
+  const hasCash = allocation.byInstrument.cash !== null
+  return allocation.byQuoteCurrency.map((part, index) => ({
+    ...donutPart(part.currency, partColour(index), {
+      ...part,
+      name: part.currency,
+    }),
+    detail:
+      hasCash && part.currency === allocation.currency
+        ? "with cash"
+        : undefined,
+  }))
+}
+
+// partColour gives the colour of the part at an index in the order of value. After 8 parts, the colours repeat.
+function partColour(index: number): ColourKey {
+  return `part${(index % 8) + 1}` as ColourKey
 }
 
 // donutPart builds one part of the chart. The size is the share as a float, for the geometry of the ring only.
