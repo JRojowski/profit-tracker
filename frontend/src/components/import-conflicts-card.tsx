@@ -6,14 +6,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   CashOperationData,
@@ -35,38 +27,54 @@ type ImportConflictsCardProps = {
 // none marks a field that the Cash Operation does not have.
 const none = "—"
 
-// fields are the rows of the comparison table, in display order.
+// fields are the rows of the comparison, in display order. numeric marks a field that shows a number.
 const fields: {
   key: keyof CashOperationData
   label: string
+  numeric: boolean
   format: (data: CashOperationData, currency: string) => string
 }[] = [
-  { key: "type", label: "Type", format: (data) => data.type },
+  { key: "type", label: "Type", numeric: false, format: (data) => data.type },
   {
     key: "time",
     label: "Time",
+    numeric: true,
     format: (data) => new Date(data.time).toLocaleString(),
   },
   {
     key: "amount",
     label: "Amount",
+    numeric: true,
     format: (data, currency) => formatAmount(data.amount, currency),
   },
-  { key: "comment", label: "Comment", format: (data) => data.comment },
-  { key: "ticker", label: "Ticker", format: (data) => data.ticker || none },
+  {
+    key: "comment",
+    label: "Comment",
+    numeric: false,
+    format: (data) => data.comment || none,
+  },
+  {
+    key: "ticker",
+    label: "Ticker",
+    numeric: true,
+    format: (data) => data.ticker || none,
+  },
   {
     key: "positionId",
     label: "Position ID",
+    numeric: true,
     format: (data) => data.positionId || none,
   },
   {
     key: "volume",
     label: "Volume",
+    numeric: true,
     format: (data) => (data.volume === null ? none : formatVolume(data.volume)),
   },
   {
     key: "price",
     label: "Price",
+    numeric: true,
     // The price is in the Instrument currency, which can differ from the Account currency.
     format: (data) => (data.price === null ? none : formatVolume(data.price)),
   },
@@ -84,6 +92,11 @@ const decisionsByKind: Record<ImportConflict["kind"], ConflictDecision[]> = {
   "check-mismatch": ["accept"],
 }
 
+// warningBadge is the look of the "No decision" badge and of the count of the open conflicts.
+const warningBadge = "border-warning/40 bg-warning/10 text-warning"
+
+// ImportConflictsCard shows each Import Conflict of an Import with its decision control.
+// A changed-data conflict shows the stored data and the new data side by side, with the changed fields highlighted.
 export function ImportConflictsCard({
   conflicts,
   currency,
@@ -95,9 +108,26 @@ export function ImportConflictsCard({
   ).length
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
-        <CardTitle>Import Conflicts</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2">
+          Import Conflicts
+          <Badge variant="secondary" className="num font-mono">
+            {conflicts.length}
+          </Badge>
+          {openCount > 0 ? (
+            <Badge variant="outline" className={cn("font-mono", warningBadge)}>
+              {openCount} with no decision
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-positive/30 bg-positive/10 font-mono text-positive"
+            >
+              All decided
+            </Badge>
+          )}
+        </CardTitle>
         <CardDescription>
           A Cash Operation with a known XTB ID but different data needs a
           decision: keep the stored data or use the new data. A sale with a
@@ -106,146 +136,200 @@ export function ImportConflictsCard({
           has a decision.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        <p className="text-sm text-muted-foreground">
-          {openCount === 0
-            ? "All conflicts have a decision."
-            : `${openCount} of ${conflicts.length} conflicts have no decision.`}
-        </p>
+      <CardContent className="flex flex-col gap-4">
         {conflicts.map((conflict) => (
-          <div key={conflict.id} className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium">
-                {conflict.kind === "check-mismatch"
-                  ? "Realized Profit check, sale"
-                  : "Changed data,"}{" "}
-                XTB ID {conflict.xtbId}
+          <section
+            key={conflict.id}
+            aria-label={`Import Conflict, XTB ID ${conflict.xtbId}`}
+            className={cn(
+              "flex min-w-0 flex-col gap-4 rounded-lg border p-3 md:p-4",
+              conflict.decision === null && "border-warning/40"
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="min-w-0 text-sm">
+                <span className="font-medium">
+                  {conflict.kind === "check-mismatch"
+                    ? "Realized Profit check, sale"
+                    : "Changed data"}
+                </span>
+                <span className="text-muted-foreground"> · XTB ID </span>
+                <span className="num font-medium">{conflict.xtbId}</span>
               </span>
               {conflict.decision === null ? (
-                <Badge variant="destructive">No decision</Badge>
+                <Badge
+                  variant="outline"
+                  className={cn("font-mono", warningBadge)}
+                >
+                  No decision
+                </Badge>
               ) : (
-                <Badge>{decisionLabels[conflict.decision]}</Badge>
+                <Badge
+                  variant="outline"
+                  className="border-primary/30 bg-primary/10 font-mono text-primary"
+                >
+                  {decisionLabels[conflict.decision]}
+                </Badge>
               )}
             </div>
             {conflict.kind === "check-mismatch" ? (
-              <ProfitCheckTable
+              <ProfitCheckList
                 sale={conflict.new}
                 check={conflict.check}
                 currency={currency}
               />
             ) : (
-              <ChangedDataTable
-                existing={conflict.existing}
-                incoming={conflict.new}
-                currency={currency}
-              />
+              <div className="grid min-w-0 gap-3 md:grid-cols-2">
+                <DataPanel
+                  title="Stored data"
+                  data={conflict.existing}
+                  other={conflict.new}
+                  currency={currency}
+                />
+                <DataPanel
+                  title="New data"
+                  data={conflict.new}
+                  other={conflict.existing}
+                  currency={currency}
+                  isNew
+                />
+              </div>
             )}
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              aria-label={`Decision for XTB ID ${conflict.xtbId}`}
-              value={conflict.decision ?? ""}
-              disabled={busy}
-              onValueChange={(value) => {
-                // An empty value means that the user clicked the selected item again.
-                if (value) onDecide(conflict.id, value as ConflictDecision)
-              }}
-            >
-              {decisionsByKind[conflict.kind].map((decision) => (
-                <ToggleGroupItem key={decision} value={decision}>
-                  {decisionLabels[decision]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <span className="text-sm text-muted-foreground">Decision</span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                aria-label={`Decision for XTB ID ${conflict.xtbId}`}
+                value={conflict.decision ?? ""}
+                disabled={busy}
+                onValueChange={(value) => {
+                  // An empty value means that the user clicked the selected item again.
+                  if (value) onDecide(conflict.id, value as ConflictDecision)
+                }}
+              >
+                {decisionsByKind[conflict.kind].map((decision) => (
+                  <ToggleGroupItem
+                    key={decision}
+                    value={decision}
+                    className="data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
+                  >
+                    {decisionLabels[decision]}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
+          </section>
         ))}
       </CardContent>
     </Card>
   )
 }
 
-type ChangedDataTableProps = {
-  existing: CashOperationData
-  incoming: CashOperationData
+type DataPanelProps = {
+  title: string
+  data: CashOperationData
+  // other is the data of the other side. A field that differs from it is highlighted.
+  other: CashOperationData
   currency: string
+  // isNew marks the panel of the new data. It shows the "Changed" tag next to each changed field.
+  isNew?: boolean
 }
 
-// ChangedDataTable compares the stored data and the new data of a Cash Operation.
-function ChangedDataTable({
-  existing,
-  incoming,
+// DataPanel shows the data of one side of a changed-data conflict.
+function DataPanel({
+  title,
+  data,
+  other,
   currency,
-}: ChangedDataTableProps) {
+  isNew = false,
+}: DataPanelProps) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead />
-          <TableHead>Stored data</TableHead>
-          <TableHead>New data</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-2 rounded-md border bg-muted/30 p-3",
+        isNew && "border-primary/30"
+      )}
+    >
+      <p
+        className={cn(
+          "font-mono text-xs tracking-wider uppercase",
+          isNew ? "text-primary" : "text-muted-foreground"
+        )}
+      >
+        {title}
+      </p>
+      <dl className="flex flex-col text-sm">
         {fields.map((field) => {
-          const changed = existing[field.key] !== incoming[field.key]
+          const changed = data[field.key] !== other[field.key]
+          const value = field.format(data, currency)
           return (
-            <TableRow key={field.key}>
-              <TableCell className="text-muted-foreground">
+            <div
+              key={field.key}
+              className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-1.5 last:border-b-0"
+            >
+              <dt className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
                 {field.label}
-              </TableCell>
-              <TableCell
-                className={cn("whitespace-normal", changed && "font-medium")}
+                {changed && isNew && (
+                  <span className="font-mono text-[10px] text-warning uppercase">
+                    Changed
+                  </span>
+                )}
+              </dt>
+              <dd
+                className={cn(
+                  "min-w-0 text-right break-words",
+                  field.numeric && "num",
+                  value === none && "text-muted-foreground",
+                  changed &&
+                    "rounded-sm bg-warning/15 px-1.5 font-medium text-warning"
+                )}
               >
-                {field.format(existing, currency)}
-              </TableCell>
-              <TableCell
-                className={cn("whitespace-normal", changed && "font-medium")}
-              >
-                {field.format(incoming, currency)}
-              </TableCell>
-            </TableRow>
+                {value}
+              </dd>
+            </div>
           )
         })}
-      </TableBody>
-    </Table>
+      </dl>
+    </div>
   )
 }
 
-type ProfitCheckTableProps = {
+type ProfitCheckListProps = {
   sale: CashOperationData
   check: ProfitCheck
   currency: string
 }
 
-// ProfitCheckTable shows the Realized Profit of a sale next to the Profit/Loss in Closed Positions.
-function ProfitCheckTable({ sale, check, currency }: ProfitCheckTableProps) {
+// ProfitCheckList shows the Realized Profit of a sale next to the Profit/Loss in Closed Positions.
+function ProfitCheckList({ sale, check, currency }: ProfitCheckListProps) {
   return (
-    <Table>
-      <TableBody>
-        <TableRow>
-          <TableCell className="text-muted-foreground">Sale</TableCell>
-          <TableCell className="text-right whitespace-normal">
-            {sale.ticker} · {new Date(sale.time).toLocaleString()} ·{" "}
-            {sale.comment}
-          </TableCell>
-        </TableRow>
-        <TableRow>
-          <TableCell className="text-muted-foreground">
-            Realized Profit from the Ledger
-          </TableCell>
-          <TableCell className="text-right num">
-            {formatAmount(check.calculated, currency)}
-          </TableCell>
-        </TableRow>
-        <TableRow>
-          <TableCell className="text-muted-foreground">
-            Profit/Loss in Closed Positions
-          </TableCell>
-          <TableCell className="text-right num">
-            {formatAmount(check.closedPositions, currency)}
-          </TableCell>
-        </TableRow>
-      </TableBody>
-    </Table>
+    <dl className="flex flex-col rounded-md border bg-muted/30 px-3 py-1 text-sm">
+      <div className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-1.5">
+        <dt className="shrink-0 text-muted-foreground">Sale</dt>
+        <dd className="min-w-0 text-right break-words">
+          {sale.ticker} · {new Date(sale.time).toLocaleString()} ·{" "}
+          {sale.comment}
+        </dd>
+      </div>
+      <div className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-1.5">
+        <dt className="text-muted-foreground">
+          Realized Profit from the Ledger
+        </dt>
+        <dd className="num font-medium text-warning">
+          {formatAmount(check.calculated, currency, { signed: true })}
+        </dd>
+      </div>
+      <div className="flex min-w-0 items-baseline justify-between gap-3 py-1.5">
+        <dt className="text-muted-foreground">
+          Profit/Loss in Closed Positions
+        </dt>
+        <dd className="num font-medium text-warning">
+          {formatAmount(check.closedPositions, currency, {
+            signed: true,
+          })}
+        </dd>
+      </div>
+    </dl>
   )
 }

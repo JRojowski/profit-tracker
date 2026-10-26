@@ -63,6 +63,7 @@ The project tokens in addition to the shadcn tokens:
 |---|---|
 | `positive` | A profit, a result above zero, the IKZE tag |
 | `negative` | A loss, a result below zero |
+| `warning` | An Import Conflict, a changed field, a warning of an Import |
 | `primary` | The accent: the selected item, the Total Result bar |
 | `chart-1` to `chart-8` | The parts of a chart, in order of value |
 | `chart-cash` | The cash part of a chart |

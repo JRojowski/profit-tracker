@@ -1,17 +1,10 @@
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
+import { CircleAlertIcon, UploadIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Field, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { ImportConflictsCard } from "@/components/import-conflicts-card"
+import { ImportFileDrop } from "@/components/import-file-drop"
 import { ImportPreviewCard } from "@/components/import-preview-card"
 import {
   cancelImport,
@@ -25,23 +18,37 @@ import {
   type NewAccount,
 } from "@/lib/api"
 
+// confirmFormId is the id of the form of the preview. The Confirm button submits it.
+const confirmFormId = "import-confirm"
+
 type ImportPageProps = {
   onImported: (summary: ImportSummary) => void
 }
 
+// ImportPage leads the user through an Import: select a file, read the preview, decide each Import Conflict,
+// and confirm or cancel. The tool saves nothing before the confirmation.
 export function ImportPage({ onImported }: ImportPageProps) {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // The input key resets the file input after a cancel or a confirmation.
+  // The input key resets the file input after a cancel, a confirmation or a removed file.
   const [inputKey, setInputKey] = useState(0)
+
+  const hasOpenConflicts =
+    preview?.conflicts.some((conflict) => conflict.decision === null) ?? false
 
   function reset() {
     setFile(null)
     setPreview(null)
     setError(null)
     setInputKey((key) => key + 1)
+  }
+
+  function handleFileChange(next: File | null) {
+    setFile(next)
+    setError(null)
+    if (next === null) setInputKey((key) => key + 1)
   }
 
   // run calls an API action. It blocks the page while the action runs and shows the error of a failed action.
@@ -57,14 +64,14 @@ export function ImportPage({ onImported }: ImportPageProps) {
     }
   }
 
-  async function handleUpload(event: FormEvent) {
-    event.preventDefault()
+  async function handlePreview() {
     if (!file) return
     await run(async () => setPreview(await uploadImport(file)))
   }
 
   async function handleConfirm(account?: NewAccount) {
-    if (!preview) return
+    // The Confirm button is disabled while a conflict has no decision. This check also stops the Enter key.
+    if (!preview || hasOpenConflicts) return
     await run(async () => {
       const summary = await confirmImport(preview.id, account)
       reset()
@@ -94,40 +101,31 @@ export function ImportPage({ onImported }: ImportPageProps) {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Upload an XTB export</CardTitle>
-          <CardDescription>
-            Select the xlsx file of one Account. The tool saves nothing before
-            you confirm the Import.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleUpload} className="flex items-end gap-2">
-            <Field>
-              <FieldLabel htmlFor="import-file">Export file</FieldLabel>
-              <Input
-                key={inputKey}
-                id="import-file"
-                type="file"
-                accept=".xlsx"
-                disabled={busy || preview !== null}
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              />
-            </Field>
-            <Button type="submit" disabled={!file || busy || preview !== null}>
-              Preview
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="flex min-w-0 flex-col gap-6">
+      <ImportFileDrop
+        file={file}
+        inputKey={inputKey}
+        busy={busy}
+        previewReady={preview !== null}
+        onFileChange={handleFileChange}
+        onPreview={handlePreview}
+      />
 
       {error && (
         <Alert variant="destructive">
           <AlertTitle>The Import failed</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="break-words">{error}</AlertDescription>
         </Alert>
+      )}
+
+      {preview && (
+        <ImportPreviewCard
+          key={preview.id}
+          preview={preview}
+          formId={confirmFormId}
+          busy={busy}
+          onConfirm={handleConfirm}
+        />
       )}
 
       {preview && preview.conflicts.length > 0 && (
@@ -140,13 +138,36 @@ export function ImportPage({ onImported }: ImportPageProps) {
       )}
 
       {preview && (
-        <ImportPreviewCard
-          key={preview.id}
-          preview={preview}
-          busy={busy}
-          onConfirm={handleConfirm}
-          onCancel={handleCancel}
-        />
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          {hasOpenConflicts ? (
+            <p className="flex items-center gap-2 text-sm text-warning">
+              <CircleAlertIcon className="size-4 shrink-0" />
+              Decide each Import Conflict first.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The tool saves the Import when you confirm it.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={handleCancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form={confirmFormId}
+              disabled={busy || hasOpenConflicts}
+            >
+              <UploadIcon data-icon="inline-start" />
+              Confirm Import
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )

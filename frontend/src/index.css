@@ -12,6 +12,7 @@
   --font-mono: "Geist Mono Variable", monospace;
   --color-positive: var(--positive);
   --color-negative: var(--negative);
+  --color-warning: var(--warning);
   --color-chart-8: var(--chart-8);
   --color-chart-7: var(--chart-7);
   --color-chart-6: var(--chart-6);
@@ -77,6 +78,8 @@
   --destructive: #e11d48;
   --positive: #047857;
   --negative: #be123c;
+  /* warning marks an Import Conflict, a changed field and a warning of an Import. */
+  --warning: #b45309;
   --border: #dbe3ee;
   --input: #cfd9e6;
   --ring: #0284c7;
@@ -121,6 +124,7 @@
   --destructive: #f43f5e;
   --positive: #34d399;
   --negative: #fb7185;
+  --warning: #fbbf24;
   --border: #1f2b3d;
   --input: #23334d;
   --ring: #38bdf8;
