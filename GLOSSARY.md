@@ -48,6 +48,10 @@ _Avoid_: Position, pozycja, asset
 The currency in which the price source gives the price of an Instrument. It can be different from the Account currency.
 _Avoid_: Instrument currency, price currency
 
+**Allocation**:
+The share of each part in the value of one Account or of all Accounts. The parts are the cash and the Holdings with a known value. One Instrument on two Accounts is one part. A Holding with no known value is not a part.
+_Avoid_: Portfolio share, breakdown, udział
+
 ### Currencies
 
 **Exchange Rate**:
