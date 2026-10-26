@@ -55,6 +55,9 @@ export function DashboardPage() {
   const [reloadCount, setReloadCount] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [refresh, setRefresh] = useState<PriceRefresh | null>(null)
+  // refreshedAt is the time of the last successful price refresh. A repeated refresh with the same prices
+  // changes only this time, so the user sees that the refresh ran.
+  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
   const [refreshError, setRefreshError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -95,11 +98,13 @@ export function DashboardPage() {
     refreshPrices()
       .then((result) => {
         setRefresh(result)
+        setRefreshedAt(new Date())
         setRefreshError(null)
         setReloadCount((count) => count + 1)
       })
       .catch((err: unknown) => {
         setRefresh(null)
+        setRefreshedAt(null)
         setRefreshError(errorMessage(err))
       })
       .finally(() => setRefreshing(false))
@@ -185,6 +190,7 @@ export function DashboardPage() {
             summary={current.summary}
             refreshing={refreshing}
             refresh={refresh}
+            refreshedAt={refreshedAt}
             refreshError={refreshError}
             onRefresh={handleRefreshPrices}
           />

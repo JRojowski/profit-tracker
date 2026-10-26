@@ -33,6 +33,11 @@ export function formatPercent(percent: string): string {
   }).format(Number(percent) / 100)
 }
 
+// formatTime shows the time of day of a local time, for example "10:32:05".
+export function formatTime(time: Date): string {
+  return time.toLocaleTimeString()
+}
+
 // formatDate shows a YYYY-MM-DD date in the local format. It reads the date as a calendar date, with no time zone shift.
 export function formatDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number)

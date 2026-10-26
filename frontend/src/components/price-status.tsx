@@ -3,13 +3,15 @@ import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import type { AccountSummary, PriceRefresh } from "@/lib/api"
-import { formatDate } from "@/lib/format"
+import { formatDate, formatTime } from "@/lib/format"
 
 type PriceStatusProps = {
   summary: AccountSummary
   refreshing: boolean
   // refresh is the result of the last price refresh, or null before the first refresh.
   refresh: PriceRefresh | null
+  // refreshedAt is the time of the last successful price refresh, or null.
+  refreshedAt: Date | null
   // refreshError is the error of the last price refresh, or null.
   refreshError: string | null
   onRefresh: () => void
@@ -20,6 +22,7 @@ export function PriceStatus({
   summary,
   refreshing,
   refresh,
+  refreshedAt,
   refreshError,
   onRefresh,
 }: PriceStatusProps) {
@@ -35,6 +38,13 @@ export function PriceStatus({
           <RefreshCwIcon data-icon="inline-start" />
           {refreshing ? "Refreshing…" : "Refresh prices"}
         </Button>
+        {refresh && refreshedAt && (
+          <p className="text-sm text-muted-foreground" role="status">
+            Got {refresh.refreshed}{" "}
+            {refresh.refreshed === 1 ? "price" : "prices"} at{" "}
+            {formatTime(refreshedAt)}.
+          </p>
+        )}
       </div>
       {refreshError && (
         <Alert variant="destructive">
