@@ -226,6 +226,15 @@ export type AccountSummary = {
   staleRates: boolean
   // unpricedHoldings is the count of Holdings with no value.
   unpricedHoldings: number
+} & Returns
+
+// Returns holds the Simple Return and the Annual Return as decimal percentages, for example "8.85" for 8.85 %.
+// A return is null when the tool cannot calculate it. Then its note tells the user why.
+export type Returns = {
+  simpleReturn: string | null
+  simpleReturnNote: string | null
+  annualReturn: string | null
+  annualReturnNote: string | null
 }
 
 // Holding holds all open Lots of one Instrument. Volumes and amounts are decimal text.

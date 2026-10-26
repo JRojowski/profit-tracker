@@ -59,6 +59,15 @@ type summaryResponse struct {
 	StaleRates bool `json:"staleRates"`
 	// UnpricedHoldings is the number of Holdings with no value.
 	UnpricedHoldings int `json:"unpricedHoldings"`
+	// SimpleReturn is the Simple Return as a percentage in decimal text: "10" is 10 %. It is exact, with at most
+	// 16 decimal places. The frontend rounds for display. It is nil if it is not available.
+	// Then SimpleReturnNote tells the reason.
+	SimpleReturn     *string `json:"simpleReturn"`
+	SimpleReturnNote *string `json:"simpleReturnNote"`
+	// AnnualReturn is the Annual Return as a percentage in decimal text, with at most 8 decimal places.
+	// It is nil if it is not available. Then AnnualReturnNote tells the reason.
+	AnnualReturn     *string `json:"annualReturn"`
+	AnnualReturnNote *string `json:"annualReturnNote"`
 }
 
 // holdingResponse is one row of GET /api/accounts/{id}/holdings. Amounts and the volume are decimal text.
@@ -169,6 +178,10 @@ func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 		StalePrices:      view.stalePrices(a.today()),
 		StaleRates:       view.staleRates(exchange.StartOfDayInWarsaw(a.now())),
 		UnpricedHoldings: view.unpricedHoldings(),
+		SimpleReturn:     percent(state.SimpleReturn),
+		SimpleReturnNote: returnNote(state.SimpleReturn),
+		AnnualReturn:     percent(state.AnnualReturn),
+		AnnualReturnNote: returnNote(state.AnnualReturn),
 	})
 }
 
@@ -252,6 +265,8 @@ func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountVi
 		l.QuoteCurrencies[ticker] = inst.QuoteCurrency
 	}
 	l.Prices = quotePrices(instruments, prices)
+	// The Annual Return counts days in Polish time, as the day of a flow in ADR 0004.
+	l.Today = exchange.StartOfDayInWarsaw(a.now())
 	l.ExchangeRates = make(map[string]ledger.ExchangeRate, len(rates))
 	for currency, r := range rates {
 		l.ExchangeRates[currency] = ledger.ExchangeRate{Rate: r.Mid, Date: r.Date}

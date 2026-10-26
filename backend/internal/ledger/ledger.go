@@ -1,6 +1,6 @@
 // Package ledger calculates the state of one Account from its Ledger, the prices and the Exchange Rates.
 // The state has the cash balance, the Net Deposits and the Holdings with their value and Unrealized Profit.
-// It also has the sales with their Realized Profit, and the total result with its parts.
+// It also has the sales with their Realized Profit, the total result with its parts, the Simple Return and the Annual Return.
 // It is a pure calculation with no I/O.
 // The tool calculates this state on each request and does not store it.
 package ledger
@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+
+	"github.com/jrojowski/profit-tracker/backend/internal/returns"
 )
 
 // The Cash Operation types that the calculator uses, as the broker export writes them.
@@ -57,6 +59,10 @@ type Ledger struct {
 	Prices map[string]decimal.Decimal
 	// ExchangeRates are the latest Exchange Rates, by currency.
 	ExchangeRates map[string]ExchangeRate
+	// Today is the start of today in Polish time. The Annual Return counts days in its location.
+	// This is an exception to "keep times in UTC": ADR 0004 takes the day of a flow in Polish time.
+	// A zero Today is before each flow, so the Annual Return is not available.
+	Today time.Time
 }
 
 // ExchangeRate is one Exchange Rate of a currency against PLN.
@@ -164,6 +170,11 @@ type State struct {
 	Value decimal.Decimal
 	// TotalResult is RealizedProfit + UnrealizedProfit + NetDividends + NetInterest + Fees.
 	TotalResult decimal.Decimal
+	// SimpleReturn is TotalResult × 100 / NetDeposits.
+	SimpleReturn returns.Rate
+	// AnnualReturn is the yearly rate that makes the Net Deposits flows grow to Value today.
+	// It is not available if a Holding has no value, because then Value leaves the Holding out.
+	AnnualReturn returns.Rate
 }
 
 // Sale is one Stock sell: the close of a part of one Lot. See ADR 0001.
@@ -264,7 +275,33 @@ func Calculate(l Ledger) (State, error) {
 		s.Value = s.Value.Add(h.Value)
 	}
 	s.TotalResult = s.RealizedProfit.Add(s.UnrealizedProfit).Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
+	s.SimpleReturn = returns.Simple(s.TotalResult, s.NetDeposits)
+	s.AnnualReturn = s.annualReturn(l)
 	return s, nil
+}
+
+// annualReturn returns the Annual Return of the state, or the reason why it is not available.
+// A short history comes before a Holding with no value, because a price refresh does not change it.
+func (s *State) annualReturn(l Ledger) returns.Rate {
+	rate := returns.Annual(flows(l.CashOperations), s.Value, l.Today)
+	if rate.Reason == returns.ReasonNoFlows || rate.Reason == returns.ReasonShortHistory {
+		return rate
+	}
+	if slices.ContainsFunc(s.Holdings, func(h Holding) bool { return !h.HasValue() }) {
+		return returns.Rate{Reason: returns.ReasonHoldingNoValue}
+	}
+	return rate
+}
+
+// flows returns the Net Deposits flows of the Cash Operations.
+func flows(ops []CashOperation) []returns.Flow {
+	var result []returns.Flow
+	for _, op := range ops {
+		if amount := netDeposit(op); !amount.IsZero() {
+			result = append(result, returns.Flow{Time: op.Time, Amount: amount})
+		}
+	}
+	return result
 }
 
 // add adds the amount of op to the cash balance and to the parts of the state that op counts in.

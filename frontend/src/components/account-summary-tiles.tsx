@@ -4,6 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { ReturnTile } from "@/components/return-tile"
 import type { AccountSummary } from "@/lib/api"
 import { formatAmount } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -41,7 +42,7 @@ export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {accountTiles.map((tile) => (
           <SummaryTile
             key={tile.label}
@@ -50,6 +51,7 @@ export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
             titleClassName="text-2xl"
           />
         ))}
+        <ReturnTile returns={summary} />
       </div>
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">
