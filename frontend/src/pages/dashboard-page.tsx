@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 
 import { AccountSummaryTiles } from "@/components/account-summary-tiles"
 import { HoldingsTable } from "@/components/holdings-table"
+import { IkzeLimitCard } from "@/components/ikze-limit-card"
 import { PriceStatus } from "@/components/price-status"
 import { RenameAccountForm } from "@/components/rename-account-form"
 import { SalesTable } from "@/components/sales-table"
@@ -195,6 +196,9 @@ export function DashboardPage() {
             onRefresh={handleRefreshPrices}
           />
           <AccountSummaryTiles summary={current.summary} />
+          {selected?.type === "IKZE" && (
+            <IkzeLimitCard accountId={current.accountId} />
+          )}
           <Card>
             <CardHeader>
               <CardTitle>Holdings</CardTitle>

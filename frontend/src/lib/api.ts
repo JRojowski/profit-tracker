@@ -390,3 +390,30 @@ export async function setQuoteCurrency(
   )
   return readJSON<Instrument>(response)
 }
+
+// IkzeLimitYear is one calendar year of an IKZE Account, in Polish time. Amounts are decimal text in PLN.
+// limit, unused and overLimit are null when the tool has no IKZE Limit for the year.
+export type IkzeLimitYear = {
+  year: number
+  contributions: string
+  limit: string | null
+  // unused is the part of the limit that the IKZE Contributions do not use.
+  unused: string | null
+  // overLimit is the amount of the IKZE Contributions above the limit.
+  overLimit: string | null
+}
+
+// IkzeLimit holds one row for each year from the first IKZE Contribution to currentYear, newest first.
+export type IkzeLimit = {
+  currentYear: number
+  rows: IkzeLimitYear[]
+}
+
+// fetchIkzeLimit fails for an Account that is not of the type IKZE.
+export async function fetchIkzeLimit(
+  id: number,
+  signal?: AbortSignal
+): Promise<IkzeLimit> {
+  const response = await fetch(`/api/accounts/${id}/ikze-limit`, { signal })
+  return readJSON<IkzeLimit>(response)
+}
