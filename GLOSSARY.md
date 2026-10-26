@@ -44,6 +44,20 @@ _Avoid_: Position, pozycja, trade
 All open Lots of one Instrument on one Account, taken together.
 _Avoid_: Position, pozycja, asset
 
+**Quote Currency**:
+The currency in which the price source gives the price of an Instrument. It can be different from the Account currency.
+_Avoid_: Instrument currency, price currency
+
+### Currencies
+
+**Exchange Rate**:
+The average rate of the National Bank of Poland (NBP) for one currency against PLN on one day.
+_Avoid_: FX rate, kurs
+
+**Currency Result**:
+The part of the Total Result in PLN that comes from the change of the Exchange Rate between the day of each Net Deposits flow and today.
+_Avoid_: FX gain, kursówka, currency profit
+
 ### Results
 
 **Realized Profit**:
@@ -53,6 +67,28 @@ _Avoid_: P/L, gain, return
 **Unrealized Profit**:
 The current value of the open part of a Lot minus the cost of that part, in the Account currency.
 _Avoid_: Paper profit, open P/L
+
+**Total Result**:
+The current value of an Account (cash and Holdings) minus its Net Deposits. It is equal to the sum of Realized Profit, Unrealized Profit, net dividends, net interest and fees.
+_Avoid_: Total P/L, return, wynik
+
+**Simple Return**:
+The Total Result divided by the Net Deposits, as a percentage.
+_Avoid_: ROI, yield
+
+**Annual Return**:
+The yearly rate of return that gives the current value from the Net Deposits flows, with the date of each flow taken into account.
+_Avoid_: XIRR, IRR, CAGR
+
+### IKZE
+
+**IKZE Contribution**:
+A deposit or a Transfer In on an IKZE Account. It counts towards the IKZE Limit of its calendar year in Polish time.
+_Avoid_: IKZE deposit, wpłata
+
+**IKZE Limit**:
+The highest sum of IKZE Contributions in one calendar year that the law allows for the user.
+_Avoid_: Cap, contribution cap
 
 ### Import
 
