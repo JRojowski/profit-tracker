@@ -28,7 +28,7 @@ func TestParseConfig(t *testing.T) {
 	}{
 		{
 			name:     "defaults",
-			wantAddr: "127.0.0.1:8080",
+			wantAddr: "127.0.0.1:8088",
 			wantDB:   filepath.Join("/home/user/.config", "profit-tracker", "profit-tracker.db"),
 		},
 		{
@@ -48,14 +48,14 @@ func TestParseConfig(t *testing.T) {
 			name:          "db flag works without a user configuration folder",
 			args:          []string{"-db", "/data/flag.db"},
 			userConfigDir: noUserConfigDir,
-			wantAddr:      "127.0.0.1:8080",
+			wantAddr:      "127.0.0.1:8088",
 			wantDB:        "/data/flag.db",
 		},
 		{
 			name:          "db environment works without a user configuration folder",
 			env:           map[string]string{"PROFIT_TRACKER_DB": "/data/env.db"},
 			userConfigDir: noUserConfigDir,
-			wantAddr:      "127.0.0.1:8080",
+			wantAddr:      "127.0.0.1:8088",
 			wantDB:        "/data/env.db",
 		},
 	}

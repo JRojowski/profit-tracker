@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
 // The Go program reads the same variable. Keep the default equal to its default.
-const backendAddr = process.env.PROFIT_TRACKER_ADDR ?? "127.0.0.1:8080"
+const backendAddr = process.env.PROFIT_TRACKER_ADDR ?? "127.0.0.1:8088"
 
 // https://vite.dev/config/
 export default defineConfig({

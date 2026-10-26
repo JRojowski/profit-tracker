@@ -13,7 +13,7 @@ const (
 )
 
 // defaultAddr is the listen address. The Vite dev proxy sends /api requests to it.
-const defaultAddr = "127.0.0.1:8080"
+const defaultAddr = "127.0.0.1:8088"
 
 // config is the start configuration of the program.
 type config struct {
