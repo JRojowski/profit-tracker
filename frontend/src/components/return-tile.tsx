@@ -39,8 +39,8 @@ function ReturnLine({ label, percent, note }: ReturnLineProps) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-xl font-semibold tabular-nums">
-        {percent === null ? "—" : formatPercent(percent)}
+      <p className="num text-xl font-semibold">
+        {percent === null ? "—" : formatPercent(percent, { signed: true })}
       </p>
       {percent === null && note && (
         <p className="text-sm text-muted-foreground">{note}</p>

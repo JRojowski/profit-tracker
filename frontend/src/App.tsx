@@ -1,60 +1,59 @@
-import { useEffect, useState } from "react"
+import { createBrowserRouter, RouterProvider, useNavigate } from "react-router"
 
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { fetchHealth } from "@/lib/api"
-import { DashboardPage } from "@/pages/dashboard-page"
+import { AppShell } from "@/components/app-shell"
+import { useAppState } from "@/lib/app-state"
+import { accountPattern, paths } from "@/lib/routes"
+import { AccountHoldingsPage } from "@/pages/account-holdings-page"
+import { AccountIkzePage } from "@/pages/account-ikze-page"
+import { AccountLayout } from "@/pages/account-layout"
+import { AccountOverviewPage } from "@/pages/account-overview-page"
+import { AccountSalesPage } from "@/pages/account-sales-page"
+import { AllAccountsPage } from "@/pages/all-accounts-page"
 import { ImportPage } from "@/pages/import-page"
 import { ImportsPage } from "@/pages/imports-page"
+import { NotFoundPage } from "@/pages/not-found-page"
 
-type BackendState = "checking" | "ok" | "unavailable"
+// The backend serves index.html for each of these paths, so a reload opens the same view.
+const router = createBrowserRouter([
+  {
+    element: <AppShell />,
+    children: [
+      { path: paths.root, element: <AllAccountsPage /> },
+      { path: paths.allAccounts, element: <AllAccountsPage /> },
+      {
+        path: accountPattern,
+        element: <AccountLayout />,
+        children: [
+          { index: true, element: <AccountOverviewPage /> },
+          { path: "holdings", element: <AccountHoldingsPage /> },
+          { path: "sales", element: <AccountSalesPage /> },
+          { path: "ikze", element: <AccountIkzePage /> },
+        ],
+      },
+      { path: paths.import, element: <ImportRoute /> },
+      { path: paths.imports, element: <ImportsPage /> },
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
+])
 
-type Page = "dashboard" | "import" | "imports"
-
-export function App() {
-  const [backend, setBackend] = useState<BackendState>("checking")
-  const [page, setPage] = useState<Page>("dashboard")
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchHealth(controller.signal)
-      .then(() => setBackend("ok"))
-      .catch(() => {
-        if (!controller.signal.aborted) setBackend("unavailable")
-      })
-    return () => controller.abort()
-  }, [])
-
+// ImportRoute opens the Imports after a confirmed Import. A new Account shows in the sidebar at once.
+function ImportRoute() {
+  const navigate = useNavigate()
+  const { reloadAccounts } = useAppState()
   return (
-    <div className="flex min-h-svh flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-4">
-        <h1 className="text-lg font-medium">Profit Tracker</h1>
-        <Badge
-          variant={backend === "unavailable" ? "destructive" : "secondary"}
-        >
-          Backend: {backend}
-        </Badge>
-      </header>
-      <main className="flex flex-1 flex-col gap-4 p-6">
-        <Tabs value={page} onValueChange={(value) => setPage(value as Page)}>
-          <TabsList>
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="import">Import</TabsTrigger>
-            <TabsTrigger value="imports">Imports</TabsTrigger>
-          </TabsList>
-          <TabsContent value="dashboard">
-            <DashboardPage />
-          </TabsContent>
-          <TabsContent value="import">
-            <ImportPage onImported={() => setPage("imports")} />
-          </TabsContent>
-          <TabsContent value="imports">
-            <ImportsPage />
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+    <ImportPage
+      onImported={() => {
+        reloadAccounts()
+        void navigate(paths.imports)
+      }}
+    />
   )
+}
+
+// App shows the view of the URL.
+export function App() {
+  return <RouterProvider router={router} />
 }
 
 export default App

@@ -19,6 +19,8 @@ export type Tile = {
   amount: string | null
   // note is a short text under the amount, or undefined.
   note?: string
+  // signed shows "+" or "−" before the amount, for a result or a part of it.
+  signed?: boolean
 }
 
 export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
@@ -27,18 +29,24 @@ export function AccountSummaryTiles({ summary }: AccountSummaryTilesProps) {
     { label: "Value", amount: summary.value, note: unpriced },
     { label: "Cash", amount: summary.cash },
     { label: "Net Deposits", amount: summary.netDeposits },
-    { label: "Total Result", amount: summary.totalResult, note: unpriced },
+    {
+      label: "Total Result",
+      amount: summary.totalResult,
+      note: unpriced,
+      signed: true,
+    },
   ]
   const resultParts: Tile[] = [
-    { label: "Realized Profit", amount: summary.realizedProfit },
+    { label: "Realized Profit", amount: summary.realizedProfit, signed: true },
     {
       label: "Unrealized Profit",
       amount: summary.unrealizedProfit,
       note: unpriced,
+      signed: true,
     },
-    { label: "Net dividends", amount: summary.netDividends },
-    { label: "Net interest", amount: summary.netInterest },
-    { label: "Fees", amount: summary.fees },
+    { label: "Net dividends", amount: summary.netDividends, signed: true },
+    { label: "Net interest", amount: summary.netInterest, signed: true },
+    { label: "Fees", amount: summary.fees, signed: true },
   ]
 
   return (
@@ -88,8 +96,11 @@ export function SummaryTile({
     <Card>
       <CardHeader>
         <CardDescription>{tile.label}</CardDescription>
-        <CardTitle className={cn("tabular-nums", titleClassName)}>
-          {tile.amount === null ? "—" : formatAmount(tile.amount, currency)}
+        {/* font-mono replaces the font-heading class of CardTitle. num alone loses to it. */}
+        <CardTitle className={cn("num font-mono", titleClassName)}>
+          {tile.amount === null
+            ? "—"
+            : formatAmount(tile.amount, currency, { signed: tile.signed })}
         </CardTitle>
         {tile.note && <CardDescription>{tile.note}</CardDescription>}
       </CardHeader>

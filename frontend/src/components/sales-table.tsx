@@ -41,17 +41,17 @@ export function SalesTable({ sales, currency }: SalesTableProps) {
               {sale.ticker}{" "}
               <span className="text-muted-foreground">{sale.name}</span>
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatVolume(sale.volume)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatAmount(sale.amount, currency)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatAmount(sale.cost, currency)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {formatAmount(sale.realizedProfit, currency)}
+            <TableCell className="text-right num">
+              {formatAmount(sale.realizedProfit, currency, { signed: true })}
             </TableCell>
           </TableRow>
         ))}

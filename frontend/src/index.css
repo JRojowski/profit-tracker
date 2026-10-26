@@ -2,12 +2,21 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Geist Variable", sans-serif;
+  --font-mono: "Geist Mono Variable", monospace;
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-chart-8: var(--chart-8);
+  --color-chart-7: var(--chart-7);
+  --color-chart-6: var(--chart-6);
+  --color-chart-cash: var(--chart-cash);
+  --color-chart-other: var(--chart-other);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,72 +58,90 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  color-scheme: light;
+  /* The light theme uses the hues of the dark theme with a light background and darker accents. */
+  --background: #f6f8fb;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #0284c7;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2f7;
+  --secondary-foreground: #334155;
+  --muted: #eef2f7;
+  --muted-foreground: #64748b;
+  --accent: #e6eef7;
+  --accent-foreground: #0f172a;
+  --destructive: #e11d48;
+  --positive: #047857;
+  --negative: #be123c;
+  --border: #dbe3ee;
+  --input: #cfd9e6;
+  --ring: #0284c7;
+  --chart-1: #0284c7;
+  --chart-2: #2563eb;
+  --chart-3: #4f46e5;
+  --chart-4: #7c3aed;
+  --chart-5: #059669;
+  --chart-6: #0d9488;
+  --chart-7: #d97706;
+  --chart-8: #e11d48;
+  --chart-cash: #10b981;
+  --chart-other: #94a3b8;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #eef2f7;
+  --sidebar-foreground: #475569;
+  --sidebar-primary: #0284c7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e0eaf5;
+  --sidebar-accent-foreground: #0369a1;
+  --sidebar-border: #dbe3ee;
+  --sidebar-ring: #0284c7;
 }
 
+/* The dark theme is the mockup "Variant B" in docs/design/v3/all-accounts.html. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  color-scheme: dark;
+  --background: #0c1017;
+  --foreground: #f1f5f9;
+  --card: #131923;
+  --card-foreground: #f1f5f9;
+  --popover: #131923;
+  --popover-foreground: #f1f5f9;
+  --primary: #38bdf8;
+  --primary-foreground: #0c1017;
+  --secondary: #18212e;
+  --secondary-foreground: #cbd5e1;
+  --muted: #18212e;
+  --muted-foreground: #94a3b8;
+  --accent: #16202e;
+  --accent-foreground: #f1f5f9;
+  --destructive: #f43f5e;
+  --positive: #34d399;
+  --negative: #fb7185;
+  --border: #1f2b3d;
+  --input: #23334d;
+  --ring: #38bdf8;
+  --chart-1: #38bdf8;
+  --chart-2: #60a5fa;
+  --chart-3: #818cf8;
+  --chart-4: #a78bfa;
+  --chart-5: #34d399;
+  --chart-6: #2dd4bf;
+  --chart-7: #f59e0b;
+  --chart-8: #fb7185;
+  --chart-cash: #10b981;
+  --chart-other: #475569;
+  --sidebar: #090d13;
+  --sidebar-foreground: #94a3b8;
+  --sidebar-primary: #38bdf8;
+  --sidebar-primary-foreground: #0c1017;
+  --sidebar-accent: #16202e;
+  --sidebar-accent-foreground: #38bdf8;
+  --sidebar-border: #1a2332;
+  --sidebar-ring: #38bdf8;
 }
 
 @layer base {
@@ -127,4 +154,11 @@
   html {
     @apply font-sans;
   }
+}
+
+/* num shows a number: Geist Mono with tabular figures, and never a line break between the digits and the currency. */
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

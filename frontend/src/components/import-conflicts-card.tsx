@@ -233,7 +233,7 @@ function ProfitCheckTable({ sale, check, currency }: ProfitCheckTableProps) {
           <TableCell className="text-muted-foreground">
             Realized Profit from the Ledger
           </TableCell>
-          <TableCell className="text-right tabular-nums">
+          <TableCell className="text-right num">
             {formatAmount(check.calculated, currency)}
           </TableCell>
         </TableRow>
@@ -241,7 +241,7 @@ function ProfitCheckTable({ sale, check, currency }: ProfitCheckTableProps) {
           <TableCell className="text-muted-foreground">
             Profit/Loss in Closed Positions
           </TableCell>
-          <TableCell className="text-right tabular-nums">
+          <TableCell className="text-right num">
             {formatAmount(check.closedPositions, currency)}
           </TableCell>
         </TableRow>

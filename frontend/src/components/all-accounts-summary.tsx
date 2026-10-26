@@ -37,21 +37,28 @@ export function AllAccountsSummaryView({
     { label: "Value", amount: summary.value, note: unpriced },
     { label: "Cash", amount: summary.cash },
     { label: "Net Deposits", amount: summary.netDeposits },
-    { label: "Total Result", amount: summary.totalResult, note: unpriced },
+    {
+      label: "Total Result",
+      amount: summary.totalResult,
+      note: unpriced,
+      signed: true,
+    },
   ]
   const resultParts: Tile[] = [
-    { label: "Realized Profit", amount: summary.realizedProfit },
+    { label: "Realized Profit", amount: summary.realizedProfit, signed: true },
     {
       label: "Unrealized Profit",
       amount: summary.unrealizedProfit,
       note: unpriced,
+      signed: true,
     },
-    { label: "Net dividends", amount: summary.netDividends },
-    { label: "Net interest", amount: summary.netInterest },
-    { label: "Fees", amount: summary.fees },
+    { label: "Net dividends", amount: summary.netDividends, signed: true },
+    { label: "Net interest", amount: summary.netInterest, signed: true },
+    { label: "Fees", amount: summary.fees, signed: true },
     {
       label: "Currency Result",
       amount: summary.currencyResult,
+      signed: true,
       note: "The effect of the Exchange Rates on the Net Deposits.",
     },
   ]
@@ -114,17 +121,21 @@ export function AllAccountsSummaryView({
 }
 
 // columns are the amount columns of the table, in the order of the tiles.
-const columns: { label: string; key: keyof AllAccountsAmounts }[] = [
+const columns: {
+  label: string
+  key: keyof AllAccountsAmounts
+  signed?: boolean
+}[] = [
   { label: "Value", key: "value" },
   { label: "Cash", key: "cash" },
   { label: "Net Deposits", key: "netDeposits" },
-  { label: "Total Result", key: "totalResult" },
-  { label: "Realized Profit", key: "realizedProfit" },
-  { label: "Unrealized Profit", key: "unrealizedProfit" },
-  { label: "Net dividends", key: "netDividends" },
-  { label: "Net interest", key: "netInterest" },
-  { label: "Fees", key: "fees" },
-  { label: "Currency Result", key: "currencyResult" },
+  { label: "Total Result", key: "totalResult", signed: true },
+  { label: "Realized Profit", key: "realizedProfit", signed: true },
+  { label: "Unrealized Profit", key: "unrealizedProfit", signed: true },
+  { label: "Net dividends", key: "netDividends", signed: true },
+  { label: "Net interest", key: "netInterest", signed: true },
+  { label: "Fees", key: "fees", signed: true },
+  { label: "Currency Result", key: "currencyResult", signed: true },
 ]
 
 function AccountsTable({ rows }: { rows: AllAccountsRow[] }) {
@@ -170,14 +181,16 @@ function AccountsTable({ rows }: { rows: AllAccountsRow[] }) {
                 <Badge variant="outline">{row.currency}</Badge>
               )}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {row.exchangeRate === null ? "—" : formatRate(row.exchangeRate)}
             </TableCell>
             {columns.map((column) => {
               const amount = row[column.key]
               return (
-                <TableCell key={column.key} className="text-right tabular-nums">
-                  {amount === null ? "—" : formatAmount(amount, "PLN")}
+                <TableCell key={column.key} className="text-right num">
+                  {amount === null
+                    ? "—"
+                    : formatAmount(amount, "PLN", { signed: column.signed })}
                 </TableCell>
               )
             })}

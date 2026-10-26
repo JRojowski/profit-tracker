@@ -89,16 +89,16 @@ export function HoldingsTable({
                 />
               </div>
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatVolume(holding.volume)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatAmount(holding.averageCost, currency)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatAmount(holding.cost, currency)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {holding.price !== null && holding.priceDate !== null ? (
                 <div className="flex flex-col">
                   <span>
@@ -115,7 +115,7 @@ export function HoldingsTable({
                 <NoValue />
               )}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {holding.exchangeRate !== null &&
               holding.exchangeRateCurrency !== null &&
               holding.exchangeRateDate !== null ? (
@@ -132,23 +132,25 @@ export function HoldingsTable({
                 <NoValue />
               )}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {holding.value !== null ? (
                 formatAmount(holding.value, currency)
               ) : (
                 <NoValue />
               )}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {holding.unrealizedProfit !== null ? (
-                formatAmount(holding.unrealizedProfit, currency)
+                formatAmount(holding.unrealizedProfit, currency, {
+                  signed: true,
+                })
               ) : (
                 <NoValue />
               )}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {holding.unrealizedProfitPercent !== null ? (
-                formatPercent(holding.unrealizedProfitPercent)
+                formatPercent(holding.unrealizedProfitPercent, { signed: true })
               ) : (
                 <NoValue />
               )}

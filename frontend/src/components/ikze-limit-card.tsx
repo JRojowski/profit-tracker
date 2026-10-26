@@ -130,7 +130,7 @@ function Figure({ label, amount }: FigureProps) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-2xl font-semibold tabular-nums">{plnOrDash(amount)}</p>
+      <p className="num text-2xl font-semibold">{plnOrDash(amount)}</p>
     </div>
   )
 }
@@ -151,18 +151,18 @@ function PastYears({ rows }: { rows: IkzeLimitYear[] }) {
         {rows.map((row) => (
           <TableRow key={row.year}>
             <TableCell>{row.year}</TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {formatAmount(row.contributions, "PLN")}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {row.limit === null
                 ? "Limit unknown"
                 : formatAmount(row.limit, "PLN")}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {plnOrDash(row.unused)}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right num">
               {plnOrDash(row.overLimit)}
             </TableCell>
           </TableRow>
