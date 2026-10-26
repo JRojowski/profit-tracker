@@ -12,6 +12,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -45,10 +46,17 @@ type summaryResponse struct {
 	TotalResult      string `json:"totalResult"`
 	// Value is the cash balance plus the value of the Holdings with a price.
 	Value string `json:"value"`
-	// PriceDate is the oldest price date of the Holdings with a price, as YYYY-MM-DD. It is nil if no Holding has a price.
+	// PriceDate is the oldest price date of the Holdings with a value, as YYYY-MM-DD. It is nil if no Holding has a value.
 	PriceDate *string `json:"priceDate"`
-	// StalePrices tells that a Holding in the Account currency has no price, or its price was fetched before today.
+	// ExchangeRateDate is the oldest table date of the Exchange Rates that the Holdings use, as YYYY-MM-DD.
+	// It is nil if no Holding uses an Exchange Rate.
+	ExchangeRateDate *string `json:"exchangeRateDate"`
+	// StalePrices tells that a Holding with a known Quote Currency has no price in that currency,
+	// or its price was fetched before today.
 	StalePrices bool `json:"stalePrices"`
+	// StaleRates tells that a Holding needs an Exchange Rate that is missing,
+	// or that the tool fetched before today in Polish time.
+	StaleRates bool `json:"staleRates"`
 	// UnpricedHoldings is the number of Holdings with no value.
 	UnpricedHoldings int `json:"unpricedHoldings"`
 }
@@ -62,10 +70,17 @@ type holdingResponse struct {
 	Cost        string `json:"cost"`
 	AverageCost string `json:"averageCost"`
 	priceSourceResponse
-	// Price is the close price. PriceDate is its date as YYYY-MM-DD.
+	// Price is the close price in the Quote Currency. PriceDate is its date as YYYY-MM-DD.
 	Price     *string `json:"price"`
 	PriceDate *string `json:"priceDate"`
-	Value     *string `json:"value"`
+	// ExchangeRate is the Exchange Rate that Value uses: the PLN amount for 1 unit of ExchangeRateCurrency,
+	// the currency that is not PLN. ExchangeRateDate is its NBP table date as YYYY-MM-DD.
+	// They are nil if Value uses no rate.
+	ExchangeRate         *string `json:"exchangeRate"`
+	ExchangeRateCurrency *string `json:"exchangeRateCurrency"`
+	ExchangeRateDate     *string `json:"exchangeRateDate"`
+	// Value is in the Account currency.
+	Value *string `json:"value"`
 	// UnrealizedProfit is Value minus Cost.
 	UnrealizedProfit *string `json:"unrealizedProfit"`
 	// UnrealizedProfitPercent is UnrealizedProfit × 100 / Cost, exact. The frontend rounds for display.
@@ -150,7 +165,9 @@ func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 		TotalResult:      formatAmount(state.TotalResult),
 		Value:            formatAmount(state.Value),
 		PriceDate:        view.priceDate(),
+		ExchangeRateDate: view.exchangeRateDate(),
 		StalePrices:      view.stalePrices(a.today()),
+		StaleRates:       view.staleRates(exchange.StartOfDayInWarsaw(a.now())),
 		UnpricedHoldings: view.unpricedHoldings(),
 	})
 }
@@ -211,7 +228,7 @@ func (a *api) accountView(w http.ResponseWriter, r *http.Request) (accountView, 
 	return view, true
 }
 
-// readAccountView reads the Ledger and the price data, and calculates the state of the Account.
+// readAccountView reads the Ledger, the price data and the Exchange Rates, and calculates the state of the Account.
 func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountView, error) {
 	l, err := a.store.Ledger(ctx, acc.ID)
 	if err != nil {
@@ -225,12 +242,25 @@ func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountVi
 	if err != nil {
 		return accountView{}, err
 	}
-	l.Prices = accountPrices(acc.Currency, instruments, prices)
+	rates, err := a.rates.LatestRates(ctx)
+	if err != nil {
+		return accountView{}, err
+	}
+	l.Currency = acc.Currency
+	l.QuoteCurrencies = make(map[string]string, len(instruments))
+	for ticker, inst := range instruments {
+		l.QuoteCurrencies[ticker] = inst.QuoteCurrency
+	}
+	l.Prices = quotePrices(instruments, prices)
+	l.ExchangeRates = make(map[string]ledger.ExchangeRate, len(rates))
+	for currency, r := range rates {
+		l.ExchangeRates[currency] = ledger.ExchangeRate{Rate: r.Mid, Date: r.Date}
+	}
 	state, err := ledger.Calculate(l)
 	if err != nil {
 		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)
 	}
-	return accountView{account: acc, state: state, instruments: instruments, prices: prices}, nil
+	return accountView{account: acc, state: state, instruments: instruments, prices: prices, rates: rates}, nil
 }
 
 // accountID returns the Account ID of the path. An ID that is not a number is an unknown Account.

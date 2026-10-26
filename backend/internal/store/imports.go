@@ -86,8 +86,8 @@ type CashOperation struct {
 	Ticker         string
 	InstrumentName string
 	Category       string
-	// QuoteCurrency is the quote currency of the Instrument, or empty if it is not known.
-	// The store sets it only when it adds the Instrument. Thus a later Import keeps a quote currency that the user set.
+	// QuoteCurrency is the Quote Currency of the Instrument, or empty if it is not known.
+	// The store sets it only when it adds the Instrument. Thus a later Import keeps a Quote Currency that the user set.
 	QuoteCurrency string
 	Time          time.Time
 	Amount        decimal.Decimal

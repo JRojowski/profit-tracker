@@ -80,7 +80,7 @@ func TestSetPriceTicker_ManualTicker_RefreshAsksForIt(t *testing.T) {
 	assert.Equal(t, instrumentResponse{
 		Ticker: "ABC.US", PriceTicker: "ABCX", PriceTickerManual: true, QuoteCurrency: ptr("USD"), QuoteCurrencyManual: false,
 	}, got, "the tool trims the whitespace")
-	assert.Equal(t, refreshResponse{Refreshed: 2, Failures: []refreshFailure{}}, refresh)
+	assert.Equal(t, refreshResponse{Refreshed: 2, Failures: []refreshFailure{}, RateFailures: []rateFailure{}}, refresh)
 	assert.ElementsMatch(t, []string{"ABCX", "XYZ"}, provider.requestedTickers())
 	assert.Equal(t, []holdingSource{
 		{Ticker: "ABC.US", PriceTicker: "ABCX", PriceTickerManual: true, QuoteCurrency: ptr("USD"), Price: ptr("125.5"), Value: ptr("251.00")},
@@ -182,7 +182,7 @@ func TestSetQuoteCurrency_USDOnUKInstrument_RefreshAcceptsUSDPrice(t *testing.T)
 	id := srv.importAccount(t, cspxExport(), "XTB USD")
 	require.Equal(t, refreshResponse{Refreshed: 0, Failures: []refreshFailure{
 		{Ticker: "CSPX.UK", Error: "the price is in USD, but the Instrument is quoted in GBP"},
-	}}, srv.refreshPrices(t))
+	}, RateFailures: []rateFailure{}}, srv.refreshPrices(t))
 
 	got := srv.setQuoteCurrency(t, "CSPX.UK", " usd ")
 	refresh := srv.refreshPrices(t)
@@ -190,7 +190,7 @@ func TestSetQuoteCurrency_USDOnUKInstrument_RefreshAcceptsUSDPrice(t *testing.T)
 	assert.Equal(t, instrumentResponse{
 		Ticker: "CSPX.UK", PriceTicker: "CSPX.L", PriceTickerManual: false, QuoteCurrency: ptr("USD"), QuoteCurrencyManual: true,
 	}, got, "the tool trims the whitespace and changes the letters to upper case")
-	assert.Equal(t, refreshResponse{Refreshed: 1, Failures: []refreshFailure{}}, refresh)
+	assert.Equal(t, refreshResponse{Refreshed: 1, Failures: []refreshFailure{}, RateFailures: []rateFailure{}}, refresh)
 	assert.Equal(t, []holdingSource{
 		{Ticker: "CSPX.UK", PriceTicker: "CSPX.L", QuoteCurrency: ptr("USD"), QuoteCurrencyManual: true, Price: ptr("650"), Value: ptr("650.00")},
 	}, srv.holdingSources(t, id))
@@ -209,7 +209,7 @@ func TestSetQuoteCurrency_EmptyValue_RestoresCurrencyFromSuffixAndKeepsPrices(t 
 
 	assert.Equal(t, instrumentResponse{Ticker: "CSPX.UK", PriceTicker: "CSPX.L", QuoteCurrency: ptr("GBP")}, got)
 	assert.Equal(t, []holdingPrices{
-		noValue("CSPX.UK", ptr("GBP"), "The Instrument is quoted in GBP. The tool shows no value in USD."),
+		noValue("CSPX.UK", ptr("GBP"), "The Instrument is quoted in GBP. The tool has no Exchange Rate between GBP and USD."),
 	}, srv.holdingPrices(t, id), "the tool ignores the stored USD price of an Instrument quoted in GBP")
 
 	// The change kept the USD price, so the manual USD gives the value again with no refresh.

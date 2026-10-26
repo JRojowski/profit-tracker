@@ -17,7 +17,7 @@ type PriceStatusProps = {
   onRefresh: () => void
 }
 
-// PriceStatus shows the date of the prices, the "Refresh prices" button and the price warnings.
+// PriceStatus shows the date of the prices and the Exchange Rates, the "Refresh prices" button and the warnings.
 export function PriceStatus({
   summary,
   refreshing,
@@ -33,6 +33,8 @@ export function PriceStatus({
           {summary.priceDate
             ? `Prices from ${formatDate(summary.priceDate)}`
             : "No prices"}
+          {summary.exchangeRateDate &&
+            ` · Exchange Rates from ${formatDate(summary.exchangeRateDate)}`}
         </p>
         <Button variant="outline" onClick={onRefresh} disabled={refreshing}>
           <RefreshCwIcon data-icon="inline-start" />
@@ -65,6 +67,32 @@ export function PriceStatus({
                 </li>
               ))}
             </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      {refresh && refresh.rateFailures.length > 0 && (
+        <Alert variant="destructive">
+          <TriangleAlertIcon />
+          <AlertTitle>Some currencies got no new Exchange Rate</AlertTitle>
+          <AlertDescription>
+            <ul className="list-inside list-disc">
+              {refresh.rateFailures.map((failure) => (
+                <li key={failure.currency}>
+                  {failure.currency}: {failure.error}
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+      {summary.staleRates && (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>The Exchange Rates are not current</AlertTitle>
+          <AlertDescription>
+            {summary.exchangeRateDate
+              ? "The tool did not get the Exchange Rates today. The values use the last stored Exchange Rates."
+              : "A Holding needs an Exchange Rate that the tool does not have. Refresh the prices."}
           </AlertDescription>
         </Alert>
       )}

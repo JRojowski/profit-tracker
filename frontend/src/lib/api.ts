@@ -217,13 +217,19 @@ export type AccountSummary = {
   fees: string
   // priceDate is the oldest price date of the priced Holdings, as YYYY-MM-DD. It is null when no Holding has a price.
   priceDate: string | null
-  // stalePrices tells that a Holding in the Account currency has no price, or that its price is not from today.
+  // stalePrices tells that a Holding with a known Quote Currency has no price, or that its price is not from today.
   stalePrices: boolean
+  // exchangeRateDate is the oldest date of the Exchange Rates that the Holdings use, as YYYY-MM-DD.
+  // It is null when no Holding uses an Exchange Rate.
+  exchangeRateDate: string | null
+  // staleRates tells that a Holding needs an Exchange Rate that is missing or that the tool did not fetch today.
+  staleRates: boolean
   // unpricedHoldings is the count of Holdings with no value.
   unpricedHoldings: number
 }
 
 // Holding holds all open Lots of one Instrument. Volumes and amounts are decimal text.
+// The cost, the value and the Unrealized Profit are in the Account currency. The price is in the Quote Currency.
 // The price fields are null when the Holding has no value. Then note tells the user why.
 export type Holding = {
   ticker: string
@@ -234,6 +240,14 @@ export type Holding = {
   price: string | null
   // priceDate is YYYY-MM-DD.
   priceDate: string | null
+  // exchangeRate is the NBP rate in PLN for 1 unit of the currency that is not PLN.
+  // It is null when the value needs no conversion.
+  exchangeRate: string | null
+  // exchangeRateCurrency is the currency of exchangeRate: the one of the Quote Currency and the Account currency
+  // that is not PLN. It is null when exchangeRate is null.
+  exchangeRateCurrency: string | null
+  // exchangeRateDate is the NBP table date of exchangeRate, as YYYY-MM-DD.
+  exchangeRateDate: string | null
   value: string | null
   unrealizedProfit: string | null
   // unrealizedProfitPercent is the Unrealized Profit as a percentage of the cost, for example "8.85" for 8.85 %.
@@ -247,10 +261,17 @@ export type PriceFailure = {
   error: string
 }
 
-// PriceRefresh is the result of a price refresh.
+// RateFailure is one currency that got no new Exchange Rate.
+export type RateFailure = {
+  currency: string
+  error: string
+}
+
+// PriceRefresh is the result of a refresh of the prices and the Exchange Rates.
 export type PriceRefresh = {
   refreshed: number
   failures: PriceFailure[]
+  rateFailures: RateFailure[]
 }
 
 // Sale is one sale with its Realized Profit. The time is RFC 3339 text in UTC.
@@ -308,7 +329,7 @@ export async function fetchSales(
   return readJSON<Sale[]>(response)
 }
 
-// refreshPrices gets new prices for the Instruments in the Holdings of all Accounts.
+// refreshPrices gets new prices for the Instruments in the Holdings of all Accounts, and new Exchange Rates.
 export async function refreshPrices(): Promise<PriceRefresh> {
   const response = await fetch("/api/prices/refresh", { method: "POST" })
   return readJSON<PriceRefresh>(response)

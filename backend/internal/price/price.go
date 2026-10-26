@@ -44,7 +44,7 @@ var markets = map[string]market{
 	".DE": {quoteCurrency: "EUR", priceSuffix: ".DE"},
 }
 
-// QuoteCurrency returns the quote currency of the Instrument from the suffix of its broker ticker.
+// QuoteCurrency returns the Quote Currency of the Instrument from the suffix of its broker ticker.
 // It returns an empty string for an unknown suffix.
 func QuoteCurrency(brokerTicker string) string {
 	m, _, ok := marketOf(brokerTicker)

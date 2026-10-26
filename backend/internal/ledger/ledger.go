@@ -1,6 +1,6 @@
-// Package ledger calculates the state of one Account from its Ledger and the prices: the cash balance,
-// the Net Deposits, the Holdings with their value and Unrealized Profit, the sales with their Realized Profit,
-// and the total result with its parts.
+// Package ledger calculates the state of one Account from its Ledger, the prices and the Exchange Rates.
+// The state has the cash balance, the Net Deposits and the Holdings with their value and Unrealized Profit.
+// It also has the sales with their Realized Profit, and the total result with its parts.
 // It is a pure calculation with no I/O.
 // The tool calculates this state on each request and does not store it.
 package ledger
@@ -38,15 +38,67 @@ var (
 	ErrLotOverclosed = errors.New("the sales close more than the lot volume")
 )
 
-// Ledger is the input of Calculate: all Cash Operations of one Account, its Lots and the prices.
+// PLN is the currency of the Exchange Rates. Each rate is the PLN amount for 1 unit of a currency.
+const PLN = "PLN"
+
+// Ledger is the input of Calculate: all Cash Operations of one Account, its Lots, the prices and the Exchange Rates.
 type Ledger struct {
+	// Currency is the Account currency, for example "USD".
+	Currency string
 	// CashOperations are all Cash Operations of the Account, in time order.
 	CashOperations []CashOperation
 	// Lots are the Lots of the Account, each with its Fills.
 	Lots []Lot
-	// Prices are the close prices in the Account currency, by broker ticker.
+	// QuoteCurrencies are the Quote Currencies of the Instruments, by broker ticker.
+	// An Instrument that is not in the map has an unknown Quote Currency.
+	QuoteCurrencies map[string]string
+	// Prices are the close prices in the Quote Currency of each Instrument, by broker ticker.
 	// A Holding with no price has no value and no Unrealized Profit.
 	Prices map[string]decimal.Decimal
+	// ExchangeRates are the latest Exchange Rates, by currency.
+	ExchangeRates map[string]ExchangeRate
+}
+
+// ExchangeRate is one Exchange Rate of a currency against PLN.
+type ExchangeRate struct {
+	// Rate is the PLN amount for 1 unit of the currency.
+	Rate decimal.Decimal
+	// Date is the NBP table date.
+	Date time.Time
+}
+
+// NoValueReason tells why a Holding has no value.
+type NoValueReason int
+
+const (
+	// ReasonNone tells that the Holding has a value.
+	ReasonNone NoValueReason = iota
+	// ReasonUnknownQuoteCurrency tells that the Quote Currency of the Instrument is not known.
+	ReasonUnknownQuoteCurrency
+	// ReasonCrossRate tells that the Quote Currency and the Account currency are both not PLN and not equal.
+	// The tool has no rate between two such currencies.
+	ReasonCrossRate
+	// ReasonNoPrice tells that the Ledger has no price for the Instrument.
+	ReasonNoPrice
+	// ReasonNoExchangeRate tells that the Ledger has no Exchange Rate for the conversion to the Account currency.
+	ReasonNoExchangeRate
+)
+
+// rateCurrency returns the currency whose Exchange Rate converts an amount in the Quote Currency quote
+// to the Account currency account. It is the currency of the two that is not PLN.
+// It returns "" and true if quote equals account, because then no conversion is necessary.
+// It returns false if quote and account are both not PLN and not equal.
+func rateCurrency(quote, account string) (string, bool) {
+	switch {
+	case quote == account:
+		return "", true
+	case account == PLN:
+		return quote, true
+	case quote == PLN:
+		return account, true
+	default:
+		return "", false
+	}
 }
 
 // CashOperation is one entry of the Ledger.
@@ -139,15 +191,31 @@ type Holding struct {
 	Volume decimal.Decimal
 	// Cost is the open cost in the Account currency. It is positive.
 	Cost decimal.Decimal
-	// HasPrice tells that the Ledger has a price for the Instrument. If it is false,
-	// Price, Value and UnrealizedProfit are zero.
-	HasPrice bool
-	// Price is the close price in the Account currency.
+	// NoValueReason tells why the Holding has no value in the Account currency. It is ReasonNone for a Holding
+	// with a value. For a Holding with no value, Price, ExchangeRate, Value and UnrealizedProfit are zero.
+	NoValueReason NoValueReason
+	// Price is the close price in the Quote Currency.
 	Price decimal.Decimal
-	// Value is the open volume × the price.
+	// ExchangeRateCurrency is the currency whose Exchange Rate converts the value to the Account currency:
+	// the currency of the two that is not PLN. It is empty if the value needs no conversion or no conversion is
+	// possible. It is set also when the Ledger has no price or no rate.
+	ExchangeRateCurrency string
+	// ExchangeRate is the Exchange Rate that the value uses. It is zero if the value uses no rate.
+	ExchangeRate ExchangeRate
+	// Value is the open volume × the price in the Account currency.
 	Value decimal.Decimal
 	// UnrealizedProfit is Value minus Cost. It can be negative.
 	UnrealizedProfit decimal.Decimal
+}
+
+// HasValue tells if the Holding has a value in the Account currency.
+func (h Holding) HasValue() bool {
+	return h.NoValueReason == ReasonNone
+}
+
+// UsesExchangeRate tells if the value of the Holding uses ExchangeRate.
+func (h Holding) UsesExchangeRate() bool {
+	return h.HasValue() && h.ExchangeRateCurrency != ""
 }
 
 // AverageCost returns the open cost per unit. The division keeps decimal.DivisionPrecision (16) decimal places.
@@ -158,9 +226,9 @@ func (h Holding) AverageCost() decimal.Decimal {
 
 // UnrealizedProfitPercent returns the Unrealized Profit × 100 / the open cost. The multiplication comes first,
 // so an exact result stays exact. The division keeps decimal.DivisionPrecision (16) decimal places.
-// It returns false if the Holding has no price or no cost.
+// It returns false if the Holding has no value or no cost.
 func (h Holding) UnrealizedProfitPercent() (decimal.Decimal, bool) {
-	if !h.HasPrice || h.Cost.IsZero() {
+	if !h.HasValue() || h.Cost.IsZero() {
 		return decimal.Zero, false
 	}
 	return h.UnrealizedProfit.Mul(decimal.NewFromInt(100)).Div(h.Cost), true
@@ -186,7 +254,7 @@ func Calculate(l Ledger) (State, error) {
 		return State{}, err
 	}
 	s.Sales = sales
-	s.Holdings = holdings(l.Lots, lots, l.Prices)
+	s.Holdings = holdings(l, lots)
 	for _, sale := range sales {
 		s.RealizedProfit = s.RealizedProfit.Add(sale.RealizedProfit)
 	}
@@ -299,10 +367,10 @@ func closeLots(ops []CashOperation, lots map[string]*lotState) ([]Sale, error) {
 }
 
 // holdings adds the open part of the Lots per Instrument. A fully closed Lot adds nothing.
-// A Holding with a price gets its value and its Unrealized Profit.
-func holdings(lots []Lot, states map[string]*lotState, prices map[string]decimal.Decimal) []Holding {
+// A Holding with a value gets its Unrealized Profit.
+func holdings(l Ledger, states map[string]*lotState) []Holding {
 	byTicker := map[string]*Holding{}
-	for _, lot := range lots {
+	for _, lot := range l.Lots {
 		st := states[lot.PositionID]
 		if !st.openVolume().IsPositive() {
 			continue
@@ -319,13 +387,53 @@ func holdings(lots []Lot, states map[string]*lotState, prices map[string]decimal
 	result := make([]Holding, 0, len(byTicker))
 	for _, h := range byTicker {
 		h.Price, h.Value, h.UnrealizedProfit = decimal.Zero, decimal.Zero, decimal.Zero
-		if p, ok := prices[h.Instrument.Ticker]; ok {
-			h.HasPrice, h.Price = true, p
-			h.Value = h.Volume.Mul(p)
-			h.UnrealizedProfit = h.Value.Sub(h.Cost)
-		}
+		h.setValue(l)
 		result = append(result, *h)
 	}
 	slices.SortFunc(result, func(a, b Holding) int { return cmp.Compare(a.Instrument.Ticker, b.Instrument.Ticker) })
 	return result
+}
+
+// setValue sets the value of the Holding in the Account currency from its price and, if necessary,
+// the Exchange Rate. Otherwise it sets the reason why the Holding has no value.
+func (h *Holding) setValue(l Ledger) {
+	quote, ok := l.QuoteCurrencies[h.Instrument.Ticker]
+	if !ok || quote == "" {
+		h.NoValueReason = ReasonUnknownQuoteCurrency
+		return
+	}
+	currency, ok := rateCurrency(quote, l.Currency)
+	if !ok {
+		h.NoValueReason = ReasonCrossRate
+		return
+	}
+	h.ExchangeRateCurrency = currency
+	closePrice, ok := l.Prices[h.Instrument.Ticker]
+	if !ok {
+		h.NoValueReason = ReasonNoPrice
+		return
+	}
+	value := h.Volume.Mul(closePrice)
+	if currency != "" {
+		rate, ok := l.ExchangeRates[currency]
+		// A rate of zero or less is not valid. It would give a wrong value or a division by zero.
+		if !ok || !rate.Rate.IsPositive() {
+			h.NoValueReason = ReasonNoExchangeRate
+			return
+		}
+		value = convert(value, quote, rate.Rate)
+		h.ExchangeRate = rate
+	}
+	h.Price, h.Value = closePrice, value
+	h.UnrealizedProfit = value.Sub(h.Cost)
+}
+
+// convert converts the amount in the currency from to the other currency of the rate.
+// The rate is the PLN amount for 1 unit of the currency that is not PLN.
+// The division keeps decimal.DivisionPrecision (16) decimal places.
+func convert(amount decimal.Decimal, from string, rate decimal.Decimal) decimal.Decimal {
+	if from == PLN {
+		return amount.Div(rate)
+	}
+	return amount.Mul(rate)
 }

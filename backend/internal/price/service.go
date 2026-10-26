@@ -42,9 +42,9 @@ type Failure struct {
 	Err    error
 }
 
-// CurrencyError tells that the provider gave a price in a currency that is not the quote currency of the Instrument.
+// CurrencyError tells that the provider gave a price in a currency that is not the Quote Currency of the Instrument.
 type CurrencyError struct {
-	// Got is the currency of the price. Want is the quote currency of the Instrument.
+	// Got is the currency of the price. Want is the Quote Currency of the Instrument.
 	Got, Want string
 }
 
@@ -52,7 +52,7 @@ func (e *CurrencyError) Error() string {
 	return fmt.Sprintf("the price is in %s, but the Instrument is quoted in %s", e.Got, e.Want)
 }
 
-// Refresh gets a price for each Instrument that is in a Holding of an Account and has a quote currency.
+// Refresh gets a price for each Instrument that is in a Holding of an Account and has a Quote Currency.
 // A failure of one Instrument does not stop the others.
 // Refresh returns an error if it cannot read or store data, or if ctx ends. Then the result holds the prices
 // that it stored before the error.
@@ -62,14 +62,14 @@ func (s *Service) Refresh(ctx context.Context) (Result, error) {
 	}
 	defer s.release()
 
-	held, err := s.heldInstruments(ctx)
+	held, err := HeldInstruments(ctx, s.store)
 	if err != nil {
 		return Result{}, err
 	}
 	return s.refresh(ctx, held)
 }
 
-// RefreshIfStale runs a refresh if a held Instrument with a quote currency has no price fetched today, in UTC.
+// RefreshIfStale runs a refresh if a held Instrument with a Quote Currency has no price fetched today, in UTC.
 // Thus a later start of the same day tries again for the Instruments that failed. It tells if the refresh ran.
 func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 	if err := s.acquire(ctx); err != nil {
@@ -77,7 +77,7 @@ func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 	}
 	defer s.release()
 
-	held, err := s.heldInstruments(ctx)
+	held, err := HeldInstruments(ctx, s.store)
 	if err != nil {
 		return Result{}, false, err
 	}
@@ -85,7 +85,7 @@ func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 	if err != nil {
 		return Result{}, false, err
 	}
-	if !slices.ContainsFunc(held, func(h heldInstrument) bool { return !fetched[h.ticker] }) {
+	if !slices.ContainsFunc(held, func(h HeldInstrument) bool { return !fetched[h.Ticker] }) {
 		return Result{}, false, nil
 	}
 	result, err := s.refresh(ctx, held)
@@ -114,7 +114,7 @@ func StartOfDay(t time.Time) time.Time {
 }
 
 // refresh gets and stores a price for each held Instrument. It stops when ctx ends.
-func (s *Service) refresh(ctx context.Context, held []heldInstrument) (Result, error) {
+func (s *Service) refresh(ctx context.Context, held []HeldInstrument) (Result, error) {
 	var result Result
 	for _, h := range held {
 		if err := ctx.Err(); err != nil {
@@ -126,11 +126,11 @@ func (s *Service) refresh(ctx context.Context, held []heldInstrument) (Result, e
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return result, fmt.Errorf("refresh prices: %w", ctxErr)
 			}
-			result.Failures = append(result.Failures, Failure{Ticker: h.ticker, Err: err})
+			result.Failures = append(result.Failures, Failure{Ticker: h.Ticker, Err: err})
 			continue
 		}
 		err = s.store.SavePrice(ctx, store.Price{
-			Ticker: h.ticker, Date: q.Date, Close: q.Close, Currency: q.Currency, Source: q.Source, FetchedAt: s.now(),
+			Ticker: h.Ticker, Date: q.Date, Close: q.Close, Currency: q.Currency, Source: q.Source, FetchedAt: s.now(),
 		})
 		if err != nil {
 			return result, err
@@ -141,59 +141,63 @@ func (s *Service) refresh(ctx context.Context, held []heldInstrument) (Result, e
 }
 
 // quote gets the price of the held Instrument with its price ticker and checks its currency.
-func (s *Service) quote(ctx context.Context, h heldInstrument) (Quote, error) {
-	q, err := s.provider.LastClose(ctx, h.priceTicker)
+func (s *Service) quote(ctx context.Context, h HeldInstrument) (Quote, error) {
+	q, err := s.provider.LastClose(ctx, h.PriceTicker)
 	if err != nil {
 		return Quote{}, err
 	}
-	if q.Currency != h.quoteCurrency {
-		return Quote{}, &CurrencyError{Got: q.Currency, Want: h.quoteCurrency}
+	if q.Currency != h.QuoteCurrency {
+		return Quote{}, &CurrencyError{Got: q.Currency, Want: h.QuoteCurrency}
 	}
 	return q, nil
 }
 
-// heldInstrument is an Instrument in a Holding of an Account, with a known quote currency.
-type heldInstrument struct {
-	// ticker is the broker ticker.
-	ticker string
-	// priceTicker is the manual price ticker, or the default mapping if the Instrument has no manual price ticker.
-	priceTicker   string
-	quoteCurrency string
+// HeldInstrument is an Instrument in a Holding of an Account, with a known Quote Currency.
+type HeldInstrument struct {
+	// Ticker is the broker ticker.
+	Ticker string
+	// PriceTicker is the manual price ticker, or the default mapping if the Instrument has no manual price ticker.
+	PriceTicker   string
+	QuoteCurrency string
+	// AccountCurrencies are the currencies of the Accounts that hold the Instrument, in order.
+	AccountCurrencies []string
 }
 
-// heldInstruments returns the Instruments in a Holding of any Account that have a quote currency,
-// in broker ticker order. The tool cannot check the price of an Instrument with no quote currency.
-func (s *Service) heldInstruments(ctx context.Context) ([]heldInstrument, error) {
-	tickers, err := s.heldTickers(ctx)
+// HeldInstruments returns the Instruments in a Holding of any Account that have a Quote Currency,
+// in broker ticker order. The tool cannot check the price of an Instrument with no Quote Currency.
+func HeldInstruments(ctx context.Context, st *store.Store) ([]HeldInstrument, error) {
+	tickers, err := heldTickers(ctx, st)
 	if err != nil {
 		return nil, err
 	}
-	instruments, err := s.store.Instruments(ctx)
+	instruments, err := st.Instruments(ctx)
 	if err != nil {
 		return nil, err
 	}
-	held := make([]heldInstrument, 0, len(tickers))
-	for _, ticker := range tickers {
+	held := make([]HeldInstrument, 0, len(tickers))
+	for _, ticker := range slices.Sorted(maps.Keys(tickers)) {
 		inst := instruments[ticker]
 		if inst.QuoteCurrency == "" {
 			continue
 		}
-		held = append(held, heldInstrument{
-			ticker: ticker, priceTicker: EffectiveTicker(ticker, inst.PriceTicker), quoteCurrency: inst.QuoteCurrency,
+		held = append(held, HeldInstrument{
+			Ticker: ticker, PriceTicker: EffectiveTicker(ticker, inst.PriceTicker), QuoteCurrency: inst.QuoteCurrency,
+			AccountCurrencies: slices.Sorted(maps.Keys(tickers[ticker])),
 		})
 	}
 	return held, nil
 }
 
-// heldTickers returns the broker tickers of the Instruments in a Holding of any Account, in order.
-func (s *Service) heldTickers(ctx context.Context) ([]string, error) {
-	accounts, err := s.store.Accounts(ctx)
+// heldTickers returns the broker tickers of the Instruments in a Holding of any Account,
+// each with the set of the currencies of the Accounts that hold it.
+func heldTickers(ctx context.Context, st *store.Store) (map[string]map[string]bool, error) {
+	accounts, err := st.Accounts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	held := map[string]bool{}
+	held := map[string]map[string]bool{}
 	for _, acc := range accounts {
-		l, err := s.store.Ledger(ctx, acc.ID)
+		l, err := st.Ledger(ctx, acc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -202,8 +206,11 @@ func (s *Service) heldTickers(ctx context.Context) ([]string, error) {
 			return nil, fmt.Errorf("calculate the holdings of account %d: %w", acc.ID, err)
 		}
 		for _, h := range state.Holdings {
-			held[h.Instrument.Ticker] = true
+			if held[h.Instrument.Ticker] == nil {
+				held[h.Instrument.Ticker] = map[string]bool{}
+			}
+			held[h.Instrument.Ticker][acc.Currency] = true
 		}
 	}
-	return slices.Sorted(maps.Keys(held)), nil
+	return held, nil
 }

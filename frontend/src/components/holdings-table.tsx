@@ -13,6 +13,7 @@ import {
   formatAmount,
   formatDate,
   formatPercent,
+  formatRate,
   formatVolume,
 } from "@/lib/format"
 
@@ -46,6 +47,7 @@ export function HoldingsTable({
           <TableHead className="text-right">Average cost</TableHead>
           <TableHead className="text-right">Cost</TableHead>
           <TableHead className="text-right">Price</TableHead>
+          <TableHead className="text-right">Exchange Rate</TableHead>
           <TableHead className="text-right">Value</TableHead>
           <TableHead className="text-right">Unrealized Profit</TableHead>
           <TableHead className="text-right">%</TableHead>
@@ -99,9 +101,31 @@ export function HoldingsTable({
             <TableCell className="text-right tabular-nums">
               {holding.price !== null && holding.priceDate !== null ? (
                 <div className="flex flex-col">
-                  <span>{formatAmount(holding.price, currency)}</span>
+                  <span>
+                    {formatAmount(
+                      holding.price,
+                      holding.quoteCurrency ?? currency
+                    )}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {formatDate(holding.priceDate)}
+                  </span>
+                </div>
+              ) : (
+                <NoValue />
+              )}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {holding.exchangeRate !== null &&
+              holding.exchangeRateCurrency !== null &&
+              holding.exchangeRateDate !== null ? (
+                <div className="flex flex-col">
+                  <span>
+                    1 {holding.exchangeRateCurrency} ={" "}
+                    {formatRate(holding.exchangeRate)} PLN
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDate(holding.exchangeRateDate)}
                   </span>
                 </div>
               ) : (
@@ -136,7 +160,8 @@ export function HoldingsTable({
   )
 }
 
-// NoValue marks a cell of a Holding that has no price. The note of the Holding tells why.
+// NoValue marks an empty cell. A Holding with no price has a note that tells why.
+// A Holding in the Account currency has no Exchange Rate.
 function NoValue() {
   return <span className="text-muted-foreground">—</span>
 }

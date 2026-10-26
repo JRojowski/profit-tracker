@@ -33,6 +33,22 @@ type CashOperation struct {
 	ImportID     int64
 }
 
+type ExchangeRate struct {
+	ID          int64
+	Currency    string
+	Date        string
+	Rate        decimal.Decimal
+	TableNumber string
+	FetchedAt   string
+}
+
+type ExchangeRateRange struct {
+	Currency  string
+	FirstDay  string
+	LastDay   string
+	FetchedAt string
+}
+
 type Import struct {
 	ID                    int64
 	AccountID             sql.NullInt64

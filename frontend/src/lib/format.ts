@@ -23,6 +23,14 @@ export function formatVolume(volume: string): string {
   }).format(Number(volume))
 }
 
+// formatRate shows an Exchange Rate with all its digits. The NBP gives at most 4 decimal places.
+export function formatRate(rate: string): string {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 6,
+  }).format(Number(rate))
+}
+
 // formatPercent shows a decimal percentage from the backend with 2 decimal places, for example "8.85 %".
 // The backend sends 8.85 for 8.85 %, not 0.0885.
 export function formatPercent(percent: string): string {

@@ -23,7 +23,7 @@ type priceSourceResponse struct {
 	// PriceTicker is the price ticker that the tool uses: the manual price ticker, or the default mapping.
 	PriceTicker       string `json:"priceTicker"`
 	PriceTickerManual bool   `json:"priceTickerManual"`
-	// QuoteCurrency is nil when the quote currency of the Instrument is not known.
+	// QuoteCurrency is nil when the Quote Currency of the Instrument is not known.
 	QuoteCurrency       *string `json:"quoteCurrency"`
 	QuoteCurrencyManual bool    `json:"quoteCurrencyManual"`
 }
@@ -36,7 +36,7 @@ type priceTickerRequest struct {
 
 // quoteCurrencyRequest is the body of PUT /api/instruments/{ticker}/quote-currency.
 type quoteCurrencyRequest struct {
-	// QuoteCurrency is the manual quote currency. An empty value restores the quote currency from the ticker suffix.
+	// QuoteCurrency is the manual Quote Currency. An empty value restores the Quote Currency from the ticker suffix.
 	QuoteCurrency string `json:"quoteCurrency"`
 }
 
@@ -53,7 +53,7 @@ func (a *api) setPriceTicker(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// setQuoteCurrency sets or removes the manual quote currency of the Instrument.
+// setQuoteCurrency sets or removes the manual Quote Currency of the Instrument.
 func (a *api) setQuoteCurrency(w http.ResponseWriter, r *http.Request) {
 	var req quoteCurrencyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

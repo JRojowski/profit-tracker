@@ -21,6 +21,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/httpapi"
 	"github.com/jrojowski/profit-tracker/backend/internal/price"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
@@ -38,6 +39,10 @@ type testServer struct {
 	client *http.Client
 	// prices is the price service of the server. A test calls it to run the refresh at start.
 	prices *price.Service
+	// rates is the Exchange Rate service of the server. A test calls it to run the refresh at start.
+	rates *exchange.Service
+	// rateProvider is the fake Exchange Rate provider of the server. A test sets its rates and its failures.
+	rateProvider *fakeRateProvider
 	// clock is the clock of the server. A test moves it to change "today".
 	clock *testClock
 	// db is the database of the server. Only a test that needs data that no endpoint shows reads it.
@@ -74,17 +79,22 @@ func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *tes
 
 	clock := &testClock{now: testToday}
 	prices := price.NewService(db, provider, clock.Now)
+	rateProvider := newFakeRateProvider()
+	rates := exchange.NewService(db, rateProvider, clock.Now)
 	handler := httpapi.NewHandler(httpapi.Options{
-		Store:    db,
-		Frontend: frontend,
-		Logger:   slog.New(slog.DiscardHandler),
-		Prices:   prices,
-		Now:      clock.Now,
+		Store:         db,
+		Frontend:      frontend,
+		Logger:        slog.New(slog.DiscardHandler),
+		Prices:        prices,
+		ExchangeRates: rates,
+		Now:           clock.Now,
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	return &testServer{URL: srv.URL, client: srv.Client(), prices: prices, clock: clock, db: db}
+	return &testServer{
+		URL: srv.URL, client: srv.Client(), prices: prices, rates: rates, rateProvider: rateProvider, clock: clock, db: db,
+	}
 }
 
 // testToday is the time of the server clock at the start of a test.
@@ -179,6 +189,88 @@ func (f *fakeProvider) requestedTickers() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.requested...)
+}
+
+// fakeRateProvider is an exchange.Provider with fixed Exchange Rates per currency and table date.
+// It records each requested range. It is safe for concurrent use.
+//
+// The fake starts with one default rate for USD, EUR and GBP on 2026-10-22. Thus a test that does not care
+// about the rates gets no rate failure. The first set of a currency replaces its default rate.
+// A currency with no rate gives an empty list, as the NBP does for a currency that is not in table A.
+type fakeRateProvider struct {
+	mu    sync.Mutex
+	rates map[string][]exchange.Rate
+	// defaults are the currencies that still have only their default rate.
+	defaults map[string]bool
+	// failures are the errors of the currencies that must fail.
+	failures  map[string]error
+	requested []rateRequest
+}
+
+// rateRequest is one requested range: the currency and the first and last day as YYYY-MM-DD.
+type rateRequest struct {
+	Currency, From, To string
+}
+
+func newFakeRateProvider() *fakeRateProvider {
+	f := &fakeRateProvider{rates: map[string][]exchange.Rate{}, defaults: map[string]bool{}, failures: map[string]error{}}
+	day := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
+	for currency, mid := range map[string]string{"USD": "4.00", "EUR": "4.25", "GBP": "4.90"} {
+		f.rates[currency] = []exchange.Rate{{Date: day, Mid: decimal.RequireFromString(mid), Table: "default/A/NBP/2026"}}
+		f.defaults[currency] = true
+	}
+	return f
+}
+
+// Rates returns the rates of the currency with a table date from from to to, in date order,
+// or the error of the currency if it must fail.
+func (f *fakeRateProvider) Rates(_ context.Context, currency string, from, to time.Time) ([]exchange.Rate, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.requested = append(f.requested, rateRequest{
+		Currency: currency, From: from.Format(time.DateOnly), To: to.Format(time.DateOnly),
+	})
+	if err := f.failures[currency]; err != nil {
+		return nil, err
+	}
+	var got []exchange.Rate
+	for _, r := range f.rates[currency] {
+		if !r.Date.Before(from) && !r.Date.After(to) {
+			got = append(got, r)
+		}
+	}
+	return got, nil
+}
+
+// set adds the rate of the currency for the table date as YYYY-MM-DD. Give the dates in order.
+// The first set of a currency removes its default rate.
+func (f *fakeRateProvider) set(t *testing.T, currency, date, mid string) {
+	t.Helper()
+	at, err := time.Parse(time.DateOnly, date)
+	require.NoError(t, err)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.defaults[currency] {
+		delete(f.rates, currency)
+		delete(f.defaults, currency)
+	}
+	f.rates[currency] = append(f.rates[currency], exchange.Rate{
+		Date: at, Mid: decimal.RequireFromString(mid), Table: fmt.Sprintf("%d/A/NBP/%d", at.YearDay(), at.Year()),
+	})
+}
+
+// fail makes each later request of the currency fail with err. A nil err stops the failures.
+func (f *fakeRateProvider) fail(currency string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failures[currency] = err
+}
+
+// requestedRanges returns the requested ranges, in request order.
+func (f *fakeRateProvider) requestedRanges() []rateRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]rateRequest(nil), f.requested...)
 }
 
 // get sends a GET request to path and returns the status, the content type and the body.

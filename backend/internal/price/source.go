@@ -17,7 +17,7 @@ const maxPriceTickerLength = 32
 var (
 	// ErrInvalidPriceTicker tells that a manual price ticker has whitespace in it or is too long.
 	ErrInvalidPriceTicker = errors.New("invalid price ticker")
-	// ErrInvalidQuoteCurrency tells that a manual quote currency is not three letters A to Z.
+	// ErrInvalidQuoteCurrency tells that a manual Quote Currency is not three letters A to Z.
 	ErrInvalidQuoteCurrency = errors.New("invalid quote currency")
 )
 
@@ -59,12 +59,12 @@ func checkPriceTicker(priceTicker string) error {
 	return nil
 }
 
-// SetQuoteCurrency sets the manual quote currency of the Instrument with the broker ticker and returns the Instrument.
+// SetQuoteCurrency sets the manual Quote Currency of the Instrument with the broker ticker and returns the Instrument.
 // It removes the whitespace at the start and at the end and changes the letters to upper case.
-// An empty value removes the manual quote currency. Then the quote currency comes from the ticker suffix again,
+// An empty value removes the manual Quote Currency. Then the Quote Currency comes from the ticker suffix again,
 // and it is not known for an unknown suffix.
 //
-// SetQuoteCurrency keeps the stored prices. The Holdings use only a price in the quote currency of the Instrument.
+// SetQuoteCurrency keeps the stored prices. The Holdings use only a price in the Quote Currency of the Instrument.
 // It returns ErrInvalidQuoteCurrency for a value that is not valid, and store.ErrNotFound for an unknown Instrument.
 func (s *Service) SetQuoteCurrency(ctx context.Context, brokerTicker, quoteCurrency string) (store.Instrument, error) {
 	quoteCurrency = strings.ToUpper(strings.TrimSpace(quoteCurrency))

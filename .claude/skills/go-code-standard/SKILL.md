@@ -48,7 +48,7 @@ backend/
   internal/<package>/   one package per domain concept
 ```
 
-- Name packages after the domain concept, with the `GLOSSARY.md` term: `xtb`, `lot`, `ledger`, `importer`, `price`, `store`, `httpapi`.
+- Name packages after the domain concept, with the `GLOSSARY.md` term: `xtb`, `lot`, `ledger`, `importer`, `price`, `exchange`, `store`, `httpapi`.
 - Give a package a name that tells what it holds. `util`, `common`, `models` and `helpers` tell nothing.
 - Use names that do not repeat the package: `ledger.Calculate`, `price.Provider`.
 - Keep the domain packages free of HTTP and SQL. `httpapi` and `store` are the adapters.
@@ -65,7 +65,7 @@ backend/
 ## Interfaces and functions
 
 - Declare an interface in the package that uses it, with only the methods that package calls.
-- Add an interface only at a real seam. The one seam in v1 is `price.Provider`. A type with one implementation stays a concrete type.
+- Add an interface only at a real seam. There are two seams: `price.Provider` (v1) and `exchange.Provider` (v2). A type with one implementation stays a concrete type.
 - Accept interfaces and return concrete types.
 - Pass `ctx context.Context` as the first parameter of every function that does I/O. Keep a context out of structs.
 - Prefer a pure function for calculations. The Ledger calculator takes data and returns data.
@@ -79,7 +79,7 @@ backend/
 
 ## Tests
 
-- Test external behaviour at the HTTP API seam (see the spec). Use `package httpapi_test`, a real SQLite file in `t.TempDir()`, and a fake `price.Provider`.
+- Test external behaviour at the HTTP API seam (see the spec). Use `package httpapi_test`, a real SQLite file in `t.TempDir()`, a fake `price.Provider` and a fake `exchange.Provider`.
 - Use `require` when the test cannot continue after a failure. Use `assert` for the checks after that.
 - Compare decimals with `assert.True(t, want.Equal(got), "want %s, got %s", want, got)`, or compare their `String()` values. `assert.Equal` on two `decimal.Decimal` values compares the internal form and can fail for equal numbers.
 - Write table tests as a slice of named cases with `t.Run(tc.name, ...)`.

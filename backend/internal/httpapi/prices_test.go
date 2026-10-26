@@ -17,8 +17,15 @@ import (
 
 // refreshResponse is the body of POST /api/prices/refresh.
 type refreshResponse struct {
-	Refreshed int              `json:"refreshed"`
-	Failures  []refreshFailure `json:"failures"`
+	Refreshed    int              `json:"refreshed"`
+	Failures     []refreshFailure `json:"failures"`
+	RateFailures []rateFailure    `json:"rateFailures"`
+}
+
+// rateFailure is one currency that got no Exchange Rate in a refresh.
+type rateFailure struct {
+	Currency string `json:"currency"`
+	Error    string `json:"error"`
 }
 
 // refreshFailure is one Instrument that got no price in a refresh.
@@ -34,7 +41,9 @@ type summaryPrices struct {
 	UnrealizedProfit string  `json:"unrealizedProfit"`
 	TotalResult      string  `json:"totalResult"`
 	PriceDate        *string `json:"priceDate"`
+	ExchangeRateDate *string `json:"exchangeRateDate"`
 	StalePrices      bool    `json:"stalePrices"`
+	StaleRates       bool    `json:"staleRates"`
 	UnpricedHoldings int     `json:"unpricedHoldings"`
 }
 
@@ -44,6 +53,9 @@ type holdingPrices struct {
 	QuoteCurrency           *string `json:"quoteCurrency"`
 	Price                   *string `json:"price"`
 	PriceDate               *string `json:"priceDate"`
+	ExchangeRate            *string `json:"exchangeRate"`
+	ExchangeRateCurrency    *string `json:"exchangeRateCurrency"`
+	ExchangeRateDate        *string `json:"exchangeRateDate"`
 	Value                   *string `json:"value"`
 	UnrealizedProfit        *string `json:"unrealizedProfit"`
 	UnrealizedProfitPercent *string `json:"unrealizedProfitPercent"`
@@ -122,7 +134,7 @@ func TestRefreshPrices_HoldingsInAccountCurrency_ReturnsValueAndUnrealizedProfit
 
 	refresh := srv.refreshPrices(t)
 
-	assert.Equal(t, refreshResponse{Refreshed: 2, Failures: []refreshFailure{}}, refresh)
+	assert.Equal(t, refreshResponse{Refreshed: 2, Failures: []refreshFailure{}, RateFailures: []rateFailure{}}, refresh)
 	assert.Equal(t, summaryPrices{
 		Cash: "740.00", Value: "1046.00", UnrealizedProfit: "46.00", TotalResult: "46.00",
 		PriceDate: ptr("2026-10-21"), StalePrices: false, UnpricedHoldings: 0,
@@ -166,7 +178,7 @@ func TestRefreshPrices_PriceInOtherCurrency_RejectsThePrice(t *testing.T) {
 
 	assert.Equal(t, refreshResponse{Refreshed: 1, Failures: []refreshFailure{
 		{Ticker: "ABC.US", Error: "the price is in EUR, but the Instrument is quoted in USD"},
-	}}, refresh)
+	}, RateFailures: []rateFailure{}}, refresh)
 	holdings := srv.holdingPrices(t, id)
 	require.Len(t, holdings, 2)
 	assert.Equal(t, noValue("ABC.US", ptr("USD"), noPriceNote), holdings[0], "the tool must store nothing for a rejected price")
@@ -193,7 +205,7 @@ func TestRefreshPrices_ProviderFailsNextDay_KeepsLastPricesWithStaleWarning(t *t
 	assert.Equal(t, refreshResponse{Refreshed: 0, Failures: []refreshFailure{
 		{Ticker: "ABC.US", Error: "the price source does not respond"},
 		{Ticker: "XYZ.US", Error: "the price source does not respond"},
-	}}, refresh)
+	}, RateFailures: []rateFailure{}}, refresh)
 	assert.Equal(t, summaryPrices{
 		Cash: "740.00", Value: "1046.00", UnrealizedProfit: "46.00", TotalResult: "46.00",
 		PriceDate: ptr("2026-10-22"), StalePrices: true, UnpricedHoldings: 0,
@@ -234,17 +246,17 @@ func TestAccountHoldings_OtherOrUnknownQuoteCurrency_ShowsNoValueAndNote(t *test
 
 	refresh := srv.refreshPrices(t)
 
-	assert.Equal(t, refreshResponse{Refreshed: 3, Failures: []refreshFailure{}}, refresh,
+	assert.Equal(t, refreshResponse{Refreshed: 3, Failures: []refreshFailure{}, RateFailures: []rateFailure{}}, refresh,
 		"the refresh stores the EUR price of DEF.DE and skips GHI.FR with no quote currency")
 	assert.NotContains(t, provider.requestedTickers(), "GHI.FR")
 	holdings := srv.holdingPrices(t, id)
 	require.Len(t, holdings, 4)
-	assert.Equal(t, noValue("DEF.DE", ptr("EUR"), "The Instrument is quoted in EUR. The tool shows no value in USD."), holdings[1])
+	assert.Equal(t, noValue("DEF.DE", ptr("EUR"), "The Instrument is quoted in EUR. The tool has no Exchange Rate between EUR and USD."), holdings[1])
 	assert.Equal(t, noValue("GHI.FR", nil, unknownQuoteCurrencyNote), holdings[2])
 	assert.Equal(t, summaryPrices{
 		Cash: "660.00", Value: "966.00", UnrealizedProfit: "46.00", TotalResult: "46.00",
 		PriceDate: ptr("2026-10-22"), StalePrices: false, UnpricedHoldings: 2,
-	}, srv.summaryPrices(t, id), "a Holding in another quote currency does not make the prices stale")
+	}, srv.summaryPrices(t, id), "the EUR price of DEF.DE is current, and GHI.FR has no quote currency")
 }
 
 func TestRefreshPrices_DefaultTickerMapping_AsksForPriceTickers(t *testing.T) {
@@ -275,7 +287,7 @@ func TestRefreshPrices_NoHoldings_RefreshesNothing(t *testing.T) {
 
 	refresh := srv.refreshPrices(t)
 
-	assert.Equal(t, refreshResponse{Refreshed: 0, Failures: []refreshFailure{}}, refresh)
+	assert.Equal(t, refreshResponse{Refreshed: 0, Failures: []refreshFailure{}, RateFailures: []rateFailure{}}, refresh)
 	assert.Empty(t, provider.requestedTickers())
 }
 

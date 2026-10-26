@@ -9,7 +9,7 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/store/queries"
 )
 
-// Instrument is the price source of one Instrument: its quote currency and its manual price ticker.
+// Instrument is the price source of one Instrument: its Quote Currency and its manual price ticker.
 type Instrument struct {
 	// Ticker is the broker ticker.
 	Ticker string
@@ -72,10 +72,10 @@ func (s *Store) SetPriceTicker(ctx context.Context, ticker, priceTicker string, 
 	return toInstrument(row), nil
 }
 
-// SetQuoteCurrency sets the quote currency of the Instrument and returns the Instrument, or ErrNotFound.
-// manual tells that the user set the value. An empty quoteCurrency tells that the quote currency is not known.
+// SetQuoteCurrency sets the Quote Currency of the Instrument and returns the Instrument, or ErrNotFound.
+// manual tells that the user set the value. An empty quoteCurrency tells that the Quote Currency is not known.
 // It keeps the stored prices. A price in another currency gives no value, because the Holdings use only
-// the prices in the quote currency.
+// the prices in the Quote Currency.
 func (s *Store) SetQuoteCurrency(ctx context.Context, ticker, quoteCurrency string, manual bool) (Instrument, error) {
 	var flag int64
 	if manual {
