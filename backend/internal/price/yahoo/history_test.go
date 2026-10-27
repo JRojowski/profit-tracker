@@ -161,3 +161,55 @@ func TestLastClose_TooManyRequests_ReturnsSentinelError(t *testing.T) {
 
 	require.ErrorIs(t, err, price.ErrTooManyRequests)
 }
+
+func TestNoData_NotFoundOrEmptyResult_WrapsErrNoData(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "404 for a delisted ticker", status: http.StatusNotFound, body: recorded(t, "not_found.json")},
+		{name: "404 with no JSON", status: http.StatusNotFound, body: "Not Found\n"},
+		{name: "no result", status: http.StatusOK, body: `{"chart":{"result":[],"error":null}}`},
+		{name: "null result", status: http.StatusOK, body: `{"chart":{"result":null,"error":null}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			provider, _ := startHistory(t, tc.status, tc.body)
+
+			_, lastErr := provider.LastClose(t.Context(), "NOPE")
+			_, historyErr := provider.DailyCloses(t.Context(), "NOPE", day(2026, 1, 2), day(2026, 10, 22))
+
+			require.ErrorIs(t, lastErr, price.ErrNoData)
+			require.ErrorIs(t, historyErr, price.ErrNoData)
+			assert.Contains(t, lastErr.Error(), "NOPE")
+			assert.Contains(t, historyErr.Error(), "NOPE")
+		})
+	}
+}
+
+func TestNoData_OtherErrors_DoNotWrapErrNoData(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "server error", status: http.StatusInternalServerError, body: "<html>error</html>"},
+		{name: "too many requests", status: http.StatusTooManyRequests, body: "Too Many Requests\n"},
+		{name: "monthly response", status: http.StatusOK, body: recorded(t, "monthly.json")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			provider, _ := startHistory(t, tc.status, tc.body)
+
+			_, err := provider.DailyCloses(t.Context(), "AAPL", day(2020, 8, 1), day(2020, 9, 30))
+
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, price.ErrNoData)
+		})
+	}
+}

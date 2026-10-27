@@ -179,9 +179,19 @@ func (s *Service) refresh(ctx context.Context, held []HeldInstrument) (Result, e
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("refresh prices: %w", err)
 		}
-		q, err := s.quote(ctx, h)
+		q, err := s.provider.LastClose(ctx, h.PriceTicker)
+		if err == nil {
+			// The price check needs the currency of the price source, also when it is not the Quote Currency.
+			if err := s.store.SetSourceCurrency(ctx, h.Ticker, q.Currency); err != nil {
+				return result, err
+			}
+			err = checkCurrency(q.Currency, h.QuoteCurrency)
+		}
 		if err != nil {
 			if stop, err := stopOn(ctx, err, &result); stop {
+				return result, err
+			}
+			if err := s.recordNoData(ctx, h.Ticker, err); err != nil {
 				return result, err
 			}
 			result.Failures = append(result.Failures, Failure{Ticker: h.Ticker, Err: err})
@@ -216,16 +226,21 @@ func stopOn(ctx context.Context, err error, result *Result) (bool, error) {
 	return false, err
 }
 
-// quote gets the price of the held Instrument with its price ticker and checks its currency.
-func (s *Service) quote(ctx context.Context, h HeldInstrument) (Quote, error) {
-	q, err := s.provider.LastClose(ctx, h.PriceTicker)
-	if err != nil {
-		return Quote{}, err
+// checkCurrency returns a *CurrencyError if the currency of a price is not the Quote Currency.
+func checkCurrency(got, quoteCurrency string) error {
+	if got != quoteCurrency {
+		return &CurrencyError{Got: got, Want: quoteCurrency}
 	}
-	if q.Currency != h.QuoteCurrency {
-		return Quote{}, &CurrencyError{Got: q.Currency, Want: h.QuoteCurrency}
+	return nil
+}
+
+// recordNoData stores that the price source has no data for the price ticker, if err wraps ErrNoData.
+// The price check uses it. Another error tells nothing about the price ticker, so it changes nothing.
+func (s *Service) recordNoData(ctx context.Context, ticker string, err error) error {
+	if !errors.Is(err, ErrNoData) {
+		return nil
 	}
-	return q, nil
+	return s.store.SetPriceNoData(ctx, ticker)
 }
 
 // HeldInstrument is an Instrument in a Holding of an Account, with a known Quote Currency.

@@ -44,6 +44,16 @@ func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	series := rateSeries(stored)
+	instruments, err := a.store.Instruments(ctx)
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
+	warnings, err := a.readPriceWarnings(ctx, instruments, prices)
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
 
 	views := make([]accountView, 0, len(accounts))
 	histories := make([]allaccounts.HistoryAccount, 0, len(accounts))
@@ -83,6 +93,8 @@ func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
 		Warnings:         rateWarnings(views, hero.result.Rows, hero.latest),
 		valueHistoryBody: unavailableValueHistoryBody(),
 	}
+	// The Price Warnings do not need an Exchange Rate. They show also when the history is not available.
+	resp.PriceWarnings = warnings.all()
 	// The history uses the same rates as the hero. It is not available when the hero is not available.
 	if !hero.result.Available {
 		writeJSON(w, http.StatusOK, resp)
@@ -96,6 +108,7 @@ func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Available = true
 	resp.valueHistoryBody = newValueHistoryBody(ledger.PLN, history.Points, uniqueInstruments(valuedAtCost))
+	resp.PriceWarnings = warnings.all()
 	writeJSON(w, http.StatusOK, resp)
 }
 

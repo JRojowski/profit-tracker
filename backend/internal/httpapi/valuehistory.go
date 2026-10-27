@@ -30,8 +30,9 @@ type valueHistoryBody struct {
 	PeriodStarts periodStartsResponse `json:"periodStarts"`
 	// ValuedAtCost are the Instruments that the tool valued at cost on one or more days, in ticker order.
 	ValuedAtCost []valuedAtCostResponse `json:"valuedAtCost"`
-	// PriceWarnings are the Price Warnings of the Instruments. The list is empty for now.
-	PriceWarnings []struct{} `json:"priceWarnings"`
+	// PriceWarnings are the Price Warnings of the Instruments, also of the sold ones. The points do not change
+	// when a warning exists.
+	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
 }
 
 // valuePointResponse is the state of the Account at the end of one calendar day.
@@ -99,6 +100,12 @@ func (a *api) accountValueHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	warnings, err := a.readPriceWarnings(ctx, in.instruments, prices)
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
+
 	history, err := valuehistory.Calculate(valuehistory.Input{
 		Ledger:        in.ledger,
 		Closes:        quoteCloses(in.instruments, prices),
@@ -109,9 +116,9 @@ func (a *api) accountValueHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, valueHistoryResponse{
-		AccountID: acc.ID, valueHistoryBody: newValueHistoryBody(acc.Currency, history.Points, history.ValuedAtCost),
-	})
+	body := newValueHistoryBody(acc.Currency, history.Points, history.ValuedAtCost)
+	body.PriceWarnings = warnings.forLedger(in.ledger)
+	writeJSON(w, http.StatusOK, valueHistoryResponse{AccountID: acc.ID, valueHistoryBody: body})
 }
 
 // newValueHistoryBody returns the body of the points, with the Time-Weighted Return of each period.
@@ -120,7 +127,7 @@ func newValueHistoryBody(currency string, points []valuehistory.Point, valuedAtC
 		Currency:      currency,
 		Points:        make([]valuePointResponse, 0, len(points)),
 		ValuedAtCost:  make([]valuedAtCostResponse, 0, len(valuedAtCost)),
-		PriceWarnings: []struct{}{},
+		PriceWarnings: []priceWarningResponse{},
 	}
 	days := make([]returns.DayValue, 0, len(points))
 	for _, p := range points {

@@ -11,7 +11,7 @@ import (
 )
 
 const instrumentPriceSource = `-- name: InstrumentPriceSource :one
-SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual
+SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
 FROM instruments
 WHERE ticker = ?
 `
@@ -27,12 +27,15 @@ func (q *Queries) InstrumentPriceSource(ctx context.Context, ticker string) (Ins
 		&i.QuoteCurrency,
 		&i.PriceTicker,
 		&i.QuoteCurrencyManual,
+		&i.SourceCurrency,
+		&i.PriceNoData,
+		&i.PriceConfirmed,
 	)
 	return i, err
 }
 
 const instrumentPriceSources = `-- name: InstrumentPriceSources :many
-SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual
+SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
 FROM instruments
 ORDER BY ticker
 `
@@ -54,6 +57,9 @@ func (q *Queries) InstrumentPriceSources(ctx context.Context) ([]Instrument, err
 			&i.QuoteCurrency,
 			&i.PriceTicker,
 			&i.QuoteCurrencyManual,
+			&i.SourceCurrency,
+			&i.PriceNoData,
+			&i.PriceConfirmed,
 		); err != nil {
 			return nil, err
 		}
@@ -68,11 +74,78 @@ func (q *Queries) InstrumentPriceSources(ctx context.Context) ([]Instrument, err
 	return items, nil
 }
 
+const resetPriceCheck = `-- name: ResetPriceCheck :one
+UPDATE instruments
+SET source_currency = NULL, price_no_data = 0, price_confirmed = 0
+WHERE ticker = ?
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+`
+
+// A new price ticker needs a new price check. The answers and the confirmation of the old price ticker do not apply.
+func (q *Queries) ResetPriceCheck(ctx context.Context, ticker string) (Instrument, error) {
+	row := q.db.QueryRowContext(ctx, resetPriceCheck, ticker)
+	var i Instrument
+	err := row.Scan(
+		&i.ID,
+		&i.Ticker,
+		&i.Name,
+		&i.Category,
+		&i.QuoteCurrency,
+		&i.PriceTicker,
+		&i.QuoteCurrencyManual,
+		&i.SourceCurrency,
+		&i.PriceNoData,
+		&i.PriceConfirmed,
+	)
+	return i, err
+}
+
+const setPriceConfirmed = `-- name: SetPriceConfirmed :one
+UPDATE instruments
+SET price_confirmed = ?
+WHERE ticker = ?
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+`
+
+type SetPriceConfirmedParams struct {
+	PriceConfirmed int64
+	Ticker         string
+}
+
+func (q *Queries) SetPriceConfirmed(ctx context.Context, arg SetPriceConfirmedParams) (Instrument, error) {
+	row := q.db.QueryRowContext(ctx, setPriceConfirmed, arg.PriceConfirmed, arg.Ticker)
+	var i Instrument
+	err := row.Scan(
+		&i.ID,
+		&i.Ticker,
+		&i.Name,
+		&i.Category,
+		&i.QuoteCurrency,
+		&i.PriceTicker,
+		&i.QuoteCurrencyManual,
+		&i.SourceCurrency,
+		&i.PriceNoData,
+		&i.PriceConfirmed,
+	)
+	return i, err
+}
+
+const setPriceNoData = `-- name: SetPriceNoData :exec
+UPDATE instruments
+SET price_no_data = 1
+WHERE ticker = ?
+`
+
+func (q *Queries) SetPriceNoData(ctx context.Context, ticker string) error {
+	_, err := q.db.ExecContext(ctx, setPriceNoData, ticker)
+	return err
+}
+
 const setPriceTicker = `-- name: SetPriceTicker :one
 UPDATE instruments
 SET price_ticker = ?1
 WHERE ticker = ?2
-RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
 `
 
 type SetPriceTickerParams struct {
@@ -91,15 +164,20 @@ func (q *Queries) SetPriceTicker(ctx context.Context, arg SetPriceTickerParams) 
 		&i.QuoteCurrency,
 		&i.PriceTicker,
 		&i.QuoteCurrencyManual,
+		&i.SourceCurrency,
+		&i.PriceNoData,
+		&i.PriceConfirmed,
 	)
 	return i, err
 }
 
 const setQuoteCurrency = `-- name: SetQuoteCurrency :one
 UPDATE instruments
-SET quote_currency = ?1, quote_currency_manual = ?2
+SET quote_currency        = ?1,
+    quote_currency_manual = ?2,
+    price_confirmed       = CASE WHEN quote_currency IS ?1 THEN price_confirmed ELSE 0 END
 WHERE ticker = ?3
-RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
 `
 
 type SetQuoteCurrencyParams struct {
@@ -108,6 +186,7 @@ type SetQuoteCurrencyParams struct {
 	Ticker              string
 }
 
+// A change of the Quote Currency removes the confirmation of the user. The same value keeps it.
 func (q *Queries) SetQuoteCurrency(ctx context.Context, arg SetQuoteCurrencyParams) (Instrument, error) {
 	row := q.db.QueryRowContext(ctx, setQuoteCurrency, arg.QuoteCurrency, arg.QuoteCurrencyManual, arg.Ticker)
 	var i Instrument
@@ -119,6 +198,26 @@ func (q *Queries) SetQuoteCurrency(ctx context.Context, arg SetQuoteCurrencyPara
 		&i.QuoteCurrency,
 		&i.PriceTicker,
 		&i.QuoteCurrencyManual,
+		&i.SourceCurrency,
+		&i.PriceNoData,
+		&i.PriceConfirmed,
 	)
 	return i, err
+}
+
+const setSourceCurrency = `-- name: SetSourceCurrency :exec
+UPDATE instruments
+SET source_currency = ?, price_no_data = 0
+WHERE ticker = ?
+`
+
+type SetSourceCurrencyParams struct {
+	SourceCurrency sql.NullString
+	Ticker         string
+}
+
+// An answer with a price tells the currency of the price source, and that the price source has data.
+func (q *Queries) SetSourceCurrency(ctx context.Context, arg SetSourceCurrencyParams) error {
+	_, err := q.db.ExecContext(ctx, setSourceCurrency, arg.SourceCurrency, arg.Ticker)
+	return err
 }

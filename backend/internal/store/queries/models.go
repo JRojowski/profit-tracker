@@ -96,6 +96,9 @@ type Instrument struct {
 	QuoteCurrency       sql.NullString
 	PriceTicker         sql.NullString
 	QuoteCurrencyManual int64
+	SourceCurrency      sql.NullString
+	PriceNoData         int64
+	PriceConfirmed      int64
 }
 
 type Lot struct {

@@ -27,14 +27,20 @@ type Quote struct {
 // The price source blocks the requests of the tool. The tool must stop and try again later.
 var ErrTooManyRequests = errors.New("the price source answered Too Many Requests")
 
+// ErrNoData tells that the price source has no data for the price ticker.
+// The price ticker can be wrong, or the Instrument can be delisted.
+var ErrNoData = errors.New("the price source has no data for the price ticker")
+
 // Provider gets prices from a price source.
 type Provider interface {
 	// LastClose returns the last close price of the price ticker, for example "AAPL" or "VUSA.L".
+	// It returns an error that wraps ErrNoData when the price source has no data for the price ticker.
 	LastClose(ctx context.Context, ticker string) (Quote, error)
 	// DailyCloses returns the raw daily closes of the price ticker from the day from to the day to.
 	// The range includes both days. The days are at midnight UTC. A day with no close is not in the History,
 	// and the History has no close for today. It returns an error that wraps ErrTooManyRequests
-	// when the price source blocks the requests.
+	// when the price source blocks the requests, and an error that wraps ErrNoData when the price source
+	// has no data for the price ticker.
 	DailyCloses(ctx context.Context, ticker string, from, to time.Time) (History, error)
 }
 

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { FigureLabel } from "@/components/figure-label"
+import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -15,6 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import {
   historyPeriods,
   type HistoryPeriod,
+  type PriceWarning,
   type ValueHistory,
   type ValueHistoryPoint,
   type ValuedInstrument,
@@ -116,8 +118,12 @@ export function ValueHistoryCard({
         </ToggleGroup>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">
-        {history.valuedAtCost.length > 0 && (
-          <ValuedAtCostAlert instruments={history.valuedAtCost} />
+        {(history.priceWarnings.length > 0 ||
+          history.valuedAtCost.length > 0) && (
+          <HistoryWarningsAlert
+            priceWarnings={history.priceWarnings}
+            valuedAtCost={history.valuedAtCost}
+          />
         )}
         {unavailable !== undefined ? (
           <UnavailableAlert warnings={unavailable} />
@@ -155,28 +161,54 @@ function UnavailableAlert({ warnings }: { warnings: string[] }) {
   )
 }
 
-// ValuedAtCostAlert names each Instrument that the Value History values at the cost of its Lots.
-function ValuedAtCostAlert({
-  instruments,
-}: {
-  instruments: ValuedInstrument[]
-}) {
+type HistoryWarningsAlertProps = {
+  priceWarnings: PriceWarning[]
+  valuedAtCost: ValuedInstrument[]
+}
+
+// HistoryWarningsAlert tells which parts of the Value History can be wrong: the Price Warnings, also of sold
+// Instruments, and the Instruments that the history values at the cost of their Lots. The chart shows under it.
+function HistoryWarningsAlert({
+  priceWarnings,
+  valuedAtCost,
+}: HistoryWarningsAlertProps) {
+  const title =
+    priceWarnings.length === 0
+      ? "Some Instruments are valued at cost"
+      : valuedAtCost.length === 0
+        ? "Some prices can be wrong"
+        : "Some values can be wrong"
   return (
     <Alert className="border-warning/40 bg-warning/10 *:[svg]:text-warning">
       <TriangleAlertIcon />
-      <AlertTitle>Some Instruments are valued at cost</AlertTitle>
-      <AlertDescription>
-        <p>
-          The tool has no price for these Instruments on some days. On these
-          days, the value uses the cost of their Lots.
-        </p>
-        <ul className="list-inside list-disc">
-          {instruments.map((instrument) => (
-            <li key={instrument.ticker} className="break-words">
-              <span className="num">{instrument.ticker}</span> {instrument.name}
-            </li>
-          ))}
-        </ul>
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription className="flex flex-col gap-3">
+        {priceWarnings.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <div>
+              The price ticker or the Quote Currency of these Instruments can be
+              wrong. Then the values of the days with their prices are also
+              wrong.
+            </div>
+            <PriceWarningList warnings={priceWarnings} />
+          </section>
+        )}
+        {valuedAtCost.length > 0 && (
+          <section className="flex flex-col gap-1">
+            <div>
+              The tool has no price for these Instruments on some days. On these
+              days, the value uses the cost of their Lots.
+            </div>
+            <ul className="list-inside list-disc">
+              {valuedAtCost.map((instrument) => (
+                <li key={instrument.ticker} className="break-words">
+                  <span className="num">{instrument.ticker}</span>{" "}
+                  {instrument.name}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </AlertDescription>
     </Alert>
   )

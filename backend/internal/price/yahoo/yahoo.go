@@ -105,7 +105,7 @@ func (p *Provider) lastClose(ctx context.Context, ticker string) (price.Quote, e
 		return price.Quote{}, err
 	}
 	if len(chart.Chart.Result) == 0 {
-		return price.Quote{}, errors.New("the response has no result")
+		return price.Quote{}, errNoResult
 	}
 	meta := chart.Chart.Result[0].Meta
 	if meta.RegularMarketPrice == "" {
@@ -129,6 +129,9 @@ func (p *Provider) lastClose(ctx context.Context, ticker string) (price.Quote, e
 		Source:   Source,
 	}, nil
 }
+
+// errNoResult tells that the response has no result. Yahoo has no data for the symbol.
+var errNoResult = fmt.Errorf("the response has no result: %w", price.ErrNoData)
 
 // pence is the Yahoo currency of a London price in pence. The provider gives such a price in pounds (GBP).
 const pence = "GBp"
@@ -185,7 +188,7 @@ func (p *Provider) dailyCloses(ctx context.Context, ticker string, from, to time
 		return price.History{}, err
 	}
 	if len(chart.Chart.Result) == 0 {
-		return price.History{}, errors.New("the response has no result")
+		return price.History{}, errNoResult
 	}
 	result := chart.Chart.Result[0]
 	if g := result.Meta.DataGranularity; g != "1d" {
@@ -263,7 +266,8 @@ func (p *Provider) now() time.Time {
 }
 
 // chart sends the chart request for the symbol with the encoded query and decodes the response.
-// It returns an error that wraps price.ErrTooManyRequests for HTTP 429.
+// It returns an error that wraps price.ErrTooManyRequests for HTTP 429,
+// and an error that wraps price.ErrNoData for HTTP 404. Yahoo answers 404 for an unknown or a delisted symbol.
 func (p *Provider) chart(ctx context.Context, ticker, rawQuery string) (chartResponse, error) {
 	u := p.BaseURL + "/v8/finance/chart/" + url.PathEscape(ticker) + "?" + rawQuery
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
@@ -284,11 +288,17 @@ func (p *Provider) chart(ctx context.Context, ticker, rawQuery string) (chartRes
 
 	var chart chartResponse
 	decodeErr := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&chart)
+	var statusErr error
 	if e := chart.Chart.Error; decodeErr == nil && e != nil {
-		return chartResponse{}, fmt.Errorf("status %d: %s: %s", resp.StatusCode, e.Code, e.Description)
+		statusErr = fmt.Errorf("status %d: %s: %s", resp.StatusCode, e.Code, e.Description)
+	} else if resp.StatusCode != http.StatusOK {
+		statusErr = fmt.Errorf("status %d", resp.StatusCode)
 	}
-	if resp.StatusCode != http.StatusOK {
-		return chartResponse{}, fmt.Errorf("status %d", resp.StatusCode)
+	if statusErr != nil && resp.StatusCode == http.StatusNotFound {
+		return chartResponse{}, fmt.Errorf("%w: %w", price.ErrNoData, statusErr)
+	}
+	if statusErr != nil {
+		return chartResponse{}, statusErr
 	}
 	if decodeErr != nil {
 		return chartResponse{}, fmt.Errorf("decode response: %w", decodeErr)

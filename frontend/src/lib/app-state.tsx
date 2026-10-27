@@ -49,6 +49,9 @@ type AppState = {
   reloadAccounts: () => void
   replaceAccount: (account: Account) => void
   refreshAllPrices: () => void
+  // applyPriceConfirmation loads the values again after the user set or removed the confirmation of a price source.
+  // It sends no price refresh, because a confirmation changes no price.
+  applyPriceConfirmation: (ticker: string, confirmed: boolean) => void
 }
 
 const AppStateContext = createContext<AppState | undefined>(undefined)
@@ -154,6 +157,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       })
   }, [])
 
+  const applyPriceConfirmation = useCallback(
+    (ticker: string, confirmed: boolean) => {
+      // A confirmation removes the price mismatch warning. The shown refresh result stops listing it.
+      // A removed confirmation shows the warning again after the next refresh.
+      if (confirmed) {
+        setPriceRefresh((state) =>
+          state.result === null
+            ? state
+            : {
+                ...state,
+                result: {
+                  ...state.result,
+                  priceWarnings: state.result.priceWarnings.filter(
+                    (warning) =>
+                      warning.ticker !== ticker ||
+                      warning.kind !== "priceMismatch"
+                  ),
+                },
+              }
+        )
+      }
+      setValuesVersion((version) => version + 1)
+    },
+    []
+  )
+
   const value = useMemo(
     () => ({
       accounts,
@@ -164,6 +193,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       reloadAccounts,
       replaceAccount,
       refreshAllPrices,
+      applyPriceConfirmation,
     }),
     [
       accounts,
@@ -174,6 +204,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       reloadAccounts,
       replaceAccount,
       refreshAllPrices,
+      applyPriceConfirmation,
     ]
   )
 

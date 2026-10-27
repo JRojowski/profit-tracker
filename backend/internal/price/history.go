@@ -133,6 +133,9 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 			if stop {
 				return err
 			}
+			if err := s.recordNoData(ctx, req.ticker, err); err != nil {
+				return err
+			}
 			failed[req.ticker] = true
 			if !reported[req.ticker] {
 				reported[req.ticker] = true
@@ -144,8 +147,14 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 			return err
 		}
 		result.HistoryStored += len(h.Closes)
-		// A response with no closes can have no currency.
-		if len(h.Closes) > 0 && h.Currency != req.quoteCurrency && !reported[req.ticker] {
+		// A response with no closes can have no currency, and it tells nothing about the price ticker.
+		if len(h.Closes) == 0 {
+			continue
+		}
+		if err := s.store.SetSourceCurrency(ctx, req.ticker, h.Currency); err != nil {
+			return err
+		}
+		if h.Currency != req.quoteCurrency && !reported[req.ticker] {
 			reported[req.ticker] = true
 			result.HistoryFailures = append(result.HistoryFailures, Failure{
 				Ticker: req.ticker, Err: &CurrencyError{Got: h.Currency, Want: req.quoteCurrency},

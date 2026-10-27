@@ -77,3 +77,20 @@ JOIN instruments i ON i.id = l.instrument_id
 JOIN cash_operations c ON c.id = f.cash_operation_id
 GROUP BY i.ticker
 ORDER BY i.ticker;
+
+-- name: TradePrices :many
+-- The XTB price of one unit of each Fill and each sale on any Account, with the time of the Cash Operation.
+-- The Instrument of a sale is the Instrument of the Lot that it closes.
+SELECT i.ticker, c.time, c.price
+FROM lot_fills f
+JOIN lots l ON l.id = f.lot_id
+JOIN instruments i ON i.id = l.instrument_id
+JOIN cash_operations c ON c.id = f.cash_operation_id
+WHERE c.price IS NOT NULL
+UNION ALL
+SELECT i.ticker, c.time, c.price
+FROM cash_operations c
+JOIN lots l ON l.account_id = c.account_id AND l.position_id = c.position_id
+JOIN instruments i ON i.id = l.instrument_id
+WHERE c.type = 'Stock sell' AND c.price IS NOT NULL
+ORDER BY 1, 2;

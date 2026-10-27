@@ -10,7 +10,7 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
-// instrumentResponse is the body of PUT /api/instruments/{ticker}/price-ticker and PUT /api/instruments/{ticker}/quote-currency.
+// instrumentResponse is the body of PUT /api/instruments/{ticker}/price-ticker, /quote-currency and /price-confirmation.
 type instrumentResponse struct {
 	// Ticker is the broker ticker.
 	Ticker string `json:"ticker"`
@@ -26,6 +26,8 @@ type priceSourceResponse struct {
 	// QuoteCurrency is nil when the Quote Currency of the Instrument is not known.
 	QuoteCurrency       *string `json:"quoteCurrency"`
 	QuoteCurrencyManual bool    `json:"quoteCurrencyManual"`
+	// PriceConfirmed tells that the user confirmed that the price ticker and the Quote Currency are correct.
+	PriceConfirmed bool `json:"priceConfirmed"`
 }
 
 // priceTickerRequest is the body of PUT /api/instruments/{ticker}/price-ticker.
@@ -91,6 +93,7 @@ func toPriceSourceResponse(inst store.Instrument) priceSourceResponse {
 		PriceTickerManual:   inst.PriceTicker != "",
 		QuoteCurrency:       optional(inst.QuoteCurrency),
 		QuoteCurrencyManual: inst.QuoteCurrencyManual,
+		PriceConfirmed:      inst.PriceConfirmed,
 	}
 }
 

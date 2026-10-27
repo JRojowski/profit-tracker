@@ -262,6 +262,8 @@ export type Holding = {
   // unrealizedProfitPercent is the Unrealized Profit as a percentage of the cost, for example "8.85" for 8.85 %.
   unrealizedProfitPercent: string | null
   note: string | null
+  // priceWarnings are the Price Warnings of the Instrument. The list is empty when the Instrument has none.
+  priceWarnings: PriceWarning[]
 } & PriceSource
 
 // PriceFailure is one Instrument that got no new price. The ticker is the broker ticker.
@@ -289,6 +291,8 @@ export type PriceRefresh = {
   tooManyRequests: boolean
   // stopMessage tells why the refresh stopped early, or is null.
   stopMessage: string | null
+  // priceWarnings are the Price Warnings of each Instrument that an Account ever held, after the refresh.
+  priceWarnings: PriceWarning[]
 }
 
 // RefreshProgress is the progress of a running price refresh. total is 0 during the step of the current prices.
@@ -401,8 +405,8 @@ export type ValueHistory = {
   // It is null only when the Value History has no points.
   periodStarts: Record<HistoryPeriod, string | null>
   valuedAtCost: ValuedInstrument[]
-  // priceWarnings is empty for now.
-  priceWarnings: unknown[]
+  // priceWarnings are the Price Warnings of the Instruments of the history, also of the sold ones.
+  priceWarnings: PriceWarning[]
 }
 
 // AccountValueHistory is the Value History of one Account, in the Account currency.
@@ -445,10 +449,52 @@ export type PriceSource = {
   quoteCurrency: string | null
   // quoteCurrencyManual tells that the user set the quote currency.
   quoteCurrencyManual: boolean
+  // priceConfirmed tells that the user confirmed that the price ticker and the Quote Currency are correct.
+  // A change of the price ticker or of the Quote Currency removes the confirmation.
+  priceConfirmed: boolean
 }
 
 // Instrument is the price source of one Instrument. The ticker is the broker ticker.
 export type Instrument = { ticker: string } & PriceSource
+
+// NamedPriceSource is the price source of one Instrument with its broker ticker and its name.
+// A Holding and a Price Warning both have these fields.
+export type NamedPriceSource = Instrument & { name: string }
+
+// PriceWarningKind is the kind of a Price Warning: the price source has no data, gives a different currency,
+// or gives prices that do not agree with the XTB prices.
+export type PriceWarningKind = "noData" | "differentCurrency" | "priceMismatch"
+
+// PriceWarning tells that the price ticker or the Quote Currency of an Instrument can be wrong.
+// It holds the price source of the Instrument, so that the price source dialog can open also for a sold Instrument.
+export type PriceWarning = NamedPriceSource & {
+  kind: PriceWarningKind
+  // sourceCurrency is the currency of the price source. It is set only for "differentCurrency".
+  sourceCurrency: string | null
+  // medianDifference and maxDifference are exact percentages as decimal text. The frontend rounds them for display.
+  // They are set only for "priceMismatch".
+  medianDifference: string | null
+  maxDifference: string | null
+  // confirmable tells that the user can confirm the price source to remove the warning. It is true only for "priceMismatch".
+  confirmable: boolean
+}
+
+// setPriceConfirmation sets or removes the confirmation that the price ticker and the Quote Currency of the
+// Instrument are correct. The confirmation removes only the Price Warning about a price mismatch.
+export async function setPriceConfirmation(
+  ticker: string,
+  confirmed: boolean
+): Promise<Instrument> {
+  const response = await fetch(
+    `/api/instruments/${encodeURIComponent(ticker)}/price-confirmation`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmed }),
+    }
+  )
+  return readJSON<Instrument>(response)
+}
 
 // setPriceTicker sets the manual price ticker of the Instrument. An empty value removes it.
 export async function setPriceTicker(

@@ -33,6 +33,8 @@ type refreshResponse struct {
 	TooManyRequests bool `json:"tooManyRequests"`
 	// StopMessage is the message for the user when the refresh stopped, or nil.
 	StopMessage *string `json:"stopMessage"`
+	// PriceWarnings are the Price Warnings of each Instrument that an Account ever held, after the refresh.
+	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
 }
 
 // progressResponse is the body of GET /api/prices/refresh/progress.
@@ -73,7 +75,13 @@ func (a *api) refreshPrices(w http.ResponseWriter, r *http.Request) {
 		a.writeInternalError(w, r, fmt.Errorf("refresh exchange rates: %w", err))
 		return
 	}
+	warnings, err := a.readAllPriceWarnings(r.Context())
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
 	resp := refreshResponse{
+		PriceWarnings:   warnings.all(),
 		Refreshed:       result.Refreshed,
 		Failures:        toRefreshFailures(result.Failures),
 		RateFailures:    make([]rateFailureResponse, 0, len(rateResult.Failures)),
@@ -204,8 +212,8 @@ func (v accountView) unpricedHoldings() int {
 	return n
 }
 
-// holdingRow returns the response row of the Holding.
-func (v accountView) holdingRow(h ledger.Holding) holdingResponse {
+// holdingRow returns the response row of the Holding with its Price Warnings.
+func (v accountView) holdingRow(h ledger.Holding, warnings priceWarnings) holdingResponse {
 	ticker := h.Instrument.Ticker
 	// An Instrument of a Holding is always in the map. The zero value gives the default mapping and no Quote Currency.
 	inst := v.instruments[ticker]
@@ -218,6 +226,7 @@ func (v accountView) holdingRow(h ledger.Holding) holdingResponse {
 		// The frontend rounds for display. ADR 0001: the tool rounds only for display.
 		AverageCost:         h.AverageCost().String(),
 		priceSourceResponse: toPriceSourceResponse(inst),
+		PriceWarnings:       warnings.of(ticker),
 	}
 	if !h.HasValue() {
 		row.Note = new(v.noValueNote(h))

@@ -1,6 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from "react"
-import { PencilIcon } from "lucide-react"
+import { CircleCheckIcon, PencilIcon, TriangleAlertIcon } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { PriceWarningText } from "@/components/price-warning-text"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,16 +22,24 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 import {
   errorMessage,
+  setPriceConfirmation,
   setPriceTicker,
   setQuoteCurrency,
-  type Holding,
+  type NamedPriceSource,
+  type PriceWarning,
 } from "@/lib/api"
+import { useAppState } from "@/lib/app-state"
 
 type PriceSourceDialogProps = {
-  holding: Holding
-  // onChanged runs after the tool stored a change. The caller gets new prices.
+  // instrument is the price source of the Instrument, from a Holding or from a Price Warning.
+  instrument: NamedPriceSource
+  // warnings are the Price Warnings of the Instrument. They can be empty.
+  warnings: PriceWarning[]
+  // onChanged runs after the tool stored a change of the price ticker or the Quote Currency. The caller gets new prices.
+  // A change of the confirmation does not run it.
   onChanged: () => void
 }
 
@@ -39,9 +49,11 @@ type PriceSourceDialogTriggerProps = PriceSourceDialogProps & {
   trigger?: ReactNode
 }
 
-// PriceSourceDialog lets the user set the price ticker and the quote currency of the Instrument of a Holding.
+// PriceSourceDialog lets the user set the price ticker and the Quote Currency of an Instrument.
+// It shows the Price Warnings of the Instrument. For a price mismatch, the user can confirm the price source.
 export function PriceSourceDialog({
-  holding,
+  instrument,
+  warnings,
   onChanged,
   trigger,
 }: PriceSourceDialogTriggerProps) {
@@ -54,7 +66,7 @@ export function PriceSourceDialog({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`Edit the price source of ${holding.ticker}`}
+            aria-label={`Edit the price source of ${instrument.ticker}`}
           >
             <PencilIcon data-icon="inline-start" />
           </Button>
@@ -62,17 +74,27 @@ export function PriceSourceDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Price source of {holding.ticker}</DialogTitle>
+          <DialogTitle>Price source of {instrument.ticker}</DialogTitle>
           <DialogDescription>
-            Set the values when the default mapping gives a wrong price.
+            {instrument.name}. Set the values when the default mapping gives a
+            wrong price.
           </DialogDescription>
         </DialogHeader>
         {open && (
-          <PriceSourceForm
-            holding={holding}
-            onChanged={onChanged}
-            onDone={() => setOpen(false)}
-          />
+          <>
+            {warnings.length > 0 && <DialogWarnings warnings={warnings} />}
+            <PriceConfirmation
+              instrument={instrument}
+              warnings={warnings}
+              onDone={() => setOpen(false)}
+            />
+            <PriceSourceForm
+              instrument={instrument}
+              warnings={warnings}
+              onChanged={onChanged}
+              onDone={() => setOpen(false)}
+            />
+          </>
         )}
       </DialogContent>
     </Dialog>
@@ -85,10 +107,16 @@ type PriceSourceFormProps = PriceSourceDialogProps & {
 }
 
 // PriceSourceForm starts with the manual values of the Instrument. An empty field means the default value.
-function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
-  const initialTicker = holding.priceTickerManual ? holding.priceTicker : ""
-  const initialCurrency = holding.quoteCurrencyManual
-    ? (holding.quoteCurrency ?? "")
+function PriceSourceForm({
+  instrument,
+  onChanged,
+  onDone,
+}: PriceSourceFormProps) {
+  const initialTicker = instrument.priceTickerManual
+    ? instrument.priceTicker
+    : ""
+  const initialCurrency = instrument.quoteCurrencyManual
+    ? (instrument.quoteCurrency ?? "")
     : ""
   const [priceTicker, setPriceTickerValue] = useState(initialTicker)
   const [quoteCurrency, setQuoteCurrencyValue] = useState(initialCurrency)
@@ -100,7 +128,7 @@ function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
     const ticker = priceTicker.trim()
     const currency = quoteCurrency.trim().toUpperCase()
     if (currency !== "" && !/^[A-Z]{3}$/.test(currency)) {
-      setError("Enter the quote currency as three letters, for example USD.")
+      setError("Enter the Quote Currency as three letters, for example USD.")
       return
     }
     if (ticker === initialTicker && currency === initialCurrency) {
@@ -113,11 +141,11 @@ function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
     let changed = false
     try {
       if (ticker !== initialTicker) {
-        await setPriceTicker(holding.ticker, ticker)
+        await setPriceTicker(instrument.ticker, ticker)
         changed = true
       }
       if (currency !== initialCurrency) {
-        await setQuoteCurrency(holding.ticker, currency)
+        await setQuoteCurrency(instrument.ticker, currency)
         changed = true
       }
       onDone()
@@ -125,7 +153,7 @@ function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
     } catch (err) {
       setBusy(false)
       setError(errorMessage(err))
-      // The dialog stays open with the error, but the Holdings must show the stored change.
+      // The dialog stays open with the error, but the views must show the stored change.
       if (changed) onChanged()
     }
   }
@@ -138,7 +166,9 @@ function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
           <Input
             id="price-ticker"
             value={priceTicker}
-            placeholder={holding.priceTickerManual ? "" : holding.priceTicker}
+            placeholder={
+              instrument.priceTickerManual ? "" : instrument.priceTicker
+            }
             disabled={busy}
             onChange={(event) => setPriceTickerValue(event.target.value)}
           />
@@ -148,12 +178,14 @@ function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
           </FieldDescription>
         </Field>
         <Field>
-          <FieldLabel htmlFor="quote-currency">Quote currency</FieldLabel>
+          <FieldLabel htmlFor="quote-currency">Quote Currency</FieldLabel>
           <Input
             id="quote-currency"
             value={quoteCurrency}
             placeholder={
-              holding.quoteCurrencyManual ? "" : (holding.quoteCurrency ?? "")
+              instrument.quoteCurrencyManual
+                ? ""
+                : (instrument.quoteCurrency ?? "")
             }
             maxLength={3}
             disabled={busy}
@@ -177,5 +209,86 @@ function PriceSourceForm({ holding, onChanged, onDone }: PriceSourceFormProps) {
         </Button>
       </DialogFooter>
     </form>
+  )
+}
+
+// DialogWarnings lists the Price Warnings of the Instrument, so that the user sees what to check.
+function DialogWarnings({ warnings }: { warnings: PriceWarning[] }) {
+  return (
+    <Alert className="border-warning/40 bg-warning/10 *:[svg]:text-warning">
+      <TriangleAlertIcon />
+      <AlertTitle>
+        {warnings.length === 1 ? "Price Warning" : "Price Warnings"}
+      </AlertTitle>
+      <AlertDescription>
+        <ul className="flex flex-col gap-1">
+          {warnings.map((warning) => (
+            <li key={warning.kind} className="break-words">
+              <PriceWarningText warning={warning} />
+            </li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+type PriceConfirmationProps = Omit<PriceSourceDialogProps, "onChanged"> & {
+  // onDone closes the dialog after the tool stored the change.
+  onDone: () => void
+}
+
+// PriceConfirmation lets the user confirm that the price ticker and the Quote Currency are correct, or remove
+// the confirmation. It shows only for a price mismatch warning or for a confirmed Instrument.
+// A confirmation changes no price, so the views load again with no price refresh.
+function PriceConfirmation({
+  instrument,
+  warnings,
+  onDone,
+}: PriceConfirmationProps) {
+  const { applyPriceConfirmation } = useAppState()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const confirmable = warnings.some((warning) => warning.confirmable)
+  const confirmed = instrument.priceConfirmed
+  if (!confirmable && !confirmed) return null
+
+  async function handleClick() {
+    setBusy(true)
+    setError(null)
+    try {
+      await setPriceConfirmation(instrument.ticker, !confirmed)
+      onDone()
+      applyPriceConfirmation(instrument.ticker, !confirmed)
+    } catch (err) {
+      setBusy(false)
+      setError(errorMessage(err))
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm text-muted-foreground">
+        {confirmed
+          ? "You confirmed that the price ticker and the Quote Currency are correct. The tool shows no warning about a price mismatch for this Instrument."
+          : "When the price ticker and the Quote Currency are correct, for example after a real price jump, confirm them. The confirmation removes only the warning about a price mismatch."}
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-auto min-h-8 whitespace-normal"
+        disabled={busy}
+        onClick={handleClick}
+      >
+        {!confirmed && <CircleCheckIcon data-icon="inline-start" />}
+        {busy
+          ? "Saving…"
+          : confirmed
+            ? "Remove the confirmation"
+            : "The price ticker and the Quote Currency are correct"}
+      </Button>
+      {error && <FieldError>{error}</FieldError>}
+      <Separator />
+    </div>
   )
 }

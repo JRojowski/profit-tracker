@@ -1,5 +1,6 @@
 import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react"
 
+import { countInstruments, PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import type { PriceFailure, RefreshProgress } from "@/lib/api"
@@ -98,7 +99,8 @@ type PriceAlertsProps = {
   refresh: PriceRefreshState
 }
 
-// PriceAlerts shows the failures of the last refresh and the warnings about prices and Exchange Rates that are not current.
+// PriceAlerts shows the failures and the Price Warnings of the last refresh, and the warnings about prices and
+// Exchange Rates that are not current.
 export function PriceAlerts({ dates, refresh }: PriceAlertsProps) {
   const failures = [
     ...withKind(refresh.result?.failures ?? [], "current"),
@@ -106,6 +108,8 @@ export function PriceAlerts({ dates, refresh }: PriceAlertsProps) {
   ]
   const rateFailures = refresh.result?.rateFailures ?? []
   const stopMessage = refresh.result?.stopMessage ?? null
+  const priceWarnings = refresh.result?.priceWarnings ?? []
+  const warnedInstruments = countInstruments(priceWarnings)
   const alerts = [
     refresh.refreshing && (
       <RefreshProgressAlert key="progress" progress={refresh.progress} />
@@ -139,6 +143,23 @@ export function PriceAlerts({ dates, refresh }: PriceAlertsProps) {
               </li>
             ))}
           </ul>
+        </AlertDescription>
+      </Alert>
+    ),
+    priceWarnings.length > 0 && (
+      <Alert
+        key="price-warnings"
+        className="border-warning/40 bg-warning/10 *:[svg]:text-warning"
+      >
+        <TriangleAlertIcon />
+        <AlertTitle>
+          <span className="num">{warnedInstruments}</span>{" "}
+          {warnedInstruments === 1
+            ? "Instrument has a Price Warning"
+            : "Instruments have a Price Warning"}
+        </AlertTitle>
+        <AlertDescription>
+          <PriceWarningList warnings={priceWarnings} />
         </AlertDescription>
       </Alert>
     ),

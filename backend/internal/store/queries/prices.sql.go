@@ -273,6 +273,53 @@ func (q *Queries) TickersFetchedSince(ctx context.Context, fetchedAt string) ([]
 	return items, nil
 }
 
+const tradePrices = `-- name: TradePrices :many
+SELECT i.ticker, c.time, c.price
+FROM lot_fills f
+JOIN lots l ON l.id = f.lot_id
+JOIN instruments i ON i.id = l.instrument_id
+JOIN cash_operations c ON c.id = f.cash_operation_id
+WHERE c.price IS NOT NULL
+UNION ALL
+SELECT i.ticker, c.time, c.price
+FROM cash_operations c
+JOIN lots l ON l.account_id = c.account_id AND l.position_id = c.position_id
+JOIN instruments i ON i.id = l.instrument_id
+WHERE c.type = 'Stock sell' AND c.price IS NOT NULL
+ORDER BY 1, 2
+`
+
+type TradePricesRow struct {
+	Ticker string
+	Time   string
+	Price  decimal.NullDecimal
+}
+
+// The XTB price of one unit of each Fill and each sale on any Account, with the time of the Cash Operation.
+// The Instrument of a sale is the Instrument of the Lot that it closes.
+func (q *Queries) TradePrices(ctx context.Context) ([]TradePricesRow, error) {
+	rows, err := q.db.QueryContext(ctx, tradePrices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TradePricesRow
+	for rows.Next() {
+		var i TradePricesRow
+		if err := rows.Scan(&i.Ticker, &i.Time, &i.Price); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertPrice = `-- name: UpsertPrice :exec
 INSERT INTO prices (instrument_id, date, close, currency, source, fetched_at)
 VALUES ((SELECT i.id FROM instruments i WHERE i.ticker = ?1),
@@ -321,9 +368,9 @@ type UpsertPriceRangeParams struct {
 	FetchedAt string
 }
 
-// The new range is the union of the stored range and the asked days. The asked days always touch
-// the stored range: a refresh asks from the day after the stored last day to yesterday, or from an earlier
-// first Fill to the day before the stored first day.
+// The new range is the union of the stored range and the asked days. The asked days always touch the stored range.
+// A refresh asks from the day after the stored last day to yesterday.
+// It also asks from an earlier first Fill to the day before the stored first day.
 func (q *Queries) UpsertPriceRange(ctx context.Context, arg UpsertPriceRangeParams) error {
 	_, err := q.db.ExecContext(ctx, upsertPriceRange,
 		arg.Ticker,

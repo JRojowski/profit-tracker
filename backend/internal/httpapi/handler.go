@@ -67,6 +67,7 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/prices/refresh/progress", a.refreshProgress)
 	mux.HandleFunc("PUT /api/instruments/{ticker}/price-ticker", a.setPriceTicker)
 	mux.HandleFunc("PUT /api/instruments/{ticker}/quote-currency", a.setQuoteCurrency)
+	mux.HandleFunc("PUT /api/instruments/{ticker}/price-confirmation", a.setPriceConfirmation)
 	mux.HandleFunc("/api/", notFound)
 	mux.Handle("/", frontendHandler(opts.Frontend))
 	return mux

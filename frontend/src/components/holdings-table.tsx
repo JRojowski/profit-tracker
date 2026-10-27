@@ -1,5 +1,9 @@
 import { CurrencyBadge } from "@/components/account-badges"
 import { PriceSourceDialog } from "@/components/price-source-dialog"
+import {
+  PriceWarningBadge,
+  PriceWarningBadgeButton,
+} from "@/components/price-warnings"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -30,7 +34,8 @@ type HoldingsTableProps = {
 }
 
 // HoldingsTable shows the Holdings of an Account: a table on a wide screen and a list of compact rows on a narrow screen.
-// Each row opens the price source dialog. A note under the table lists the Holdings with no value.
+// Each row opens the price source dialog. A Holding with a Price Warning has a badge.
+// A note under the table lists the Holdings with no value.
 export function HoldingsTable({
   holdings,
   currency,
@@ -101,6 +106,15 @@ function WideTable({
                 <span className="max-w-56 truncate text-xs text-muted-foreground">
                   {holding.name}
                 </span>
+                {holding.priceWarnings.length > 0 && (
+                  <span className="pt-1">
+                    <PriceWarningBadgeButton
+                      instrument={holding}
+                      warnings={holding.priceWarnings}
+                      onChanged={onPriceSourceChanged}
+                    />
+                  </span>
+                )}
               </div>
             </TableCell>
             <TableCell className="text-right num">
@@ -178,7 +192,8 @@ function WideTable({
                   <Badge variant="secondary">manual</Badge>
                 )}
                 <PriceSourceDialog
-                  holding={holding}
+                  instrument={holding}
+                  warnings={holding.priceWarnings}
                   onChanged={onPriceSourceChanged}
                 />
               </div>
@@ -191,6 +206,7 @@ function WideTable({
 }
 
 // HoldingRows shows each Holding as one compact row. A tap on the row opens the price source dialog.
+// The badge of a Price Warning is inside the row button, so the tap on the row opens the dialog with the warnings.
 function HoldingRows({
   holdings,
   currency,
@@ -201,7 +217,8 @@ function HoldingRows({
       {holdings.map((holding) => (
         <li key={holding.ticker}>
           <PriceSourceDialog
-            holding={holding}
+            instrument={holding}
+            warnings={holding.priceWarnings}
             onChanged={onPriceSourceChanged}
             trigger={
               <button
@@ -217,6 +234,7 @@ function HoldingRows({
                       <CurrencyBadge currency={holding.quoteCurrency} />
                     )}
                   </span>
+                  {holding.priceWarnings.length > 0 && <PriceWarningBadge />}
                   <span className="num text-xs text-muted-foreground">
                     {formatVolume(holding.volume)} ×{" "}
                     {holding.price !== null

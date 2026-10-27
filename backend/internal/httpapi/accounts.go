@@ -96,6 +96,8 @@ type holdingResponse struct {
 	UnrealizedProfitPercent *string `json:"unrealizedProfitPercent"`
 	// Note is a sentence for the user when the Holding has no value.
 	Note *string `json:"note"`
+	// PriceWarnings are the Price Warnings of the Instrument.
+	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
 }
 
 // saleResponse is one row of GET /api/accounts/{id}/sales. Amounts and the volume are decimal text.
@@ -191,9 +193,14 @@ func (a *api) accountHoldings(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	warnings, err := a.readAllPriceWarnings(r.Context())
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
 	resp := make([]holdingResponse, 0, len(view.state.Holdings))
 	for _, h := range view.state.Holdings {
-		resp = append(resp, view.holdingRow(h))
+		resp = append(resp, view.holdingRow(h, warnings))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
