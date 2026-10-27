@@ -27,3 +27,10 @@ export function sumDecimals(amounts: string[]): string {
   const fraction = digits.slice(digits.length - scale)
   return (negative ? "-" : "") + whole + (scale > 0 ? "." + fraction : "")
 }
+
+// subtractDecimals gives a minus b exactly, as decimal text, for example a Total Result from a value and Net Deposits.
+export function subtractDecimals(a: string, b: string): string {
+  const text = b.trim().replace(/^\+/, "")
+  const negated = text.startsWith("-") ? text.slice(1) : "-" + text
+  return sumDecimals([a, negated])
+}

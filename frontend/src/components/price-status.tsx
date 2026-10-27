@@ -1,6 +1,8 @@
-import { TriangleAlertIcon } from "lucide-react"
+import { RefreshCwIcon, TriangleAlertIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
+import type { PriceFailure, RefreshProgress } from "@/lib/api"
 import type { PriceRefreshState } from "@/lib/app-state"
 import { formatDate, formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -60,12 +62,35 @@ export function PriceDatesLine({
       {refresh.result && refresh.refreshedAt && (
         <span className="whitespace-nowrap" role="status">
           · Got {refresh.result.refreshed}{" "}
-          {refresh.result.refreshed === 1 ? "price" : "prices"} at{" "}
-          <span className="num">{formatTime(refresh.refreshedAt)}</span>
+          {refresh.result.refreshed === 1 ? "price" : "prices"}
+          {refresh.result.historyStored > 0 && (
+            <>
+              {" "}
+              and{" "}
+              <span className="num">
+                {refresh.result.historyStored.toLocaleString()}
+              </span>{" "}
+              {refresh.result.historyStored === 1
+                ? "daily price"
+                : "daily prices"}
+            </>
+          )}{" "}
+          at <span className="num">{formatTime(refresh.refreshedAt)}</span>
         </span>
       )}
     </p>
   )
+}
+
+// PriceKind tells which prices of an Instrument failed: the current price or the daily prices.
+type PriceKind = "current" | "daily"
+
+// KindedFailure is one failure of a price refresh, with the kind of the prices that failed.
+type KindedFailure = PriceFailure & { kind: PriceKind }
+
+// withKind gives each failure the kind of the prices that failed.
+function withKind(failures: PriceFailure[], kind: PriceKind): KindedFailure[] {
+  return failures.map((failure) => ({ ...failure, kind }))
 }
 
 type PriceAlertsProps = {
@@ -75,9 +100,25 @@ type PriceAlertsProps = {
 
 // PriceAlerts shows the failures of the last refresh and the warnings about prices and Exchange Rates that are not current.
 export function PriceAlerts({ dates, refresh }: PriceAlertsProps) {
-  const failures = refresh.result?.failures ?? []
+  const failures = [
+    ...withKind(refresh.result?.failures ?? [], "current"),
+    ...withKind(refresh.result?.historyFailures ?? [], "daily"),
+  ]
   const rateFailures = refresh.result?.rateFailures ?? []
+  const stopMessage = refresh.result?.stopMessage ?? null
   const alerts = [
+    refresh.refreshing && (
+      <RefreshProgressAlert key="progress" progress={refresh.progress} />
+    ),
+    stopMessage && (
+      <Alert key="stop" variant="destructive">
+        <TriangleAlertIcon />
+        <AlertTitle>The refresh stopped early</AlertTitle>
+        <AlertDescription>
+          {stopMessage}. The tool keeps the prices that it got.
+        </AlertDescription>
+      </Alert>
+    ),
     refresh.error && (
       <Alert key="error" variant="destructive">
         <TriangleAlertIcon />
@@ -92,8 +133,9 @@ export function PriceAlerts({ dates, refresh }: PriceAlertsProps) {
         <AlertDescription>
           <ul className="list-inside list-disc">
             {failures.map((failure) => (
-              <li key={failure.ticker}>
-                {failure.ticker}: {failure.error}
+              <li key={`${failure.kind}-${failure.ticker}`}>
+                {failure.ticker}
+                {failure.kind === "daily" && " (daily prices)"}: {failure.error}
               </li>
             ))}
           </ul>
@@ -141,4 +183,48 @@ export function PriceAlerts({ dates, refresh }: PriceAlertsProps) {
 
   if (alerts.length === 0) return null
   return <div className="flex flex-col gap-2">{alerts}</div>
+}
+
+// RefreshProgressAlert shows the progress of a running price refresh: the step, the count and the Instrument.
+// The count shows only during the step of the daily prices. Before the first read, the step is not known.
+function RefreshProgressAlert({
+  progress,
+}: {
+  progress: RefreshProgress | null
+}) {
+  const daily = progress !== null && progress.running && progress.total > 0
+  return (
+    <Alert role="status">
+      <RefreshCwIcon className="animate-spin" />
+      <AlertTitle>Refreshing the prices</AlertTitle>
+      <AlertDescription className="flex flex-col gap-2">
+        {daily ? (
+          <>
+            <span>
+              Getting the daily prices:{" "}
+              <span className="num text-foreground">
+                {progress.done} / {progress.total}
+              </span>
+              {progress.ticker && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span className="num text-foreground">{progress.ticker}</span>
+                </>
+              )}
+            </span>
+            <Progress
+              value={(progress.done / progress.total) * 100}
+              aria-label="Daily prices"
+            />
+          </>
+        ) : (
+          <span>
+            Getting the current prices and the Exchange Rates. The first refresh
+            can take some minutes.
+          </span>
+        )}
+      </AlertDescription>
+    </Alert>
+  )
 }

@@ -34,6 +34,9 @@ const (
 	// ReasonMissingExchangeRate tells that the Exchange Rate of the day of a flow is missing, so the flows in PLN
 	// are not known. The caller that converts the flows sets this reason. ADR 0004, rule 7.
 	ReasonMissingExchangeRate
+	// ReasonNoValueHistory tells that no day of the period has a value on the day before it,
+	// so the Time-Weighted Return has no daily rate.
+	ReasonNoValueHistory
 )
 
 // Rate is a rate of return as a percentage, or the reason why the tool cannot calculate it.

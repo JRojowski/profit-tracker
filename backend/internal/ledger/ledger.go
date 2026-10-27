@@ -90,11 +90,11 @@ const (
 	ReasonNoExchangeRate
 )
 
-// rateCurrency returns the currency whose Exchange Rate converts an amount in the Quote Currency quote
+// RateCurrency returns the currency whose Exchange Rate converts an amount in the Quote Currency quote
 // to the Account currency account. It is the currency of the two that is not PLN.
 // It returns "" and true if quote equals account, because then no conversion is necessary.
 // It returns false if quote and account are both not PLN and not equal.
-func rateCurrency(quote, account string) (string, bool) {
+func RateCurrency(quote, account string) (string, bool) {
 	switch {
 	case quote == account:
 		return "", true
@@ -293,7 +293,7 @@ func (s *State) AllHoldingsHaveValue() bool {
 func flows(ops []CashOperation) []returns.Flow {
 	var result []returns.Flow
 	for _, op := range ops {
-		if amount := netDeposit(op); !amount.IsZero() {
+		if amount := NetDeposit(op); !amount.IsZero() {
 			result = append(result, returns.Flow{Time: op.Time, Amount: amount})
 		}
 	}
@@ -304,7 +304,7 @@ func flows(ops []CashOperation) []returns.Flow {
 // The amounts keep the sign of the export: a tax, a fee and a Withdrawal are negative.
 func (s *State) add(op CashOperation) {
 	s.Cash = s.Cash.Add(op.Amount)
-	s.NetDeposits = s.NetDeposits.Add(netDeposit(op))
+	s.NetDeposits = s.NetDeposits.Add(NetDeposit(op))
 	switch op.Type {
 	case TypeDividend, TypeWithholdingTax:
 		s.NetDividends = s.NetDividends.Add(op.Amount)
@@ -325,10 +325,10 @@ func NetDepositsTypes() []string {
 	return slices.Clone(netDepositsTypes)
 }
 
-// netDeposit returns the part of op that counts in the Net Deposits.
+// NetDeposit returns the part of op that counts in the Net Deposits.
 // A Withdrawal and a Transfer Out have a negative amount in the export, so they decrease the Net Deposits.
 // ADR 0003: a Transfer In counts as a deposit and a Transfer Out counts as a withdrawal.
-func netDeposit(op CashOperation) decimal.Decimal {
+func NetDeposit(op CashOperation) decimal.Decimal {
 	if slices.Contains(netDepositsTypes, op.Type) {
 		return op.Amount
 	}
@@ -443,7 +443,7 @@ func (h *Holding) setValue(l Ledger) {
 		h.NoValueReason = ReasonUnknownQuoteCurrency
 		return
 	}
-	currency, ok := rateCurrency(quote, l.Currency)
+	currency, ok := RateCurrency(quote, l.Currency)
 	if !ok {
 		h.NoValueReason = ReasonCrossRate
 		return
@@ -462,17 +462,17 @@ func (h *Holding) setValue(l Ledger) {
 			h.NoValueReason = ReasonNoExchangeRate
 			return
 		}
-		value = convert(value, quote, rate.Rate)
+		value = Convert(value, quote, rate.Rate)
 		h.ExchangeRate = rate
 	}
 	h.Price, h.Value = closePrice, value
 	h.UnrealizedProfit = value.Sub(h.Cost)
 }
 
-// convert converts the amount in the currency from to the other currency of the rate.
+// Convert converts the amount in the currency from to the other currency of the rate.
 // The rate is the PLN amount for 1 unit of the currency that is not PLN.
 // The division keeps decimal.DivisionPrecision (16) decimal places.
-func convert(amount decimal.Decimal, from string, rate decimal.Decimal) decimal.Decimal {
+func Convert(amount decimal.Decimal, from string, rate decimal.Decimal) decimal.Decimal {
 	if from == PLN {
 		return amount.Div(rate)
 	}

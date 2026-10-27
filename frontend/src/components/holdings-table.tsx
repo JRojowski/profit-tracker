@@ -1,5 +1,4 @@
 import { CurrencyBadge } from "@/components/account-badges"
-import { signColour } from "@/components/overview-hero"
 import { PriceSourceDialog } from "@/components/price-source-dialog"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -19,6 +18,7 @@ import {
   formatPercent,
   formatRate,
   formatVolume,
+  signColour,
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 

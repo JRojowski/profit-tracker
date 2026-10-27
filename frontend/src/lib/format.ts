@@ -53,6 +53,13 @@ export function amountSign(amount: string): Sign {
   return text.startsWith("-") ? "negative" : "positive"
 }
 
+// signColour gives the text colour of a sign. Zero keeps the text colour.
+export function signColour(sign: Sign): string {
+  if (sign === "positive") return "text-positive"
+  if (sign === "negative") return "text-negative"
+  return ""
+}
+
 // formatVolume shows a decimal volume with all its digits.
 export function formatVolume(volume: string): string {
   return new Intl.NumberFormat(undefined, {

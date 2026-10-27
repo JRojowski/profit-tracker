@@ -11,6 +11,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const deleteInstrumentPriceRange = `-- name: DeleteInstrumentPriceRange :exec
+DELETE FROM price_ranges
+WHERE instrument_id = (SELECT i.id FROM instruments i WHERE i.ticker = ?)
+`
+
+func (q *Queries) DeleteInstrumentPriceRange(ctx context.Context, ticker string) error {
+	_, err := q.db.ExecContext(ctx, deleteInstrumentPriceRange, ticker)
+	return err
+}
+
 const deleteInstrumentPrices = `-- name: DeleteInstrumentPrices :exec
 DELETE FROM prices
 WHERE instrument_id = (SELECT i.id FROM instruments i WHERE i.ticker = ?)
@@ -18,6 +28,81 @@ WHERE instrument_id = (SELECT i.id FROM instruments i WHERE i.ticker = ?)
 
 func (q *Queries) DeleteInstrumentPrices(ctx context.Context, ticker string) error {
 	_, err := q.db.ExecContext(ctx, deleteInstrumentPrices, ticker)
+	return err
+}
+
+const firstFillTimes = `-- name: FirstFillTimes :many
+SELECT i.ticker, CAST(MIN(c.time) AS TEXT) AS first_time
+FROM lot_fills f
+JOIN lots l ON l.id = f.lot_id
+JOIN instruments i ON i.id = l.instrument_id
+JOIN cash_operations c ON c.id = f.cash_operation_id
+GROUP BY i.ticker
+ORDER BY i.ticker
+`
+
+type FirstFillTimesRow struct {
+	Ticker    string
+	FirstTime string
+}
+
+// The time of the first Fill of each Instrument on any Account, as RFC 3339 text in UTC.
+// The text has no fraction of a second, so the text order is the time order.
+func (q *Queries) FirstFillTimes(ctx context.Context) ([]FirstFillTimesRow, error) {
+	rows, err := q.db.QueryContext(ctx, firstFillTimes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FirstFillTimesRow
+	for rows.Next() {
+		var i FirstFillTimesRow
+		if err := rows.Scan(&i.Ticker, &i.FirstTime); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertDailyPrice = `-- name: InsertDailyPrice :exec
+INSERT INTO prices (instrument_id, date, close, currency, source, fetched_at, daily)
+VALUES ((SELECT i.id FROM instruments i WHERE i.ticker = ?1),
+        ?2, ?3, ?4, ?5, ?6, 1)
+ON CONFLICT (instrument_id, date) DO UPDATE
+SET close = excluded.close, currency = excluded.currency, source = excluded.source, fetched_at = excluded.fetched_at,
+    daily = 1
+WHERE prices.daily = 0 AND substr(prices.fetched_at, 1, 10) <= prices.date
+`
+
+type InsertDailyPriceParams struct {
+	Ticker    string
+	Date      string
+	Close     decimal.Decimal
+	Currency  string
+	Source    string
+	FetchedAt string
+}
+
+// A close of the daily history replaces a stored current price that the tool fetched on or before its price date
+// in UTC. That price can be a live price during the session. A close keeps a current price that the tool
+// fetched after its price date. That price is the close, and it tells that the current price is current.
+// A close never replaces a close of the daily history (ADR 0005).
+func (q *Queries) InsertDailyPrice(ctx context.Context, arg InsertDailyPriceParams) error {
+	_, err := q.db.ExecContext(ctx, insertDailyPrice,
+		arg.Ticker,
+		arg.Date,
+		arg.Close,
+		arg.Currency,
+		arg.Source,
+		arg.FetchedAt,
+	)
 	return err
 }
 
@@ -68,14 +153,103 @@ func (q *Queries) LastPrices(ctx context.Context) ([]LastPricesRow, error) {
 	return items, nil
 }
 
+const priceRanges = `-- name: PriceRanges :many
+SELECT i.ticker, r.first_day, r.last_day, r.fetched_at
+FROM price_ranges r
+JOIN instruments i ON i.id = r.instrument_id
+ORDER BY i.ticker
+`
+
+type PriceRangesRow struct {
+	Ticker    string
+	FirstDay  string
+	LastDay   string
+	FetchedAt string
+}
+
+func (q *Queries) PriceRanges(ctx context.Context) ([]PriceRangesRow, error) {
+	rows, err := q.db.QueryContext(ctx, priceRanges)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PriceRangesRow
+	for rows.Next() {
+		var i PriceRangesRow
+		if err := rows.Scan(
+			&i.Ticker,
+			&i.FirstDay,
+			&i.LastDay,
+			&i.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const prices = `-- name: Prices :many
+SELECT i.ticker, p.date, p.close, p.currency, p.source, p.fetched_at
+FROM prices p
+JOIN instruments i ON i.id = p.instrument_id
+ORDER BY i.ticker, p.date
+`
+
+type PricesRow struct {
+	Ticker    string
+	Date      string
+	Close     decimal.Decimal
+	Currency  string
+	Source    string
+	FetchedAt string
+}
+
+func (q *Queries) Prices(ctx context.Context) ([]PricesRow, error) {
+	rows, err := q.db.QueryContext(ctx, prices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PricesRow
+	for rows.Next() {
+		var i PricesRow
+		if err := rows.Scan(
+			&i.Ticker,
+			&i.Date,
+			&i.Close,
+			&i.Currency,
+			&i.Source,
+			&i.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const tickersFetchedSince = `-- name: TickersFetchedSince :many
 SELECT DISTINCT i.ticker
 FROM prices p
 JOIN instruments i ON i.id = p.instrument_id
-WHERE p.fetched_at >= ?
+WHERE p.fetched_at >= ? AND p.daily = 0
 ORDER BY i.ticker
 `
 
+// Only a current price tells that the current price is current. A close of the daily history does not.
 func (q *Queries) TickersFetchedSince(ctx context.Context, fetchedAt string) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, tickersFetchedSince, fetchedAt)
 	if err != nil {
@@ -105,6 +279,7 @@ VALUES ((SELECT i.id FROM instruments i WHERE i.ticker = ?1),
         ?2, ?3, ?4, ?5, ?6)
 ON CONFLICT (instrument_id, date) DO UPDATE
 SET close = excluded.close, currency = excluded.currency, source = excluded.source, fetched_at = excluded.fetched_at
+WHERE prices.daily = 0
 `
 
 type UpsertPriceParams struct {
@@ -116,6 +291,7 @@ type UpsertPriceParams struct {
 	FetchedAt string
 }
 
+// A current price replaces a stored current price of the same day. It never replaces a close of the daily history.
 func (q *Queries) UpsertPrice(ctx context.Context, arg UpsertPriceParams) error {
 	_, err := q.db.ExecContext(ctx, upsertPrice,
 		arg.Ticker,
@@ -123,6 +299,36 @@ func (q *Queries) UpsertPrice(ctx context.Context, arg UpsertPriceParams) error 
 		arg.Close,
 		arg.Currency,
 		arg.Source,
+		arg.FetchedAt,
+	)
+	return err
+}
+
+const upsertPriceRange = `-- name: UpsertPriceRange :exec
+INSERT INTO price_ranges (instrument_id, first_day, last_day, fetched_at)
+VALUES ((SELECT i.id FROM instruments i WHERE i.ticker = ?1),
+        ?2, ?3, ?4)
+ON CONFLICT (instrument_id) DO UPDATE
+SET first_day  = min(price_ranges.first_day, excluded.first_day),
+    last_day   = max(price_ranges.last_day, excluded.last_day),
+    fetched_at = excluded.fetched_at
+`
+
+type UpsertPriceRangeParams struct {
+	Ticker    string
+	FirstDay  string
+	LastDay   string
+	FetchedAt string
+}
+
+// The new range is the union of the stored range and the asked days. The asked days always touch
+// the stored range: a refresh asks from the day after the stored last day to yesterday, or from an earlier
+// first Fill to the day before the stored first day.
+func (q *Queries) UpsertPriceRange(ctx context.Context, arg UpsertPriceRangeParams) error {
+	_, err := q.db.ExecContext(ctx, upsertPriceRange,
+		arg.Ticker,
+		arg.FirstDay,
+		arg.LastDay,
 		arg.FetchedAt,
 	)
 	return err

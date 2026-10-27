@@ -118,4 +118,12 @@ type Price struct {
 	Currency     string
 	Source       string
 	FetchedAt    string
+	Daily        int64
+}
+
+type PriceRange struct {
+	InstrumentID int64
+	FirstDay     string
+	LastDay      string
+	FetchedAt    string
 }

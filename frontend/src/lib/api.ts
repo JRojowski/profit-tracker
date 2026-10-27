@@ -281,6 +281,23 @@ export type PriceRefresh = {
   refreshed: number
   failures: PriceFailure[]
   rateFailures: RateFailure[]
+  // historyStored is the number of daily prices that the refresh stored.
+  historyStored: number
+  // historyFailures are the Instruments that got no new daily prices.
+  historyFailures: PriceFailure[]
+  // tooManyRequests tells that the price source stopped the refresh with HTTP 429.
+  tooManyRequests: boolean
+  // stopMessage tells why the refresh stopped early, or is null.
+  stopMessage: string | null
+}
+
+// RefreshProgress is the progress of a running price refresh. total is 0 during the step of the current prices.
+export type RefreshProgress = {
+  running: boolean
+  done: number
+  total: number
+  // ticker is the broker ticker that the refresh gets now, or null.
+  ticker: string | null
 }
 
 // Sale is one sale with its Realized Profit. The time is RFC 3339 text in UTC.
@@ -338,10 +355,66 @@ export async function fetchSales(
   return readJSON<Sale[]>(response)
 }
 
-// refreshPrices gets new prices for the Instruments in the Holdings of all Accounts, and new Exchange Rates.
+// refreshPrices gets new prices for the Instruments in the Holdings of all Accounts and new Exchange Rates.
+// It also gets the missing daily prices of each Instrument that an Account ever held.
+// The first refresh can take some minutes.
 export async function refreshPrices(): Promise<PriceRefresh> {
   const response = await fetch("/api/prices/refresh", { method: "POST" })
   return readJSON<PriceRefresh>(response)
+}
+
+// fetchRefreshProgress gets the progress of the running price refresh.
+export async function fetchRefreshProgress(
+  signal?: AbortSignal
+): Promise<RefreshProgress> {
+  const response = await fetch("/api/prices/refresh/progress", { signal })
+  return readJSON<RefreshProgress>(response)
+}
+
+// ValueHistoryPoint is the value and the Net Deposits at the end of one calendar day, as decimal text.
+export type ValueHistoryPoint = {
+  // date is the calendar day, as YYYY-MM-DD.
+  date: string
+  value: string
+  netDeposits: string
+}
+
+// historyPeriods are the periods of the Value History, from the shortest to the longest.
+export const historyPeriods = ["1M", "3M", "YTD", "1Y", "All"] as const
+
+// HistoryPeriod is one period of the Value History.
+export type HistoryPeriod = (typeof historyPeriods)[number]
+
+// ValuedInstrument is an Instrument that the Value History values at the cost of its Lots on some days.
+export type ValuedInstrument = {
+  ticker: string
+  name: string
+}
+
+// ValueHistory is the Value History of one Account in the Account currency, with one point for each calendar day.
+export type ValueHistory = {
+  accountId: number
+  currency: string
+  points: ValueHistoryPoint[]
+  // timeWeightedReturn is the cumulative Time-Weighted Return of each period, as a percentage, or null.
+  timeWeightedReturn: Record<HistoryPeriod, string | null>
+  // periodStarts is the date of the first point that the chart shows for each period, as YYYY-MM-DD.
+  // It is null only when the Value History has no points.
+  periodStarts: Record<HistoryPeriod, string | null>
+  valuedAtCost: ValuedInstrument[]
+  // priceWarnings is empty for now.
+  priceWarnings: unknown[]
+}
+
+// fetchAccountValueHistory gets the Value History and the Time-Weighted Return of one Account.
+export async function fetchAccountValueHistory(
+  id: number,
+  signal?: AbortSignal
+): Promise<ValueHistory> {
+  const response = await fetch(`/api/accounts/${id}/value-history`, {
+    signal,
+  })
+  return readJSON<ValueHistory>(response)
 }
 
 // PriceSource tells where the tool gets the price of an Instrument.

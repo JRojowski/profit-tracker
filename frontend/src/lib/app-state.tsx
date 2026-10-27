@@ -12,14 +12,21 @@ import {
   errorMessage,
   fetchAccounts,
   fetchHealth,
+  fetchRefreshProgress,
   refreshPrices,
   type Account,
   type PriceRefresh,
+  type RefreshProgress,
 } from "@/lib/api"
+
+// progressInterval is the time in milliseconds between two reads of the progress of a running price refresh.
+const progressInterval = 1000
 
 // PriceRefreshState holds the result of the last refresh of the prices and the Exchange Rates.
 export type PriceRefreshState = {
   refreshing: boolean
+  // progress is the last known progress of the running refresh, or null.
+  progress: RefreshProgress | null
   // result is the result of the last price refresh, or null before the first refresh.
   result: PriceRefresh | null
   // refreshedAt is the time of the last successful price refresh. A repeated refresh with the same prices
@@ -56,6 +63,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [valuesVersion, setValuesVersion] = useState(0)
   const [priceRefresh, setPriceRefresh] = useState<PriceRefreshState>({
     refreshing: false,
+    progress: null,
     result: null,
     refreshedAt: null,
     error: null,
@@ -101,11 +109,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshAllPrices = useCallback(() => {
-    setPriceRefresh((state) => ({ ...state, refreshing: true }))
+    setPriceRefresh((state) => ({ ...state, refreshing: true, progress: null }))
+    // While the refresh waits, the tool reads its progress about once each second.
+    const polling = new AbortController()
+    const readProgress = () => {
+      fetchRefreshProgress(polling.signal)
+        .then((progress) => {
+          if (polling.signal.aborted) return
+          setPriceRefresh((state) =>
+            state.refreshing ? { ...state, progress } : state
+          )
+        })
+        .catch(() => {
+          // A failed read of the progress is not important. The next read can work.
+        })
+    }
+    const timer = window.setInterval(readProgress, progressInterval)
+    readProgress()
+    const stopPolling = () => {
+      window.clearInterval(timer)
+      polling.abort()
+    }
     refreshPrices()
       .then((result) => {
+        stopPolling()
         setPriceRefresh({
           refreshing: false,
+          progress: null,
           result,
           refreshedAt: new Date(),
           error: null,
@@ -113,8 +143,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setValuesVersion((version) => version + 1)
       })
       .catch((err: unknown) => {
+        stopPolling()
         setPriceRefresh({
           refreshing: false,
+          progress: null,
           result: null,
           refreshedAt: null,
           error: errorMessage(err),

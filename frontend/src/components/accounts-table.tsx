@@ -1,7 +1,7 @@
 import { Link } from "react-router"
 
 import { AccountBadges } from "@/components/account-badges"
-import { signColour, unpricedNote } from "@/components/overview-hero"
+import { unpricedNote } from "@/components/overview-hero"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -13,7 +13,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { AllAccountsSummary } from "@/lib/api"
-import { amountSign, formatAmount, formatPercent } from "@/lib/format"
+import {
+  amountSign,
+  formatAmount,
+  formatPercent,
+  signColour,
+} from "@/lib/format"
 import { paths } from "@/lib/routes"
 import { cn } from "@/lib/utils"
 

@@ -1,4 +1,3 @@
-import { signColour } from "@/components/overview-hero"
 import { StackedHead } from "@/components/stacked-head"
 import {
   Table,
@@ -15,6 +14,7 @@ import {
   formatAmount,
   formatPolishDate,
   formatVolume,
+  signColour,
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 

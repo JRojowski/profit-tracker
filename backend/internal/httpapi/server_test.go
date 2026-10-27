@@ -47,6 +47,30 @@ type testServer struct {
 	clock *testClock
 	// db is the database of the server. Only a test that needs data that no endpoint shows reads it.
 	db *store.Store
+	// pauses counts the pauses of the price service before a history request. The test server does not sleep.
+	pauses *pauseCounter
+}
+
+// pauseCounter is a pause of the price service that does not sleep. It counts the calls.
+// It is safe for concurrent use.
+type pauseCounter struct {
+	mu sync.Mutex
+	n  int
+}
+
+// pause counts the call and returns at once.
+func (p *pauseCounter) pause(context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.n++
+	return nil
+}
+
+// count returns the number of pauses.
+func (p *pauseCounter) count() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.n
 }
 
 // startServer starts the backend with a new SQLite file in a temporary folder.
@@ -78,7 +102,8 @@ func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *tes
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
 	clock := &testClock{now: testToday}
-	prices := price.NewService(db, provider, clock.Now)
+	pauses := &pauseCounter{}
+	prices := price.NewService(db, provider, clock.Now, pauses.pause)
 	rateProvider := newFakeRateProvider()
 	rates := exchange.NewService(db, rateProvider, clock.Now)
 	handler := httpapi.NewHandler(httpapi.Options{
@@ -94,6 +119,7 @@ func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *tes
 
 	return &testServer{
 		URL: srv.URL, client: srv.Client(), prices: prices, rates: rates, rateProvider: rateProvider, clock: clock, db: db,
+		pauses: pauses,
 	}
 }
 
@@ -120,19 +146,101 @@ func (c *testClock) set(now time.Time) {
 	c.now = now
 }
 
-// fakeProvider is a price.Provider with fixed quotes. It records each requested price ticker.
-// It is safe for concurrent use.
+// fakeProvider is a price.Provider with fixed quotes and daily closes. It records each requested price ticker
+// and each requested history. It is safe for concurrent use.
+//
+// A price ticker with no daily closes gives an empty History and no error.
 type fakeProvider struct {
 	mu        sync.Mutex
 	quotes    map[string]price.Quote
 	failure   error
 	requested []string
-	// onRequest runs for each request, before the fake answers. It can block or cancel a context.
+	// onRequest runs for each LastClose request, before the fake answers. It can block or cancel a context.
 	onRequest func(ctx context.Context, ticker string) error
+	// histories are the daily closes by price ticker.
+	histories map[string]price.History
+	// historyFailures are the errors of the price tickers whose history requests must fail.
+	historyFailures  map[string]error
+	historyRequested []historyRequest
+	// onHistory runs for each DailyCloses request, before the fake answers. It can block.
+	onHistory func(ticker string)
+}
+
+// historyRequest is one requested history: the price ticker and the first and last day as YYYY-MM-DD.
+type historyRequest struct {
+	Ticker, From, To string
 }
 
 func newFakeProvider() *fakeProvider {
-	return &fakeProvider{quotes: map[string]price.Quote{}}
+	return &fakeProvider{
+		quotes: map[string]price.Quote{}, histories: map[string]price.History{}, historyFailures: map[string]error{},
+	}
+}
+
+// DailyCloses returns the daily closes of the price ticker from from to to, or the error of the price ticker.
+func (f *fakeProvider) DailyCloses(_ context.Context, ticker string, from, to time.Time) (price.History, error) {
+	f.mu.Lock()
+	f.historyRequested = append(f.historyRequested, historyRequest{
+		Ticker: ticker, From: from.Format(time.DateOnly), To: to.Format(time.DateOnly),
+	})
+	onHistory := f.onHistory
+	f.mu.Unlock()
+	// The hook runs with no lock, so that a blocked hook does not block the other methods.
+	if onHistory != nil {
+		onHistory(ticker)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.historyFailures[ticker]; err != nil {
+		return price.History{}, err
+	}
+	all := f.histories[ticker]
+	got := price.History{Currency: all.Currency, Source: "fake"}
+	for _, c := range all.Closes {
+		if !c.Date.Before(from) && !c.Date.After(to) {
+			got.Closes = append(got.Closes, c)
+		}
+	}
+	return got, nil
+}
+
+// setHistory sets the daily closes of the price ticker in the currency. Each close is "YYYY-MM-DD=price",
+// in date order.
+func (f *fakeProvider) setHistory(t *testing.T, ticker, currency string, closes ...string) {
+	t.Helper()
+	h := price.History{Currency: currency}
+	for _, c := range closes {
+		date, value, ok := strings.Cut(c, "=")
+		require.True(t, ok, "close %q", c)
+		at, err := time.Parse(time.DateOnly, date)
+		require.NoError(t, err)
+		h.Closes = append(h.Closes, price.DailyClose{Date: at, Close: decimal.RequireFromString(value)})
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.histories[ticker] = h
+}
+
+// failHistory makes each later history request of the price ticker fail with err. A nil err stops the failures.
+func (f *fakeProvider) failHistory(ticker string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.historyFailures[ticker] = err
+}
+
+// setOnHistory sets the hook that runs for each later history request.
+func (f *fakeProvider) setOnHistory(hook func(ticker string)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onHistory = hook
+}
+
+// historyRequests returns the requested histories, in request order.
+func (f *fakeProvider) historyRequests() []historyRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]historyRequest(nil), f.historyRequested...)
 }
 
 // LastClose returns the quote for the price ticker, or an error if the fake has no quote or must fail.

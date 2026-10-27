@@ -5,7 +5,12 @@ import { FigureLabel } from "@/components/figure-label"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Loaded } from "@/hooks/use-load"
 import type { Allocation, Returns } from "@/lib/api"
-import { amountSign, formatAmount, formatPercent } from "@/lib/format"
+import {
+  amountSign,
+  formatAmount,
+  formatPercent,
+  signColour,
+} from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // OverviewFigures are the figures of the hero of an Overview, in one currency.
@@ -167,13 +172,6 @@ function SignedPercent({ percent, className }: SignedPercentProps) {
       {percent === null ? "—" : formatPercent(percent, { signed: true })}
     </p>
   )
-}
-
-// signColour gives the text colour of a sign. Zero keeps the text colour.
-export function signColour(sign: ReturnType<typeof amountSign>): string {
-  if (sign === "positive") return "text-positive"
-  if (sign === "negative") return "text-negative"
-  return ""
 }
 
 // amountText shows an amount, or "—" when the tool cannot calculate it.

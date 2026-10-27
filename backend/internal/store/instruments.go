@@ -45,7 +45,8 @@ func (s *Store) Instrument(ctx context.Context, ticker string) (Instrument, erro
 
 // SetPriceTicker sets the manual price ticker of the Instrument and returns the Instrument, or ErrNotFound.
 // An empty priceTicker removes the manual price ticker.
-// If deletePrices is true, it also deletes the stored prices of the Instrument in the same transaction.
+// If deletePrices is true, it also deletes the stored prices and the asked range of the Instrument
+// in the same transaction.
 func (s *Store) SetPriceTicker(ctx context.Context, ticker, priceTicker string, deletePrices bool) (Instrument, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -64,6 +65,9 @@ func (s *Store) SetPriceTicker(ctx context.Context, ticker, priceTicker string, 
 	if deletePrices {
 		if err := q.DeleteInstrumentPrices(ctx, ticker); err != nil {
 			return Instrument{}, fmt.Errorf("delete prices of %s: %w", ticker, err)
+		}
+		if err := q.DeleteInstrumentPriceRange(ctx, ticker); err != nil {
+			return Instrument{}, fmt.Errorf("delete price range of %s: %w", ticker, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {

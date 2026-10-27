@@ -8,11 +8,15 @@ import {
   YAxis,
 } from "recharts"
 
-import { signColour } from "@/components/overview-hero"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { amountSign, formatAmount, formatNumber } from "@/lib/format"
+import {
+  amountSign,
+  formatAmount,
+  formatNumber,
+  signColour,
+} from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // WaterfallPart is one part of the Total Result. The amount is null when the tool cannot calculate it.

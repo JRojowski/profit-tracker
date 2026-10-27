@@ -49,7 +49,7 @@ backend/
   internal/<package>/   one package per domain concept
 ```
 
-- Name packages after the domain concept, with the `GLOSSARY.md` term. The packages now are `xtb`, `lot`, `ledger`, `importer`, `price`, `exchange`, `returns`, `ikze`, `allaccounts`, `allocation`, `store`, `httpapi`, `web` and `demo`.
+- Name packages after the domain concept, with the `GLOSSARY.md` term. The packages now are `xtb`, `lot`, `ledger`, `importer`, `price`, `exchange`, `returns`, `valuehistory`, `ikze`, `allaccounts`, `allocation`, `store`, `httpapi`, `web` and `demo`.
 - Give a package a name that tells what it holds. `util`, `common`, `models` and `helpers` tell nothing.
 - Use names that do not repeat the package: `ledger.Calculate`, `price.Provider`.
 - Keep the domain packages free of HTTP and SQL. `httpapi` and `store` are the adapters.

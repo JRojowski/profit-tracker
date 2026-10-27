@@ -243,21 +243,46 @@ func (a *api) accountView(w http.ResponseWriter, r *http.Request) (accountView, 
 
 // readAccountView reads the Ledger, the price data and the Exchange Rates, and calculates the state of the Account.
 func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountView, error) {
-	l, err := a.store.Ledger(ctx, acc.ID)
+	in, err := a.readHeroInput(ctx, acc)
 	if err != nil {
 		return accountView{}, err
+	}
+	state, err := ledger.Calculate(in.ledger)
+	if err != nil {
+		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)
+	}
+	return accountView{account: acc, state: state, instruments: in.instruments, prices: in.prices, rates: in.rates}, nil
+}
+
+// heroInput is the input of the state of one Account, with the price data that it comes from.
+type heroInput struct {
+	// ledger has the Cash Operations, the Lots, the current prices and the latest Exchange Rates.
+	ledger ledger.Ledger
+	// instruments are the price sources of the Instruments by broker ticker.
+	instruments map[string]store.Instrument
+	// prices are the last stored prices by broker ticker, in any currency.
+	prices map[string]store.Price
+	// rates are the latest Exchange Rates by currency.
+	rates map[string]exchange.Latest
+}
+
+// readHeroInput reads the Ledger, the price data and the Exchange Rates of the Account.
+func (a *api) readHeroInput(ctx context.Context, acc store.Account) (heroInput, error) {
+	l, err := a.store.Ledger(ctx, acc.ID)
+	if err != nil {
+		return heroInput{}, err
 	}
 	instruments, err := a.store.Instruments(ctx)
 	if err != nil {
-		return accountView{}, err
+		return heroInput{}, err
 	}
 	prices, err := a.store.LastPrices(ctx)
 	if err != nil {
-		return accountView{}, err
+		return heroInput{}, err
 	}
 	rates, err := a.rates.LatestRates(ctx)
 	if err != nil {
-		return accountView{}, err
+		return heroInput{}, err
 	}
 	l.Currency = acc.Currency
 	l.QuoteCurrencies = make(map[string]string, len(instruments))
@@ -271,11 +296,7 @@ func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountVi
 	for currency, r := range rates {
 		l.ExchangeRates[currency] = ledger.ExchangeRate{Rate: r.Mid, Date: r.Date}
 	}
-	state, err := ledger.Calculate(l)
-	if err != nil {
-		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)
-	}
-	return accountView{account: acc, state: state, instruments: instruments, prices: prices, rates: rates}, nil
+	return heroInput{ledger: l, instruments: instruments, prices: prices, rates: rates}, nil
 }
 
 // accountID returns the Account ID of the path. An ID that is not a number is an unknown Account.

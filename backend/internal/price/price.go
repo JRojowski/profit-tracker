@@ -4,6 +4,7 @@ package price
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -22,10 +23,38 @@ type Quote struct {
 	Source string
 }
 
+// ErrTooManyRequests tells that the price source answered "Too Many Requests" (HTTP 429).
+// The price source blocks the requests of the tool. The tool must stop and try again later.
+var ErrTooManyRequests = errors.New("the price source answered Too Many Requests")
+
 // Provider gets prices from a price source.
 type Provider interface {
 	// LastClose returns the last close price of the price ticker, for example "AAPL" or "VUSA.L".
 	LastClose(ctx context.Context, ticker string) (Quote, error)
+	// DailyCloses returns the raw daily closes of the price ticker from the day from to the day to.
+	// The range includes both days. The days are at midnight UTC. A day with no close is not in the History,
+	// and the History has no close for today. It returns an error that wraps ErrTooManyRequests
+	// when the price source blocks the requests.
+	DailyCloses(ctx context.Context, ticker string, from, to time.Time) (History, error)
+}
+
+// History is the daily raw closes of one price ticker. ADR 0005: a raw close is the close of that day
+// with no adjustment for a later split.
+type History struct {
+	// Currency is the ISO code of the currency of the closes, for example "USD".
+	// It can be empty when Closes is empty.
+	Currency string
+	// Closes are in date order.
+	Closes []DailyClose
+	// Source is the name of the provider, for example "yahoo".
+	Source string
+}
+
+// DailyClose is the raw close price of one day.
+type DailyClose struct {
+	// Date is the price date in the exchange time, at midnight UTC.
+	Date  time.Time
+	Close decimal.Decimal
 }
 
 // market is what the suffix of a broker ticker tells about the Instrument.

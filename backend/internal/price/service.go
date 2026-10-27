@@ -2,37 +2,80 @@ package price
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
-// Service gets the prices of the Instruments in Holdings from a Provider and stores them.
-// It runs one refresh at a time.
+// Service gets prices from a Provider and stores them. It runs one refresh at a time.
+// It gets the current prices of the Instruments in Holdings.
+// It also gets the daily history of each Instrument that an Account ever held.
 type Service struct {
 	store    *store.Store
 	provider Provider
 	now      func() time.Time
+	// pause runs before each history request. It can be nil.
+	pause func(ctx context.Context) error
 	// lock serializes the refreshes, because the refresh at start and a refresh by the user can overlap.
 	// It is a channel with one slot and not a sync.Mutex, so that a refresh stops waiting when its context ends.
 	lock chan struct{}
+
+	// progressMu guards progress.
+	progressMu sync.Mutex
+	progress   Progress
 }
 
 // NewService returns a Service that stores the prices in st. now is the clock that tells "today".
-func NewService(st *store.Store, provider Provider, now func() time.Time) *Service {
-	return &Service{store: st, provider: provider, now: now, lock: make(chan struct{}, 1)}
+// pause runs before each history request, so that the requests do not come too fast for the price source.
+// Give PauseBetweenRequests in production. A nil pause does not wait.
+func NewService(st *store.Store, provider Provider, now func() time.Time, pause func(ctx context.Context) error) *Service {
+	return &Service{store: st, provider: provider, now: now, pause: pause, lock: make(chan struct{}, 1)}
 }
 
 // Result is the result of one refresh.
 type Result struct {
-	// Refreshed is the number of stored prices.
+	// Refreshed is the number of stored current prices.
 	Refreshed int
-	// Failures are the Instruments that got no price, in broker ticker order.
+	// Failures are the Instruments that got no current price, in broker ticker order.
 	Failures []Failure
+	// HistoryStored is the number of stored daily closes.
+	HistoryStored int
+	// HistoryFailures are the Instruments that got no history, in broker ticker order.
+	HistoryFailures []Failure
+	// TooManyRequests tells that the price source answered "Too Many Requests" and the refresh stopped.
+	// The prices that the refresh stored before the stop stay.
+	TooManyRequests bool
+}
+
+// Progress is the state of the running refresh.
+type Progress struct {
+	// Running tells that a refresh runs.
+	Running bool
+	// Done is the number of history requests that the refresh completed. Total is the number of history
+	// requests of the refresh. Both are 0 before the history step.
+	Done, Total int
+	// Ticker is the broker ticker of the Instrument of the running history request, or empty.
+	Ticker string
+}
+
+// Progress returns the state of the running refresh. It is the zero Progress when no refresh runs.
+func (s *Service) Progress() Progress {
+	s.progressMu.Lock()
+	defer s.progressMu.Unlock()
+	return s.progress
+}
+
+// setProgress runs change on the progress, with the lock.
+func (s *Service) setProgress(change func(p *Progress)) {
+	s.progressMu.Lock()
+	defer s.progressMu.Unlock()
+	change(&s.progress)
 }
 
 // Failure is one Instrument that got no price in a refresh.
@@ -52,8 +95,10 @@ func (e *CurrencyError) Error() string {
 	return fmt.Sprintf("the price is in %s, but the Instrument is quoted in %s", e.Got, e.Want)
 }
 
-// Refresh gets a price for each Instrument that is in a Holding of an Account and has a Quote Currency.
-// A failure of one Instrument does not stop the others.
+// Refresh gets a current price for each Instrument that is in a Holding of an Account and has a Quote Currency.
+// Then it gets the missing daily closes of each Instrument that an Account ever held and that has
+// a Quote Currency. A failure of one Instrument does not stop the others. "Too Many Requests" from the price
+// source stops the refresh, and the result tells it.
 // Refresh returns an error if it cannot read or store data, or if ctx ends. Then the result holds the prices
 // that it stored before the error.
 func (s *Service) Refresh(ctx context.Context) (Result, error) {
@@ -66,11 +111,21 @@ func (s *Service) Refresh(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return s.refresh(ctx, held)
+	plan, err := s.historyPlan(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	result, err := s.refresh(ctx, held)
+	if err != nil || result.TooManyRequests {
+		return result, err
+	}
+	err = s.refreshHistory(ctx, plan, &result)
+	return result, err
 }
 
-// RefreshIfStale runs a refresh if a held Instrument with a Quote Currency has no price fetched today, in UTC.
-// Thus a later start of the same day tries again for the Instruments that failed. It tells if the refresh ran.
+// RefreshIfStale gets the current prices if a held Instrument with a Quote Currency has no current price
+// fetched today, in UTC. Thus a later start of the same day tries again for the Instruments that failed.
+// It tells if the refresh ran. It gets no daily history. Only Refresh gets the history.
 func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 	if err := s.acquire(ctx); err != nil {
 		return Result{}, false, err
@@ -81,6 +136,7 @@ func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 	if err != nil {
 		return Result{}, false, err
 	}
+	// A daily close does not tell that the current price is current. See TickersFetchedSince.
 	fetched, err := s.store.TickersFetchedSince(ctx, StartOfDay(s.now()))
 	if err != nil {
 		return Result{}, false, err
@@ -93,9 +149,11 @@ func (s *Service) RefreshIfStale(ctx context.Context) (Result, bool, error) {
 }
 
 // acquire waits until no other refresh runs. It returns the error of ctx if ctx ends first.
+// The progress tells that a refresh runs until release.
 func (s *Service) acquire(ctx context.Context) error {
 	select {
 	case s.lock <- struct{}{}:
+		s.setProgress(func(p *Progress) { *p = Progress{Running: true} })
 		return nil
 	case <-ctx.Done():
 		return fmt.Errorf("wait for the running price refresh: %w", ctx.Err())
@@ -104,6 +162,7 @@ func (s *Service) acquire(ctx context.Context) error {
 
 // release lets the next refresh run.
 func (s *Service) release() {
+	s.setProgress(func(p *Progress) { *p = Progress{} })
 	<-s.lock
 }
 
@@ -122,9 +181,8 @@ func (s *Service) refresh(ctx context.Context, held []HeldInstrument) (Result, e
 		}
 		q, err := s.quote(ctx, h)
 		if err != nil {
-			// A provider error that comes from the end of ctx is not a failure of the Instrument.
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return result, fmt.Errorf("refresh prices: %w", ctxErr)
+			if stop, err := stopOn(ctx, err, &result); stop {
+				return result, err
 			}
 			result.Failures = append(result.Failures, Failure{Ticker: h.Ticker, Err: err})
 			continue
@@ -138,6 +196,24 @@ func (s *Service) refresh(ctx context.Context, held []HeldInstrument) (Result, e
 		result.Refreshed++
 	}
 	return result, nil
+}
+
+// stopOn tells if the provider error err stops the refresh, and returns the error of the stop.
+//   - A provider error that comes from the end of ctx is not a failure of the Instrument.
+//     The refresh stops with the error of ctx.
+//   - "Too Many Requests" stops the refresh with no error and sets result.TooManyRequests,
+//     because more requests make the block of the price source longer.
+//
+// Otherwise it returns false and err, which is a failure of the Instrument.
+func stopOn(ctx context.Context, err error, result *Result) (bool, error) {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return true, fmt.Errorf("refresh prices: %w", ctxErr)
+	}
+	if errors.Is(err, ErrTooManyRequests) {
+		result.TooManyRequests = true
+		return true, nil
+	}
+	return false, err
 }
 
 // quote gets the price of the held Instrument with its price ticker and checks its currency.

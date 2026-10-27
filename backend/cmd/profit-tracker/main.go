@@ -67,7 +67,7 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 
 	// The API and the refresh at start share one price service and one Exchange Rate service,
 	// so that their refreshes do not overlap.
-	prices := price.NewService(db, yahoo.New(), time.Now)
+	prices := price.NewService(db, yahoo.New(), time.Now, price.PauseBetweenRequests)
 	rates := exchange.NewService(db, nbp.New(), time.Now)
 	srv := &http.Server{
 		Handler: httpapi.NewHandler(httpapi.Options{
@@ -115,8 +115,8 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 	return nil
 }
 
-// refreshPricesAtStart gets new prices when a held Instrument has no price fetched today, and logs the result.
-// It returns false if the tool stops.
+// refreshPricesAtStart gets new prices when a held Instrument has no current price fetched today,
+// and logs the result. It gets no daily history. It returns false if the tool stops.
 func refreshPricesAtStart(ctx context.Context, prices *price.Service, logger *slog.Logger) bool {
 	result, ran, err := prices.RefreshIfStale(ctx)
 	if errors.Is(err, context.Canceled) {
@@ -133,6 +133,9 @@ func refreshPricesAtStart(ctx context.Context, prices *price.Service, logger *sl
 	}
 	for _, f := range result.Failures {
 		logger.Warn("no price for instrument", "ticker", f.Ticker, "error", f.Err)
+	}
+	if result.TooManyRequests {
+		logger.Warn("price refresh at start stopped, because the price source answered Too Many Requests")
 	}
 	logger.Info("price refresh at start done", "refreshed", result.Refreshed, "failures", len(result.Failures))
 	return true

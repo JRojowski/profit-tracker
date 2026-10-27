@@ -4,17 +4,19 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
-	"github.com/jrojowski/profit-tracker/backend/internal/price"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
 // newSeriesDays is the number of days before the first needed day where a series starts.
-// The first needed day is the day of the earliest Net Deposits flow of an Account in the currency.
-// For a currency that is only a Quote Currency, it is the day of the first refresh.
+// The first needed day is the earlier of two days. One is the day of the earliest Net Deposits flow
+// of an Account in the currency. The other is the day of the first Fill of an Instrument with the currency
+// as its Quote Currency.
+// For a currency with neither day, the series starts 7 days before the day of the first refresh.
 // Thus the series has a table before the first day that a lookup asks for, also after a weekend or a holiday.
 const newSeriesDays = 7
 
@@ -258,21 +260,26 @@ func toStored(currency string, rates []Rate, fetchedAt time.Time) []store.Exchan
 // neededCurrency is one currency that needs a rate, with the first day that its series needs.
 type neededCurrency struct {
 	currency string
-	// firstDay is 7 days before the day of the earliest Net Deposits flow of an Account in the currency,
-	// in Polish time at midnight UTC. hasFirstDay is false if no Account in the currency has a flow.
+	// firstDay is 7 days before the first needed day of the currency, in Polish time at midnight UTC.
+	// See newSeriesDays. hasFirstDay is false if the currency has no needed day.
 	firstDay    time.Time
 	hasFirstDay bool
 }
 
 // neededCurrencies returns the currencies that need a rate, in currency order:
 //   - the Account currency that is not PLN of each Account, for the view of all Accounts (ADR 0004)
-//   - the Quote Currency that is not PLN of each Instrument in a Holding
+//   - the Quote Currency that is not PLN of each Instrument that an Account ever held.
+//     The value of its Holding today and in the Value History needs the rate.
 func (s *Service) neededCurrencies(ctx context.Context) ([]neededCurrency, error) {
 	accounts, err := s.store.Accounts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	held, err := price.HeldInstruments(ctx, s.store)
+	firstFills, err := s.store.FirstFillTimes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	instruments, err := s.store.Instruments(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -280,21 +287,41 @@ func (s *Service) neededCurrencies(ctx context.Context) ([]neededCurrency, error
 	if err != nil {
 		return nil, err
 	}
-	var currencies []string
+	// first is the earliest needed day of each currency. A currency with no known day has the zero time.
+	first := map[string]time.Time{}
+	add := func(currency string) bool {
+		if currency == "" || currency == ledger.PLN {
+			return false
+		}
+		if _, ok := first[currency]; !ok {
+			first[currency] = time.Time{}
+		}
+		return true
+	}
+	addDay := func(currency string, t time.Time) {
+		if !add(currency) {
+			return
+		}
+		if day := DayInWarsaw(t); first[currency].IsZero() || day.Before(first[currency]) {
+			first[currency] = day
+		}
+	}
 	for _, acc := range accounts {
-		currencies = append(currencies, acc.Currency)
+		if t, ok := firstFlows[acc.Currency]; ok {
+			addDay(acc.Currency, t)
+		} else {
+			add(acc.Currency)
+		}
 	}
-	for _, h := range held {
-		currencies = append(currencies, h.QuoteCurrency)
+	for ticker, t := range firstFills {
+		addDay(instruments[ticker].QuoteCurrency, t)
 	}
-	slices.Sort(currencies)
-	currencies = slices.DeleteFunc(slices.Compact(currencies), func(c string) bool { return c == ledger.PLN })
 
-	needed := make([]neededCurrency, 0, len(currencies))
-	for _, currency := range currencies {
+	needed := make([]neededCurrency, 0, len(first))
+	for _, currency := range slices.Sorted(maps.Keys(first)) {
 		n := neededCurrency{currency: currency}
-		if first, ok := firstFlows[currency]; ok {
-			n.firstDay, n.hasFirstDay = DayInWarsaw(first).AddDate(0, 0, -newSeriesDays), true
+		if day := first[currency]; !day.IsZero() {
+			n.firstDay, n.hasFirstDay = day.AddDate(0, 0, -newSeriesDays), true
 		}
 		needed = append(needed, n)
 	}

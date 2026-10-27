@@ -119,7 +119,8 @@ func TestRefreshPrices_OneCurrencyFails_OtherCurrenciesGetRates(t *testing.T) {
 		UnpricedHoldings: 1,
 	}, srv.summaryPrices(t, id))
 
-	// The next day the NBP answers. The tool recorded no days for EUR, so the series starts again 7 days before today.
+	// The next day the NBP answers. The tool recorded no days for EUR, so the series starts again 7 days before
+	// the first Fill of DEF.DE. The Fills have the default time 2026-01-02.
 	// DEF.DE: value 45.00 × 1 × 4.25 = 191.25 PLN.
 	srv.clock.set(testToday.AddDate(0, 0, 1))
 	srv.rateProvider.fail("EUR", nil)
@@ -129,9 +130,9 @@ func TestRefreshPrices_OneCurrencyFails_OtherCurrenciesGetRates(t *testing.T) {
 
 	assert.Empty(t, refresh.RateFailures)
 	assert.Equal(t, []rateRequest{
-		{Currency: "EUR", From: "2026-10-16", To: "2026-10-23"},
-		{Currency: "USD", From: "2026-10-16", To: "2026-10-23"},
-		{Currency: "EUR", From: "2026-10-17", To: "2026-10-24"},
+		{Currency: "EUR", From: "2025-12-26", To: "2026-10-23"},
+		{Currency: "USD", From: "2025-12-26", To: "2026-10-23"},
+		{Currency: "EUR", From: "2025-12-26", To: "2026-10-24"},
 		{Currency: "USD", From: "2026-10-23", To: "2026-10-24"},
 	}, srv.rateProvider.requestedRanges())
 	assert.Equal(t, ptr("191.25"), srv.holdingPrices(t, id)[1].Value)
@@ -143,9 +144,10 @@ func TestRefreshPrices_ExchangeRates_AsksOnlyForMissingDays(t *testing.T) {
 	srv := startServer(t)
 	srv.importAccount(t, plnExport(), "XTB PLN")
 
-	// Friday 2026-10-23, 11:30 in Polish time. A new currency starts 7 days before today.
+	// Friday 2026-10-23, 11:30 in Polish time. A Quote Currency starts 7 days before the first Fill of its
+	// Instrument. The Fill has the default time 2026-01-02.
 	srv.refreshPrices(t)
-	assert.Equal(t, []rateRequest{{Currency: "USD", From: "2026-10-16", To: "2026-10-23"}}, srv.rateProvider.requestedRanges())
+	assert.Equal(t, []rateRequest{{Currency: "USD", From: "2025-12-26", To: "2026-10-23"}}, srv.rateProvider.requestedRanges())
 
 	// Later on the same day, the refresh asks for nothing.
 	srv.clock.set(time.Date(2026, 10, 23, 21, 59, 0, 0, time.UTC))
@@ -153,15 +155,15 @@ func TestRefreshPrices_ExchangeRates_AsksOnlyForMissingDays(t *testing.T) {
 	assert.Len(t, srv.rateProvider.requestedRanges(), 1, "a second refresh on the same day asks for nothing")
 
 	// Monday. The last asked day comes again, because a morning fetch does not get the table of that day.
-	// A new Holding in EUR starts a new series 7 days before today.
+	// A new Holding in EUR starts a new series 7 days before its first Fill.
 	srv.clock.set(time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC))
 	srv.importAccount(t, xtbtest.Export{
 		AccountNumber: "56000032", Currency: "PLN", CashOperations: []xtbtest.CashOperation{defPurchase},
 	}, "XTB IKZE")
 	srv.refreshPrices(t)
 	assert.Equal(t, []rateRequest{
-		{Currency: "USD", From: "2026-10-16", To: "2026-10-23"},
-		{Currency: "EUR", From: "2026-10-19", To: "2026-10-26"},
+		{Currency: "USD", From: "2025-12-26", To: "2026-10-23"},
+		{Currency: "EUR", From: "2025-12-26", To: "2026-10-26"},
 		{Currency: "USD", From: "2026-10-23", To: "2026-10-26"},
 	}, srv.rateProvider.requestedRanges())
 }
@@ -206,7 +208,7 @@ func TestRefreshAtStart_ExchangeRates_RunsOnlyWhenTheLastFetchIsBeforeTodayInPol
 	assert.True(t, ran, "the last fetch is yesterday in Polish time")
 	assert.Empty(t, result.Failures)
 	assert.Equal(t, []rateRequest{
-		{Currency: "USD", From: "2026-10-16", To: "2026-10-23"},
+		{Currency: "USD", From: "2025-12-26", To: "2026-10-23"},
 		{Currency: "USD", From: "2026-10-23", To: "2026-10-24"},
 	}, srv.rateProvider.requestedRanges())
 }
@@ -244,7 +246,7 @@ func TestRefreshPrices_RateProviderFailsNextDay_KeepsLastRateWithStaleWarning(t 
 	refresh = srv.refreshPrices(t)
 	assert.Empty(t, refresh.RateFailures)
 	assert.Equal(t, []rateRequest{
-		{Currency: "USD", From: "2026-10-16", To: "2026-10-23"},
+		{Currency: "USD", From: "2025-12-26", To: "2026-10-23"},
 		{Currency: "USD", From: "2026-10-23", To: "2026-10-26"},
 		{Currency: "USD", From: "2026-10-23", To: "2026-10-26"},
 	}, srv.rateProvider.requestedRanges())

@@ -32,6 +32,8 @@ func returnNote(r returns.Rate) *string {
 		note = "The Annual Return does not converge."
 	case returns.ReasonMissingExchangeRate:
 		note = "An Exchange Rate is missing. Refresh the prices."
+	case returns.ReasonNoValueHistory:
+		note = "The Value History has no day with a value before it."
 	}
 	return &note
 }

@@ -14,13 +14,36 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
+// tooManyRequestsMessage is the stop message of a refresh that the price source blocks.
+const tooManyRequestsMessage = "Yahoo blocks the requests, try again later"
+
 // refreshResponse is the body of POST /api/prices/refresh.
 type refreshResponse struct {
-	// Refreshed is the number of stored prices.
-	Refreshed int                      `json:"refreshed"`
-	Failures  []refreshFailureResponse `json:"failures"`
+	// Refreshed is the number of stored current prices.
+	Refreshed int `json:"refreshed"`
+	// Failures are the Instruments that got no current price.
+	Failures []refreshFailureResponse `json:"failures"`
 	// RateFailures are the currencies that got no Exchange Rate.
 	RateFailures []rateFailureResponse `json:"rateFailures"`
+	// HistoryStored is the number of stored daily closes.
+	HistoryStored int `json:"historyStored"`
+	// HistoryFailures are the Instruments that got no history.
+	HistoryFailures []refreshFailureResponse `json:"historyFailures"`
+	// TooManyRequests tells that the price source blocked the requests and the refresh stopped.
+	TooManyRequests bool `json:"tooManyRequests"`
+	// StopMessage is the message for the user when the refresh stopped, or nil.
+	StopMessage *string `json:"stopMessage"`
+}
+
+// progressResponse is the body of GET /api/prices/refresh/progress.
+type progressResponse struct {
+	// Running tells that a refresh runs.
+	Running bool `json:"running"`
+	// Done and Total are the numbers of the completed and of all history requests of the running refresh.
+	Done  int `json:"done"`
+	Total int `json:"total"`
+	// Ticker is the broker ticker of the running history request, or nil.
+	Ticker *string `json:"ticker"`
 }
 
 // rateFailureResponse is one currency that got no Exchange Rate.
@@ -37,8 +60,8 @@ type refreshFailureResponse struct {
 	Error  string `json:"error"`
 }
 
-// refreshPrices gets new prices for the Instruments in Holdings, and then the missing Exchange Rates.
-// The status is 200 also when all Instruments and all currencies fail.
+// refreshPrices gets new prices for the Instruments in Holdings and the missing daily history,
+// and then the missing Exchange Rates. The status is 200 also when all Instruments and all currencies fail.
 func (a *api) refreshPrices(w http.ResponseWriter, r *http.Request) {
 	result, err := a.prices.Refresh(r.Context())
 	if err != nil {
@@ -51,17 +74,37 @@ func (a *api) refreshPrices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := refreshResponse{
-		Refreshed:    result.Refreshed,
-		Failures:     make([]refreshFailureResponse, 0, len(result.Failures)),
-		RateFailures: make([]rateFailureResponse, 0, len(rateResult.Failures)),
+		Refreshed:       result.Refreshed,
+		Failures:        toRefreshFailures(result.Failures),
+		RateFailures:    make([]rateFailureResponse, 0, len(rateResult.Failures)),
+		HistoryStored:   result.HistoryStored,
+		HistoryFailures: toRefreshFailures(result.HistoryFailures),
+		TooManyRequests: result.TooManyRequests,
 	}
-	for _, f := range result.Failures {
-		resp.Failures = append(resp.Failures, refreshFailureResponse{Ticker: f.Ticker, Error: f.Err.Error()})
+	if result.TooManyRequests {
+		resp.StopMessage = new(tooManyRequestsMessage)
 	}
 	for _, f := range rateResult.Failures {
 		resp.RateFailures = append(resp.RateFailures, rateFailureResponse{Currency: f.Currency, Error: f.Err.Error()})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// toRefreshFailures returns the response rows of the failures. It returns an empty slice and not nil,
+// so that the JSON has a list.
+func toRefreshFailures(failures []price.Failure) []refreshFailureResponse {
+	rows := make([]refreshFailureResponse, 0, len(failures))
+	for _, f := range failures {
+		rows = append(rows, refreshFailureResponse{Ticker: f.Ticker, Error: f.Err.Error()})
+	}
+	return rows
+}
+
+// refreshProgress returns the progress of the running price refresh. The frontend asks for it while
+// POST /api/prices/refresh runs.
+func (a *api) refreshProgress(w http.ResponseWriter, _ *http.Request) {
+	p := a.prices.Progress()
+	writeJSON(w, http.StatusOK, progressResponse{Running: p.Running, Done: p.Done, Total: p.Total, Ticker: optional(p.Ticker)})
 }
 
 // accountView is the state of one Account with the price data of its Instruments.
