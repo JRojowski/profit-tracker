@@ -100,3 +100,49 @@ func storeSyntheticPrices(t *testing.T, db *store.Store, now time.Time) {
 		require.NoError(t, db.SaveExchangeRates(t.Context(), asked, rates))
 	}
 }
+
+// TestRealExports_AllAccountsValueHistory imports the real exports with the synthetic prices and rates of
+// TestRealExports_ValueHistory, and measures GET /api/all-accounts/value-history. The tool has no cache, so each
+// request calculates the history again. The log shows only the times and the number of points.
+// The test checks the limit of 1 s only without the race detector. Run it with no -race to measure the time.
+func TestRealExports_AllAccountsValueHistory(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv := startServer(t)
+	for _, export := range exports {
+		srv.importRealExport(t, export)
+	}
+	storeSyntheticPrices(t, srv.db, srv.clock.Now())
+
+	const path = "/api/all-accounts/value-history"
+	var got allValueHistoryResponse
+	start := time.Now()
+	srv.getRealJSON(t, path, &got)
+	firstTime := time.Since(start)
+	times := make([]time.Duration, 0, 5)
+	for range 5 {
+		start := time.Now()
+		srv.getRealJSON(t, path, &got)
+		times = append(times, time.Since(start))
+	}
+	slices.Sort(times)
+	t.Logf("all accounts: %d points, first request %s, median %s, max %s", len(got.Points), firstTime, times[len(times)/2], times[len(times)-1])
+
+	require.True(t, got.Available, "warnings: %d", len(got.Warnings))
+	require.NotEmpty(t, got.Points)
+	first, err := time.Parse(time.DateOnly, got.Points[0].Date)
+	require.NoError(t, err)
+	last, err := time.Parse(time.DateOnly, got.Points[len(got.Points)-1].Date)
+	require.NoError(t, err)
+	assert.Len(t, got.Points, int(last.Sub(first)/(24*time.Hour))+1, "one point for each calendar day")
+	if !raceDetector {
+		assert.Less(t, firstTime, time.Second, "the limit for acceptance is 1 s")
+		assert.Less(t, times[len(times)-1], time.Second, "the limit for acceptance is 1 s")
+	}
+	hero := srv.allAccounts(t)
+	require.NotNil(t, hero.Value)
+	if hero.UnpricedHoldings == 0 {
+		assert.Equal(t, *hero.Value, got.Points[len(got.Points)-1].Value, "the point of today is the value in the hero")
+		assert.Equal(t, *hero.NetDeposits, got.Points[len(got.Points)-1].NetDeposits, "the Net Deposits of today are the Net Deposits in the hero")
+	}
+}

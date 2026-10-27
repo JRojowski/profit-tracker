@@ -34,7 +34,12 @@ export function AccountOverviewPage() {
             loaded={history}
             errorTitle="Cannot load the Value History"
           >
-            {(data) => <ValueHistoryCard history={data} />}
+            {(data) => (
+              <ValueHistoryCard
+                history={data}
+                emptyText="The Account has no Value History."
+              />
+            )}
           </LoadedView>
           <TotalResultWaterfall
             currency={data.currency}

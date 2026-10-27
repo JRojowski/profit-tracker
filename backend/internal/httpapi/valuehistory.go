@@ -5,17 +5,23 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/returns"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 	"github.com/jrojowski/profit-tracker/backend/internal/valuehistory"
 )
 
-// valueHistoryResponse is the body of GET /api/accounts/{id}/value-history. Amounts are decimal text in the
-// Account currency. The frontend does no calculation. It shows the points from the date in PeriodStarts
-// of the selected period.
+// valueHistoryResponse is the body of GET /api/accounts/{id}/value-history.
 type valueHistoryResponse struct {
-	AccountID int64  `json:"accountId"`
-	Currency  string `json:"currency"`
+	AccountID int64 `json:"accountId"`
+	valueHistoryBody
+}
+
+// valueHistoryBody is the Value History of an Account in the Account currency, or of all Accounts in PLN.
+// Amounts are decimal text. The frontend does no calculation. It shows the points from the date in PeriodStarts
+// of the selected period.
+type valueHistoryBody struct {
+	Currency string `json:"currency"`
 	// Points has one point for each calendar day from the day of the first Cash Operation to today, in date order.
 	Points []valuePointResponse `json:"points"`
 	// TimeWeightedReturn is the cumulative Time-Weighted Return of each period. See returns.TimeWeightedReturns.
@@ -24,7 +30,7 @@ type valueHistoryResponse struct {
 	PeriodStarts periodStartsResponse `json:"periodStarts"`
 	// ValuedAtCost are the Instruments that the tool valued at cost on one or more days, in ticker order.
 	ValuedAtCost []valuedAtCostResponse `json:"valuedAtCost"`
-	// PriceWarnings are the Price Warnings of the Instruments of the Account. The list is empty for now.
+	// PriceWarnings are the Price Warnings of the Instruments. The list is empty for now.
 	PriceWarnings []struct{} `json:"priceWarnings"`
 }
 
@@ -103,36 +109,42 @@ func (a *api) accountValueHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := valueHistoryResponse{
-		AccountID:     acc.ID,
-		Currency:      acc.Currency,
-		Points:        make([]valuePointResponse, 0, len(history.Points)),
-		ValuedAtCost:  make([]valuedAtCostResponse, 0, len(history.ValuedAtCost)),
+	writeJSON(w, http.StatusOK, valueHistoryResponse{
+		AccountID: acc.ID, valueHistoryBody: newValueHistoryBody(acc.Currency, history.Points, history.ValuedAtCost),
+	})
+}
+
+// newValueHistoryBody returns the body of the points, with the Time-Weighted Return of each period.
+func newValueHistoryBody(currency string, points []valuehistory.Point, valuedAtCost []ledger.Instrument) valueHistoryBody {
+	body := valueHistoryBody{
+		Currency:      currency,
+		Points:        make([]valuePointResponse, 0, len(points)),
+		ValuedAtCost:  make([]valuedAtCostResponse, 0, len(valuedAtCost)),
 		PriceWarnings: []struct{}{},
 	}
-	days := make([]returns.DayValue, 0, len(history.Points))
-	for _, p := range history.Points {
-		resp.Points = append(resp.Points, valuePointResponse{
+	days := make([]returns.DayValue, 0, len(points))
+	for _, p := range points {
+		body.Points = append(body.Points, valuePointResponse{
 			Date: p.Date.Format(time.DateOnly), Value: formatAmount(p.Value), NetDeposits: formatAmount(p.NetDeposits),
 		})
 		days = append(days, p.DayValue)
 	}
 	twr := returns.TimeWeighted(days)
-	resp.TimeWeightedReturn = timeWeightedResponse{
+	body.TimeWeightedReturn = timeWeightedResponse{
 		OneMonth: percent(twr.OneMonth), ThreeMonths: percent(twr.ThreeMonths), YearToDate: percent(twr.YearToDate),
 		OneYear: percent(twr.OneYear), All: percent(twr.All),
 	}
 	if len(days) > 0 {
 		st := twr.Starts
-		resp.PeriodStarts = periodStartsResponse{
+		body.PeriodStarts = periodStartsResponse{
 			OneMonth: dateText(st.OneMonth), ThreeMonths: dateText(st.ThreeMonths), YearToDate: dateText(st.YearToDate),
 			OneYear: dateText(st.OneYear), All: dateText(st.All),
 		}
 	}
-	for _, inst := range history.ValuedAtCost {
-		resp.ValuedAtCost = append(resp.ValuedAtCost, valuedAtCostResponse{Ticker: inst.Ticker, Name: inst.Name})
+	for _, inst := range valuedAtCost {
+		body.ValuedAtCost = append(body.ValuedAtCost, valuedAtCostResponse{Ticker: inst.Ticker, Name: inst.Name})
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return body
 }
 
 // dateText returns the day as YYYY-MM-DD.

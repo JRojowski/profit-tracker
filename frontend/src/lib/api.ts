@@ -391,9 +391,8 @@ export type ValuedInstrument = {
   name: string
 }
 
-// ValueHistory is the Value History of one Account in the Account currency, with one point for each calendar day.
+// ValueHistory is the Value History of one Account or of all Accounts, with one point for each calendar day.
 export type ValueHistory = {
-  accountId: number
   currency: string
   points: ValueHistoryPoint[]
   // timeWeightedReturn is the cumulative Time-Weighted Return of each period, as a percentage, or null.
@@ -406,15 +405,34 @@ export type ValueHistory = {
   priceWarnings: unknown[]
 }
 
+// AccountValueHistory is the Value History of one Account, in the Account currency.
+export type AccountValueHistory = ValueHistory & { accountId: number }
+
 // fetchAccountValueHistory gets the Value History and the Time-Weighted Return of one Account.
 export async function fetchAccountValueHistory(
   id: number,
   signal?: AbortSignal
-): Promise<ValueHistory> {
+): Promise<AccountValueHistory> {
   const response = await fetch(`/api/accounts/${id}/value-history`, {
     signal,
   })
-  return readJSON<ValueHistory>(response)
+  return readJSON<AccountValueHistory>(response)
+}
+
+// AllAccountsValueHistory is the Value History of all Accounts, in PLN by ADR 0004.
+// When available is false, points is empty, each period is null and the warnings tell why.
+export type AllAccountsValueHistory = ValueHistory & {
+  available: boolean
+  // warnings are sentences for the user about missing Exchange Rates.
+  warnings: string[]
+}
+
+// fetchAllAccountsValueHistory gets the Value History and the Time-Weighted Return of all Accounts.
+export async function fetchAllAccountsValueHistory(
+  signal?: AbortSignal
+): Promise<AllAccountsValueHistory> {
+  const response = await fetch("/api/all-accounts/value-history", { signal })
+  return readJSON<AllAccountsValueHistory>(response)
 }
 
 // PriceSource tells where the tool gets the price of an Instrument.

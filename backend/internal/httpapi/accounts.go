@@ -247,6 +247,11 @@ func (a *api) readAccountView(ctx context.Context, acc store.Account) (accountVi
 	if err != nil {
 		return accountView{}, err
 	}
+	return viewOf(acc, in)
+}
+
+// viewOf calculates the state of the Account from the input of the hero.
+func viewOf(acc store.Account, in heroInput) (accountView, error) {
 	state, err := ledger.Calculate(in.ledger)
 	if err != nil {
 		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)

@@ -50,11 +50,20 @@ type ChartPoint = {
 
 type ValueHistoryCardProps = {
   history: ValueHistory
+  // emptyText is the sentence for a Value History with no points, for example "The Account has no Value History.".
+  emptyText: string
+  // unavailable holds the sentences that tell why the tool cannot calculate the Value History.
+  // When it is set, the card shows these sentences instead of the chart.
+  unavailable?: string[]
 }
 
-// ValueHistoryCard shows the value and the Net Deposits of an Account for each calendar day of the selected period.
+// ValueHistoryCard shows the value and the Net Deposits of an Account, or of all Accounts, for each day of the selected period.
 // The header shows the Time-Weighted Return of the period. The amounts under the chart are its text alternative.
-export function ValueHistoryCard({ history }: ValueHistoryCardProps) {
+export function ValueHistoryCard({
+  history,
+  emptyText,
+  unavailable,
+}: ValueHistoryCardProps) {
   const [period, setPeriod] = useState<HistoryPeriod>("All")
   const points = periodPoints(history.points, history.periodStarts[period])
   const twr = history.timeWeightedReturn[period]
@@ -76,7 +85,7 @@ export function ValueHistoryCard({ history }: ValueHistoryCardProps) {
               {twr === null ? "—" : formatPercent(twr, { signed: true })}
             </span>
           </p>
-          {twr === null && (
+          {twr === null && unavailable === undefined && (
             <p className="text-sm text-muted-foreground">
               The tool cannot calculate the Time-Weighted Return of this period.
             </p>
@@ -110,10 +119,10 @@ export function ValueHistoryCard({ history }: ValueHistoryCardProps) {
         {history.valuedAtCost.length > 0 && (
           <ValuedAtCostAlert instruments={history.valuedAtCost} />
         )}
-        {points.length === 0 || last === undefined ? (
-          <p className="text-sm text-muted-foreground">
-            The Account has no Value History.
-          </p>
+        {unavailable !== undefined ? (
+          <UnavailableAlert warnings={unavailable} />
+        ) : points.length === 0 || last === undefined ? (
+          <p className="text-sm text-muted-foreground">{emptyText}</p>
         ) : (
           <>
             <HistoryChart points={points} currency={history.currency} />
@@ -122,6 +131,27 @@ export function ValueHistoryCard({ history }: ValueHistoryCardProps) {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+// UnavailableAlert tells why the tool cannot calculate the Value History, for example a missing Exchange Rate.
+function UnavailableAlert({ warnings }: { warnings: string[] }) {
+  return (
+    <Alert className="border-warning/40 bg-warning/10 *:[svg]:text-warning">
+      <TriangleAlertIcon />
+      <AlertTitle>The tool cannot calculate the Value History</AlertTitle>
+      {warnings.length > 0 && (
+        <AlertDescription>
+          <ul className="list-inside list-disc">
+            {warnings.map((warning) => (
+              <li key={warning} className="break-words">
+                {warning}
+              </li>
+            ))}
+          </ul>
+        </AlertDescription>
+      )}
+    </Alert>
   )
 }
 

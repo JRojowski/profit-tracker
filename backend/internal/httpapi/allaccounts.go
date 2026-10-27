@@ -84,32 +84,12 @@ func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 		a.writeInternalError(w, r, err)
 		return
 	}
-	series, err := a.rates.Series(ctx)
+	hero, err := a.calculateAllAccounts(ctx, views)
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
 	}
-	latest, err := a.rates.LatestRates(ctx)
-	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
-	}
-
-	input := make([]allaccounts.Account, 0, len(views))
-	for _, v := range views {
-		input = append(input, allaccounts.Account{ID: v.account.ID, Currency: v.account.Currency, State: v.state})
-	}
-	today := exchange.StartOfDayInWarsaw(a.now())
-	result := allaccounts.Calculate(input, allaccounts.Rates{
-		On: func(currency string, t time.Time) (decimal.Decimal, bool) {
-			rate, ok := series[currency].On(t)
-			return rate.Mid, ok
-		},
-		Latest: func(currency string) (decimal.Decimal, bool) {
-			rate, ok := latest[currency]
-			return rate.Mid, ok
-		},
-	}, today)
+	result, latest, today := hero.result, hero.latest, hero.today
 
 	resp := allAccountsResponse{
 		Available:        result.Available,
@@ -146,6 +126,47 @@ func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 		resp.Accounts = append(resp.Accounts, dto)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// allAccountsHero is the view of all Accounts in PLN, with the Exchange Rates that it comes from.
+type allAccountsHero struct {
+	result allaccounts.Result
+	// rates are the lookups that the view uses.
+	rates allaccounts.Rates
+	// latest are the latest Exchange Rates by currency.
+	latest map[string]exchange.Latest
+	// today is the start of today in Polish time.
+	today time.Time
+}
+
+// calculateAllAccounts reads the Exchange Rates and calculates the view of all Accounts in PLN from the states
+// of the Accounts. ADR 0004.
+func (a *api) calculateAllAccounts(ctx context.Context, views []accountView) (allAccountsHero, error) {
+	series, err := a.rates.Series(ctx)
+	if err != nil {
+		return allAccountsHero{}, fmt.Errorf("read the exchange rate series: %w", err)
+	}
+	latest, err := a.rates.LatestRates(ctx)
+	if err != nil {
+		return allAccountsHero{}, fmt.Errorf("read the latest exchange rates: %w", err)
+	}
+
+	input := make([]allaccounts.Account, 0, len(views))
+	for _, v := range views {
+		input = append(input, allaccounts.Account{ID: v.account.ID, Currency: v.account.Currency, State: v.state})
+	}
+	rates := allaccounts.Rates{
+		On: func(currency string, t time.Time) (decimal.Decimal, bool) {
+			rate, ok := series[currency].On(t)
+			return rate.Mid, ok
+		},
+		Latest: func(currency string) (decimal.Decimal, bool) {
+			rate, ok := latest[currency]
+			return rate.Mid, ok
+		},
+	}
+	today := exchange.StartOfDayInWarsaw(a.now())
+	return allAccountsHero{result: allaccounts.Calculate(input, rates, today), rates: rates, latest: latest, today: today}, nil
 }
 
 // toPLNAmounts returns the amounts as decimal text.

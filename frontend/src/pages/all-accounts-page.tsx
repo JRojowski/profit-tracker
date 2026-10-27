@@ -5,6 +5,7 @@ import { AccountsTable } from "@/components/accounts-table"
 import { LoadedView } from "@/components/loaded-view"
 import { OverviewHero } from "@/components/overview-hero"
 import { TotalResultWaterfall } from "@/components/total-result-waterfall"
+import { ValueHistoryCard } from "@/components/value-history-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,8 +13,10 @@ import { useLoad } from "@/hooks/use-load"
 import {
   fetchAllAccountsAllocation,
   fetchAllAccountsSummary,
+  fetchAllAccountsValueHistory,
   type Allocation,
   type AllAccountsSummary,
+  type AllAccountsValueHistory,
 } from "@/lib/api"
 import type { Loaded } from "@/hooks/use-load"
 import { useAppState } from "@/lib/app-state"
@@ -24,6 +27,7 @@ export function AllAccountsPage() {
   const { accounts, accountsError, valuesVersion } = useAppState()
   const summary = useLoad("all", valuesVersion, fetchAllAccountsSummary)
   const allocation = useLoad("all", valuesVersion, fetchAllAccountsAllocation)
+  const history = useLoad("all", valuesVersion, fetchAllAccountsValueHistory)
 
   if (accountsError) {
     return (
@@ -49,18 +53,26 @@ export function AllAccountsPage() {
 
   return (
     <LoadedView loaded={summary} errorTitle="Cannot load the Account values">
-      {(data) => <AllAccountsOverview summary={data} allocation={allocation} />}
+      {(data) => (
+        <AllAccountsOverview
+          summary={data}
+          allocation={allocation}
+          history={history}
+        />
+      )}
     </LoadedView>
   )
 }
 
-// AllAccountsOverview shows the totals of all Accounts in PLN, the parts of the Total Result and one row for each Account.
+// AllAccountsOverview shows the totals of all Accounts in PLN, the Value History, the parts of the Total Result and one row for each Account.
 function AllAccountsOverview({
   summary,
   allocation,
+  history,
 }: {
   summary: AllAccountsSummary
   allocation: Loaded<Allocation>
+  history: Loaded<AllAccountsValueHistory>
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -85,7 +97,15 @@ function AllAccountsOverview({
         figures={{ ...summary, currency: "PLN" }}
         allocation={allocation}
       />
-      {/* This full-width row under the hero is for the Total Result breakdown in v3. */}
+      <LoadedView loaded={history} errorTitle="Cannot load the Value History">
+        {(data) => (
+          <ValueHistoryCard
+            history={data}
+            emptyText="The Accounts have no Value History."
+            unavailable={data.available ? undefined : data.warnings}
+          />
+        )}
+      </LoadedView>
       <TotalResultWaterfall
         currency="PLN"
         totalResult={summary.totalResult}
