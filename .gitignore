@@ -10,3 +10,6 @@ backend/internal/web/dist/*
 
 # Playwright MCP snapshots, screenshots and test uploads.
 .playwright-mcp/
+
+# Local direnv settings. They select the private Azure login.
+.envrc
