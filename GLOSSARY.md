@@ -48,6 +48,10 @@ _Avoid_: Position, pozycja, asset
 The currency in which the price source gives the price of an Instrument. It can be different from the Account currency.
 _Avoid_: Instrument currency, price currency
 
+**Price Warning**:
+A sign that the price ticker or the Quote Currency of an Instrument can be wrong. The kinds are: the price source has no data, the price source gives a different currency, and the price source gives a price that does not agree with the broker prices.
+_Avoid_: Alert, error, problem
+
 **Allocation**:
 The share of each part in the value of one Account or of all Accounts. The parts are the cash and the Holdings with a known value. One Instrument on two Accounts is one part. A Holding with no known value is not a part.
 _Avoid_: Portfolio share, breakdown, udział
@@ -83,6 +87,14 @@ _Avoid_: ROI, yield
 **Annual Return**:
 The yearly rate of return that gives the current value from the Net Deposits flows, with the date of each flow taken into account.
 _Avoid_: XIRR, IRR, CAGR
+
+**Value History**:
+The value of an Account, or of all Accounts, at the end of each calendar day.
+_Avoid_: Chart, timeline, equity curve
+
+**Time-Weighted Return**:
+The rate of return in a period that the Net Deposits flows do not change. It measures the result of the investments, not the effect of the time of each deposit.
+_Avoid_: TWR, performance
 
 ### IKZE
 
