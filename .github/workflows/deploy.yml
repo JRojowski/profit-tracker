@@ -1,0 +1,111 @@
+name: Deploy
+
+# Deploys the tool to Azure after a green CI on main. See ADR 0006 and docs/deployment.md.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: The commit to deploy. Empty means the last commit of the selected branch.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+# Two deployments must never run at the same time. A new deployment waits for the running one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/jrojowski/profit-tracker
+  RESOURCE_GROUP: rg-profit-tracker
+
+jobs:
+  deploy:
+    name: Build, deploy and check
+    # The Azure identity trusts only main. A CI run of a pull request or of a fork never deploys.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.SHA }}
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apply the Bicep template
+        id: bicep
+        env:
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          url=$(az deployment group create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "deploy-$SHA" \
+            --template-file infra/main.bicep \
+            --parameters imageTag="$SHA" ghcrUsername="$GHCR_USERNAME" ghcrToken="$GHCR_TOKEN" \
+            --query properties.outputs.url.value --output tsv)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $SHA to $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # The first request starts a replica from zero. Give it some minutes.
+      - name: Smoke test
+        env:
+          URL: ${{ steps.bicep.outputs.url }}
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL/api/health" || true)
+            echo "attempt $i: GET /api/health returned $code"
+            [ "$code" = 200 ] && exit 0
+            sleep 10
+          done
+          echo "::error::GET $URL/api/health did not return 200"
+          exit 1
+
+      # A new revision that is not ready gets no traffic, and the old revision still answers the health check.
+      - name: Check that the new revision is ready
+        run: |
+          for i in $(seq 1 30); do
+            latest=$(az containerapp show --name profit-tracker --resource-group "$RESOURCE_GROUP" \
+              --query properties.latestRevisionName --output tsv)
+            ready=$(az containerapp show --name profit-tracker --resource-group "$RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName --output tsv)
+            echo "attempt $i: latest revision $latest, latest ready revision $ready"
+            [ "$latest" = "$ready" ] && exit 0
+            sleep 10
+          done
+          echo "::error::The revision $latest is not ready. The old revision $ready still gets the traffic."
+          exit 1

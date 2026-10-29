@@ -15,3 +15,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  # The Go version of the image follows go.mod, and the Node version follows frontend/.nvmrc.
+  # Dependabot proposes only patch updates of these two images. Change their versions by hand.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: golang
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
