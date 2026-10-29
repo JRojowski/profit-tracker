@@ -31,11 +31,13 @@ jobs:
   deploy:
     name: Build, deploy and check
     # The Azure identity trusts only main. A CI run of a pull request or of a fork never deploys.
+    # Before the setup script runs, the variable AZURE_CLIENT_ID is empty, and the job does not run.
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      vars.AZURE_CLIENT_ID != '' && (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.event == 'push' &&
+         github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     env:
       SHA: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
