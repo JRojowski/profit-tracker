@@ -1,6 +1,6 @@
 WEB_DIST := backend/internal/web/dist
 
-.PHONY: test lint frontend-install frontend-check frontend-dev backend-dev build demo
+.PHONY: test lint frontend-install frontend-check frontend-dev backend-dev build demo bicep-lint
 
 # Run all backend tests.
 test:
@@ -38,3 +38,8 @@ build: frontend-check
 # Start the built binary with a fresh database of synthetic demo data.
 demo: build
 	scripts/demo.sh
+
+# Build the Bicep templates with the linter. The Azure CLI installs Bicep when it is missing.
+bicep-lint:
+	az bicep lint --file infra/main.bicep
+	az bicep lint --file infra/budget.bicep
