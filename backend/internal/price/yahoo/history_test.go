@@ -84,7 +84,7 @@ func TestDailyCloses_Request_UsesPeriodsDailyIntervalAndSplitEvents(t *testing.T
 	require.NoError(t, err)
 	assert.LessOrEqual(t, period1, day(2020, 8, 27).Unix(), "the first day must be in the period")
 	assert.Equal(t, historyNow.Unix(), period2, "the period goes to now, so that the response has each later split")
-	assert.NotContains(t, all[0].userAgent, "Go-http-client")
+	assert.Equal(t, "Mozilla/5.0", all[0].userAgent)
 }
 
 func TestDailyCloses_LondonPriceInPence_ReturnsPounds(t *testing.T) {

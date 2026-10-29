@@ -24,8 +24,9 @@ const Source = "yahoo"
 // DefaultBaseURL is the address of the Yahoo Finance API.
 const DefaultBaseURL = "https://query1.finance.yahoo.com"
 
-// userAgent is a browser User-Agent. Yahoo refuses the default User-Agent of Go.
-const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36"
+// userAgent is the User-Agent of each request. Yahoo refuses the default User-Agent of Go.
+// Since 2026-10, Yahoo also answers 429 to some full browser User-Agent strings. "Mozilla/5.0" gets 200.
+const userAgent = "Mozilla/5.0"
 
 // maxBody is the largest response body that the provider reads. A chart for 5 days is a few kilobytes.
 // The daily chart of 20 years is about 1 MB.

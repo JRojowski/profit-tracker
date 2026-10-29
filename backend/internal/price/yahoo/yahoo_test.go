@@ -77,7 +77,7 @@ func TestLastClose_USDPrice_ReturnsExactPriceAndDateInExchangeTime(t *testing.T)
 	req := all[0]
 	assert.Equal(t, "/v8/finance/chart/AAPL", req.path)
 	assert.Equal(t, "range=5d&interval=1d", req.rawQuery)
-	assert.NotContains(t, req.userAgent, "Go-http-client", "Yahoo refuses the Go default User-Agent")
+	assert.Equal(t, "Mozilla/5.0", req.userAgent, "Yahoo refuses the Go default User-Agent and some full browser User-Agents")
 }
 
 func TestLastClose_LondonPriceInPence_ReturnsPounds(t *testing.T) {
