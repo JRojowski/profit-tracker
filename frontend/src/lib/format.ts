@@ -67,6 +67,18 @@ export function formatVolume(volume: string): string {
   }).format(Number(volume))
 }
 
+// formatPrice shows a decimal price from the broker with 2 to 4 decimal places and no currency symbol.
+// It rounds a longer price to 4 decimal places. The response does not state the currency of the price.
+// The conversion to a float is for display only. Never calculate with the result.
+export function formatPrice(price: string): string {
+  return withMinusSign(
+    new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(Number(price))
+  )
+}
+
 // formatRate shows an Exchange Rate with all its digits. The NBP gives at most 4 decimal places.
 export function formatRate(rate: string): string {
   return new Intl.NumberFormat(undefined, {

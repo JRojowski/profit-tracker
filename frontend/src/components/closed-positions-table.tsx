@@ -18,6 +18,7 @@ import {
   amountSign,
   formatAmount,
   formatPolishDate,
+  formatPrice,
   formatVolume,
   signColour,
 } from "@/lib/format"
@@ -50,7 +51,7 @@ export function closedPositionColumns(
   return [
     {
       id: "time",
-      header: "Date",
+      header: "Close date",
       // The date of a Closed Position is in Polish time, so that it agrees with the year filter.
       sortValue: (closedPosition) => timeSortValue(closedPosition.time),
       cell: ({ row }) => (
@@ -78,6 +79,31 @@ export function closedPositionColumns(
       meta: { align: "right" },
       sortValue: (closedPosition) => decimalSortValue(closedPosition.volume),
       cell: ({ row }) => formatVolume(row.original.volume),
+    },
+    {
+      id: "openTime",
+      header: "Open date",
+      sortValue: (closedPosition) => timeSortValue(closedPosition.openTime),
+      cell: ({ row }) => (
+        <span className="num text-muted-foreground">
+          {formatPolishDate(row.original.openTime)}
+        </span>
+      ),
+    },
+    {
+      id: "openPrice",
+      header: "Open price",
+      meta: { align: "right" },
+      sortValue: (closedPosition) => decimalSortValue(closedPosition.openPrice),
+      cell: ({ row }) => <PriceText price={row.original.openPrice} />,
+    },
+    {
+      id: "closePrice",
+      header: "Close price",
+      meta: { align: "right" },
+      sortValue: (closedPosition) =>
+        decimalSortValue(closedPosition.closePrice),
+      cell: ({ row }) => <PriceText price={row.original.closePrice} />,
     },
     {
       id: "amount",
@@ -113,6 +139,14 @@ export function closedPositionColumns(
       ),
     },
   ]
+}
+
+// PriceText shows a price with no currency symbol. An absent price shows "—", like an empty cell of the Holdings table.
+function PriceText({ price }: { price: string | null }) {
+  if (price === null) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  return <span className="num">{formatPrice(price)}</span>
 }
 
 // closedPositionsViewRules gives the rules of a stored view of this table. They come from the column definitions.
@@ -190,8 +224,8 @@ export function ClosedPositionsTable({
   )
 }
 
-// StackedTable is the narrow layout: one column holds the Instrument, the date and the volume,
-// and one column holds the Realized Profit, the sale amount and the cost. The rows are already sorted.
+// StackedTable is the narrow layout: one column holds the Instrument, the open and close dates and the volume,
+// and one column holds the Realized Profit, the sale amount, the cost and the open and close prices. The rows are already sorted.
 function StackedTable({
   closedPositions,
   currency,
@@ -206,11 +240,18 @@ function StackedTable({
       <TableHeader>
         <TableRow>
           <TableHead>
-            <StackedHead labels={["Instrument", "Date", "Volume"]} />
+            <StackedHead
+              labels={["Instrument", "Open → close date", "Volume"]}
+            />
           </TableHead>
           <TableHead className="text-right">
             <StackedHead
-              labels={["Realized Profit", "Sale amount", "Cost"]}
+              labels={[
+                "Realized Profit",
+                "Sale amount",
+                "Cost",
+                "Open → close price",
+              ]}
               alignEnd
             />
           </TableHead>
@@ -227,7 +268,10 @@ function StackedTable({
                 </span>
                 <span className="flex flex-col gap-0.5 text-xs text-muted-foreground">
                   <span className="num">
-                    {formatPolishDate(closedPosition.time)}
+                    {formatPolishDate(closedPosition.openTime)}
+                  </span>
+                  <span className="num">
+                    → {formatPolishDate(closedPosition.time)}
                   </span>
                   <span className="num">
                     {formatVolume(closedPosition.volume)}
@@ -253,6 +297,10 @@ function StackedTable({
                   </span>
                   <span className="num">
                     {formatAmount(closedPosition.cost, currency)}
+                  </span>
+                  <span>
+                    <PriceText price={closedPosition.openPrice} /> →{" "}
+                    <PriceText price={closedPosition.closePrice} />
                   </span>
                 </span>
               </span>

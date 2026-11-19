@@ -77,14 +77,14 @@ Check the light theme and the dark theme with a moved column.
 Spec: #48, ticket #51. Open the Closed Positions page of the Account "XTB USD" of `make demo`. Use the wide layout. The key in `localStorage` is `profit-tracker:table:closed-positions`.
 
 - [ ] With no sort, the newest Closed Position is first. No header shows an arrow.
-- [ ] The columns are in this order: Date, Instrument, Volume, Sale amount, Cost, Realized Profit.
-- [ ] Click "Date". The oldest row is first. Click it again. The newest row is first. Click it a third time. The arrow disappears.
+- [ ] The columns are in this order: Close date, Instrument, Volume, Open date, Open price, Close price, Sale amount, Cost, Realized Profit.
+- [ ] Click "Close date". The oldest row is first. Click it again. The newest row is first. Click it a third time. The arrow disappears.
 - [ ] Click "Instrument". The rows sort by ticker.
 - [ ] Click "Realized Profit". The rows sort by the amount. Click "Volume" with Shift. "Realized Profit" shows 1 and "Volume" shows 2.
 - [ ] "Volume", "Sale amount" and "Cost" sort by the amount, not by the text.
-- [ ] "Date" and "Instrument" have no grip handle. Each other column has one.
+- [ ] "Close date" and "Instrument" have no grip handle. Each other column has one.
 - [ ] Drag "Realized Profit" in front of "Volume". The header, the body cells and the "Total" row show the new order.
-- [ ] Try to drag a column in front of "Date" or "Instrument". The order does not change.
+- [ ] Try to drag a column in front of "Close date" or "Instrument". The order does not change.
 - [ ] The "Total" row is the last row for each sort. It shows the sum of the Realized Profit under "Realized Profit", also after you move that column.
 - [ ] Reload. The column order and the sort are the same.
 - [ ] Open the Closed Positions page of another Account. The column order and the sort are the same, because the key is for the table.
@@ -96,7 +96,7 @@ Spec: #48, ticket #51. Open the Closed Positions page of the Account "XTB USD" o
 
 Narrow layout (390 px wide):
 
-- [ ] Each row shows the ticker, the name, the date and the volume in the first column. It shows the Realized Profit, the sale amount and the cost in the second column. The "Total" row shows.
+- [ ] Each row shows the ticker, the name, the open date and the close date, and the volume in the first column. It shows the Realized Profit, the sale amount, the cost and the open price and close price in the second column. The "Total" row shows.
 - [ ] A select control with the label "Sort by" shows above the rows. It has "Default order" and the sortable columns. Select "Realized Profit". The rows are in profit order. Press the direction button. The order reverses.
 - [ ] No handle and no "Reset columns" button show. The page does not scroll sideways.
 - [ ] The sort that you set here is in the wide table after you widen the window.
@@ -120,7 +120,7 @@ Spec: #48, ticket #52. Open the Closed Positions page of the Account "XTB USD" o
 - [ ] Add another parameter, for example `?x=1`, and change a filter. The parameter `x` stays.
 - [ ] Change some filters, then click the browser Back button. The browser leaves the page. It does not step through the filter changes.
 - [ ] Sort a column and drag a column. The URL filters do not change. Change a filter. The key `profit-tracker:table:closed-positions` does not change. "Reset columns" does not touch the filters.
-- [ ] Near midnight on 31 December in Polish time: use a Closed Position that closed at 2025-12-31T23:30:00Z. In Polish time it is on 2026-01-01. With `to=2025-12-31` the row is not in the result. With `from=2026-01-01&to=2026-12-31` it is in the result. The date column shows 01/01/2026. Check this also with the time zone of the browser set to a zone far from Poland, for example Los Angeles.
+- [ ] Near midnight on 31 December in Polish time: use a Closed Position that closed at 2025-12-31T23:30:00Z. In Polish time it is on 2026-01-01. With `to=2025-12-31` the row is not in the result. With `from=2026-01-01&to=2026-12-31` it is in the result. The "Close date" column shows 01/01/2026. Check this also with the time zone of the browser set to a zone far from Poland, for example Los Angeles.
 - [ ] A Closed Position at 2025-12-31T22:30:00Z is on 2025-12-31 in Polish time. The year 2025 includes it.
 
 Narrow layout (390 px wide):
@@ -129,3 +129,24 @@ Narrow layout (390 px wide):
 - [ ] The filters select the stacked rows, and the cards and the total row follow.
 
 Check the light theme and the dark theme, at 1440 px and at 390 px, also with a popover open.
+
+## 6. Open date, open price and close price
+
+Spec: #48, ticket #53. Open the Closed Positions page of the Account "XTB USD" of `make demo`. Use the wide layout.
+
+- [ ] The columns "Open date", "Open price" and "Close price" show after "Volume". The first column is named "Close date".
+- [ ] "Open date" shows the date of the first Fill of the Lot, in the same format as "Close date".
+- [ ] The prices show as numbers with 2 to 4 decimal places, aligned to the right, with no currency symbol. A price with more places shows 4 places, for example "25.3333".
+- [ ] An absent price shows "—" in the muted colour.
+- [ ] Click "Open date", "Open price" and "Close price". Each sorts by its value, not by its text. A row with an absent price is last in both directions.
+- [ ] Drag "Open price" to another place. Reload. The place is the same. "Reset columns" brings the default order back.
+- [ ] Put a stored order of six columns in the key `profit-tracker:table:closed-positions`, for example `{"version":1,"columnOrder":["time","instrument","volume","amount","cost","realizedProfit"],"sorting":[{"id":"cost","desc":true}]}`. Reload. The default order of nine columns shows, the sort by "Cost" stays and the console has no error.
+- [ ] The "Realized Profit", "Sale amount" and "Cost" columns and the "Total" row do not change.
+- [ ] Compare one row with the same record in the "Closed Positions" sheet of the XTB export. The open date, the open price and the close price agree with the columns "Open time", "Open price" and "Close price" of the sheet. The sheet rounds the open price of a Lot with more than one Fill, so a small difference in the last place is fine.
+
+Narrow layout (390 px wide):
+
+- [ ] The first column shows "open → close date" under the name. The second column shows "open → close price" as the last line. The headers name them.
+- [ ] The "Sort by" control lists "Close date", "Open date", "Open price" and "Close price".
+
+Check the light theme and the dark theme, at 1440 px and at 390 px.

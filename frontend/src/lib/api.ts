@@ -306,6 +306,8 @@ export type RefreshProgress = {
 
 // ClosedPosition is one Closed Position with its Realized Profit. The time is RFC 3339 text in UTC.
 // Volumes and amounts are decimal text in the Account currency.
+// openTime is the time of the earliest Fill of the Lot. openPrice and closePrice are decimal text, or null when a price is absent.
+// The prices are in the currency of the broker price, which the response does not state.
 export type ClosedPosition = {
   xtbId: string
   time: string
@@ -316,6 +318,9 @@ export type ClosedPosition = {
   amount: string
   cost: string
   realizedProfit: string
+  openTime: string
+  openPrice: string | null
+  closePrice: string | null
 }
 
 export async function fetchAccounts(signal?: AbortSignal): Promise<Account[]> {
