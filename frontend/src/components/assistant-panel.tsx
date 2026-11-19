@@ -1,0 +1,148 @@
+import { LoaderCircleIcon, SendIcon } from "lucide-react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Textarea } from "@/components/ui/textarea"
+import { useAppState } from "@/lib/app-state"
+import { assistantStepText } from "@/lib/assistant-step-text"
+import { useAssistant, type AssistantTurn } from "@/lib/assistant-state"
+
+// failedAnswerText is the one message for each error. The panel shows it in place of the answer.
+const failedAnswerText =
+  "The Assistant cannot answer now. Try the question again later."
+
+// AssistantPanel shows the conversation with the Assistant in a panel at the right side. It is modal and it
+// stands above the Instrument Overview panel, so Escape closes it first.
+export function AssistantPanel() {
+  const { available, open, setOpen, turns, asking, ask } = useAssistant()
+  const [draft, setDraft] = useState("")
+  const listEnd = useRef<HTMLDivElement>(null)
+
+  // The list shows the newest turn.
+  useEffect(() => {
+    listEnd.current?.scrollIntoView({ block: "end" })
+  }, [turns, open])
+
+  if (!available) return null
+
+  const send = () => {
+    if (draft.trim() === "" || asking) return
+    ask(draft)
+    setDraft("")
+  }
+  // Enter sends the question. Shift+Enter makes a new line. A key that confirms a text composition does neither.
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) return
+    if (event.nativeEvent.isComposing) return
+    event.preventDefault()
+    send()
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent
+        data-assistant-panel=""
+        className="z-60 data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
+      >
+        <SheetHeader className="gap-1.5 border-b pr-12">
+          <SheetTitle>Assistant</SheetTitle>
+          <SheetDescription>
+            Ask a question about your Holdings.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4">
+          {turns.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              The Assistant answers with the numbers that the tool calculates.
+              It does not recommend a purchase or a sale.
+            </p>
+          )}
+          {turns.map((turn) => (
+            <TurnView key={turn.id} turn={turn} />
+          ))}
+          <div ref={listEnd} />
+        </div>
+        <div className="flex flex-col gap-2 border-t p-4">
+          <Textarea
+            aria-label="Question for the Assistant"
+            placeholder="Ask about your Holdings"
+            value={draft}
+            rows={2}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+            className="max-h-40 min-h-10"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">
+              Enter sends. Shift+Enter makes a new line.
+            </span>
+            <Button
+              onClick={send}
+              disabled={draft.trim() === "" || asking}
+              aria-label="Send the question"
+            >
+              <SendIcon data-icon="inline-start" />
+              Send
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+// TurnView shows one question, and below it the answer, the work in progress state or the error.
+function TurnView({ turn }: { turn: AssistantTurn }) {
+  return (
+    <section className="flex flex-col gap-3" aria-label="Question and answer">
+      <p className="max-w-[85%] self-end rounded-lg bg-muted px-3 py-2 text-sm break-words whitespace-pre-wrap">
+        {turn.question}
+      </p>
+      {turn.status === "pending" && (
+        <p
+          role="status"
+          className="flex items-center gap-2 text-sm text-muted-foreground"
+        >
+          <LoaderCircleIcon className="animate-spin" aria-hidden="true" />
+          Working on the answer…
+        </p>
+      )}
+      {turn.status === "failed" && (
+        <Alert variant="destructive">
+          <AlertDescription>{failedAnswerText}</AlertDescription>
+        </Alert>
+      )}
+      {turn.status === "answered" && <AnswerView turn={turn} />}
+    </section>
+  )
+}
+
+// AnswerView shows the answer as plain text with its line breaks, and under it the steps of the model.
+function AnswerView({ turn }: { turn: AssistantTurn }) {
+  const { accounts } = useAppState()
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm break-words whitespace-pre-wrap">{turn.answer}</p>
+      {turn.steps.length > 0 && (
+        <ul
+          aria-label="Steps"
+          className="flex flex-col gap-0.5 border-l-2 pl-3 font-mono text-xs text-muted-foreground"
+        >
+          {turn.steps.map((step, index) => (
+            <li key={index} className="break-words">
+              {assistantStepText(step, accounts)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

@@ -2,6 +2,7 @@ import {
   ChartLineIcon,
   HistoryIcon,
   LandmarkIcon,
+  MessageSquareIcon,
   UploadIcon,
   WalletIcon,
   type LucideIcon,
@@ -13,6 +14,7 @@ import { AccountBadges } from "@/components/account-badges"
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -25,12 +27,17 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useAppState } from "@/lib/app-state"
+import { useAssistant } from "@/lib/assistant-state"
 import { paths } from "@/lib/routes"
 
-// AppSidebar shows "All Accounts", each Account, and the Import pages. On a narrow screen it is a sheet.
+// AppSidebar shows "All Accounts", each Account, the Import pages and, when the Assistant is on, a button for the
+// Assistant. The Instrument Overview panel can cover the button of the top bar, but not this one. On a narrow screen
+// the sidebar is a sheet.
 export function AppSidebar() {
   const { accounts } = useAppState()
   const { pathname } = useLocation()
+  const assistant = useAssistant()
+  const { setOpenMobile } = useSidebar()
 
   const allAccountsActive =
     pathname === paths.root || pathname === paths.allAccounts
@@ -103,6 +110,23 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {assistant.available && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => {
+                  setOpenMobile(false)
+                  assistant.setOpen(true)
+                }}
+              >
+                <MessageSquareIcon />
+                <span className="truncate">Assistant</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
     </Sidebar>
   )
 }
