@@ -103,7 +103,9 @@ func checkPeriodMatchesPoints(t *testing.T, got periodResult, start, end valuePo
 		"netDeposits": {netDeposits, got.NetDeposits}, "totalResult": {total, got.TotalResult},
 	} {
 		g := requireAmount(t, name, pair.got)
-		assert.True(t, pair.want.Equal(g), "%s: want %s, got %s", name, pair.want, g)
+		// The tool rounds the exact value once, so the model gets text with 2 decimal places.
+		assert.Equal(t, pair.want.StringFixed(2), *pair.got, "%s", name)
+		assert.True(t, pair.want.Round(2).Equal(g), "%s: want %s, got %s", name, pair.want.Round(2), g)
 	}
 }
 
@@ -345,4 +347,21 @@ func TestAskAssistant_ResultsFunctionDefinition_HasTheArgumentsFromAndTo(t *test
 	}
 	assert.Contains(t, parameters, `"from"`)
 	assert.Contains(t, parameters, `"to"`)
+}
+
+func TestAskAssistant_ResultsWithPeriod_ValuesWithManyDecimals_AreRoundedOnceToTwoDecimals(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.setHistory(t, "ABC", "USD", "2026-10-19=101", "2026-10-20=103", "2026-10-21=105", "2026-10-22=104")
+	provider.setHistory(t, "XYZ", "USD", "2026-10-20=50.126", "2026-10-21=51.1234567", "2026-10-22=52.4444444444")
+	srv, model := startAssistantServer(t, provider)
+	id := srv.importAccount(t, historyExport(), "XTB USD")
+	srv.refreshHistory(t)
+	points := srv.valueHistory(t, id).Points
+	end := pointOn(t, points, "2026-10-22")
+	require.NotEqual(t, decimal.RequireFromString(end.Value).StringFixed(2), end.Value, "the test needs a value with many decimals")
+
+	got := askPeriod(t, srv, model, accountPeriodArguments(id, "2026-10-21", "2026-10-22"))
+
+	checkPeriodMatchesPoints(t, got, pointOn(t, points, "2026-10-20"), end)
 }

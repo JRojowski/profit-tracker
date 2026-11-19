@@ -112,8 +112,8 @@ func toAssistantClosedPositionRow(acc store.Account, cp ledger.ClosedPosition) a
 	return assistantClosedPositionRow{
 		AccountID: acc.ID, AccountName: acc.Name, Currency: acc.Currency,
 		Time: cp.Time.UTC().Format(time.RFC3339), Ticker: cp.Instrument.Ticker, Name: cp.Instrument.Name,
-		Volume: cp.Volume.String(), Amount: formatAmount(cp.Amount), Cost: formatAmount(cp.Cost),
-		RealizedProfit: formatAmount(cp.RealizedProfit), OpenTime: cp.OpenTime.UTC().Format(time.RFC3339),
+		Volume: cp.Volume.String(), Amount: formatRoundedAmount(cp.Amount), Cost: formatRoundedAmount(cp.Cost),
+		RealizedProfit: formatRoundedAmount(cp.RealizedProfit), OpenTime: cp.OpenTime.UTC().Format(time.RFC3339),
 		OpenPrice: nullPrice(cp.OpenPrice), ClosePrice: nullPrice(cp.ClosePrice),
 	}
 }
@@ -258,7 +258,7 @@ func sumRealizedProfit(entries []closedPositionEntry) []realizedProfitSum {
 	sums := make([]realizedProfitSum, 0, len(byCurrency))
 	for cur, positions := range byCurrency {
 		sums = append(sums, realizedProfitSum{
-			Currency: cur, Sum: formatAmount(ledger.SumRealizedProfit(positions)), Rows: len(positions),
+			Currency: cur, Sum: formatRoundedAmount(ledger.SumRealizedProfit(positions)), Rows: len(positions),
 		})
 	}
 	slices.SortFunc(sums, func(x, y realizedProfitSum) int { return strings.Compare(x.Currency, y.Currency) })
