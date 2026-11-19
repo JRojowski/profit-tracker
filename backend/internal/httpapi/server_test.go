@@ -424,11 +424,31 @@ func (s *testServer) get(t *testing.T, path string) (status int, contentType, bo
 }
 
 // do sends a request to path and returns the status, the content type and the body.
+// A request with a body has the content type application/json, as the frontend sends it.
 func (s *testServer) do(t *testing.T, method, path string, reqBody io.Reader) (status int, contentType, body string) {
+	t.Helper()
+
+	header := http.Header{}
+	if reqBody != nil {
+		header.Set("Content-Type", "application/json")
+	}
+	return s.doWithHeader(t, method, path, reqBody, header)
+}
+
+// doWithHeader sends a request with the header fields to path and returns the status, the content type and the
+// body. A "Host" field in header sets the Host of the request.
+func (s *testServer) doWithHeader(t *testing.T, method, path string, reqBody io.Reader, header http.Header) (status int, contentType, body string) {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(t.Context(), method, s.URL+path, reqBody)
 	require.NoError(t, err)
+	for name, values := range header {
+		if name == "Host" {
+			req.Host = values[0]
+			continue
+		}
+		req.Header[name] = values
+	}
 	resp, err := s.client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

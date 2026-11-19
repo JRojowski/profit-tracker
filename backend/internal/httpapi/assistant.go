@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
@@ -78,6 +79,17 @@ type answerResponse struct {
 	Steps  []stepResponse `json:"steps"`
 }
 
+// assistantOriginGuard returns the handler that refuses a request from another origin before the handler runs.
+// A request that costs money must come from the page of the tool. The guard allows an Origin that is equal to
+// the Host. Thus it allows the Vite dev server, which forwards the Host of the page.
+func assistantOriginGuard(next http.Handler) http.Handler {
+	guard := http.NewCrossOriginProtection()
+	guard.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeCodedError(w, http.StatusForbidden, codeInvalidRequest, "the request comes from another origin")
+	}))
+	return guard.Handler(next)
+}
+
 // assistantAvailability tells the frontend if the Assistant is available.
 func (a *api) assistantAvailability(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, availabilityResponse{Available: a.model != nil})
@@ -87,6 +99,12 @@ func (a *api) assistantAvailability(w http.ResponseWriter, _ *http.Request) {
 func (a *api) askAssistant(w http.ResponseWriter, r *http.Request) {
 	if a.model == nil {
 		writeCodedError(w, http.StatusServiceUnavailable, codeNotConfigured, "the Assistant is not configured")
+		return
+	}
+	// A page of another site can send a "simple" request with the type text/plain and no preflight.
+	// The type check refuses it, so a hostile page cannot spend the quota of the provider.
+	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
+		writeCodedError(w, http.StatusUnsupportedMediaType, codeInvalidRequest, "the content type must be application/json")
 		return
 	}
 	var req questionRequest
