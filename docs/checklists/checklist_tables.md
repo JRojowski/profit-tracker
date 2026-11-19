@@ -71,3 +71,34 @@ Narrow layout (390 px wide):
 - [ ] The sort that you set on the cards is in the wide table after you widen the window.
 
 Check the light theme and the dark theme with a moved column.
+
+## 4. Closed Positions table
+
+Spec: #48, ticket #51. Open the Closed Positions page of the Account "XTB USD" of `make demo`. Use the wide layout. The key in `localStorage` is `profit-tracker:table:closed-positions`.
+
+- [ ] With no sort, the newest Closed Position is first. No header shows an arrow.
+- [ ] The columns are in this order: Date, Instrument, Volume, Sale amount, Cost, Realized Profit.
+- [ ] Click "Date". The oldest row is first. Click it again. The newest row is first. Click it a third time. The arrow disappears.
+- [ ] Click "Instrument". The rows sort by ticker.
+- [ ] Click "Realized Profit". The rows sort by the amount. Click "Volume" with Shift. "Realized Profit" shows 1 and "Volume" shows 2.
+- [ ] "Volume", "Sale amount" and "Cost" sort by the amount, not by the text.
+- [ ] "Date" and "Instrument" have no grip handle. Each other column has one.
+- [ ] Drag "Realized Profit" in front of "Volume". The header, the body cells and the "Total" row show the new order.
+- [ ] Try to drag a column in front of "Date" or "Instrument". The order does not change.
+- [ ] The "Total" row is the last row for each sort. It shows the sum of the Realized Profit under "Realized Profit", also after you move that column.
+- [ ] Reload. The column order and the sort are the same.
+- [ ] Open the Closed Positions page of another Account. The column order and the sort are the same, because the key is for the table.
+- [ ] Select a year. The rows, the total row, and the two summary cards follow the year. The view does not change.
+- [ ] "Reset columns" in the card header is disabled for the default view. After a move or a sort it turns on. Click it. The default view comes back and the key is gone.
+- [ ] The Holdings table keeps its own view. A change in one table does not change the key of the other table.
+- [ ] Put the text `{broken` in the key and reload. The default view shows and the console has no error.
+- [ ] Use the keyboard: Tab to a header, press Enter. The sort changes. Tab to the handle "Move column Cost", press Space, press the left arrow key, press Space. The column moves.
+
+Narrow layout (390 px wide):
+
+- [ ] Each row shows the ticker, the name, the date and the volume in the first column. It shows the Realized Profit, the sale amount and the cost in the second column. The "Total" row shows.
+- [ ] A select control with the label "Sort by" shows above the rows. It has "Default order" and the sortable columns. Select "Realized Profit". The rows are in profit order. Press the direction button. The order reverses.
+- [ ] No handle and no "Reset columns" button show. The page does not scroll sideways.
+- [ ] The sort that you set here is in the wide table after you widen the window.
+
+Check the light theme and the dark theme, at 1440 px and at 390 px.

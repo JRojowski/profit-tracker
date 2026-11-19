@@ -1,7 +1,13 @@
-import { useState } from "react"
+import { useMemo } from "react"
 
 import { AllocationChart } from "@/components/allocation-donut"
-import { HoldingsTable } from "@/components/holdings-table"
+import {
+  HOLDINGS_VIEW_STORAGE_KEY,
+  holdingColumns,
+  HoldingsTable,
+  holdingsViewRules,
+} from "@/components/holdings-table"
+import { ResetColumnsButton } from "@/components/reset-columns-button"
 import { LoadedView } from "@/components/loaded-view"
 import { UnrealizedProfitChart } from "@/components/unrealized-profit-chart"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +20,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useLoad } from "@/hooks/use-load"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useTableView } from "@/hooks/use-table-view"
 import { fetchAccountAllocation, fetchHoldings } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { useAccount } from "@/pages/account-layout"
@@ -22,9 +30,17 @@ import { useAccount } from "@/pages/account-layout"
 // the Unrealized Profit of each Holding and the table of the Holdings.
 export function AccountHoldingsPage() {
   const account = useAccount()
-  // actionSlot holds the "Reset columns" button, which the Holdings table renders in the card header.
-  const [actionSlot, setActionSlot] = useState<HTMLElement | null>(null)
+  const isMobile = useIsMobile()
   const { valuesVersion, refreshAllPrices } = useAppState()
+  // The columns are built once. The table and the rules of the stored view use them.
+  const columns = useMemo(
+    () => holdingColumns(account.currency, refreshAllPrices),
+    [account.currency, refreshAllPrices]
+  )
+  const view = useTableView(
+    HOLDINGS_VIEW_STORAGE_KEY,
+    useMemo(() => holdingsViewRules(columns), [columns])
+  )
   const holdings = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchHoldings(account.id, signal)
   )
@@ -75,16 +91,24 @@ export function AccountHoldingsPage() {
               </Badge>
             )}
           </CardTitle>
-          <CardAction ref={setActionSlot} />
+          {!isMobile && (
+            <CardAction>
+              <ResetColumnsButton
+                isDefault={view.isDefault}
+                onReset={view.reset}
+              />
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           <LoadedView loaded={holdings} errorTitle="Cannot load the Holdings">
             {(data) => (
               <HoldingsTable
                 holdings={data}
+                columns={columns}
                 currency={account.currency}
                 onPriceSourceChanged={refreshAllPrices}
-                actionSlot={actionSlot}
+                view={view.props}
               />
             )}
           </LoadedView>

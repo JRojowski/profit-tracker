@@ -1,3 +1,7 @@
+import { useMemo } from "react"
+
+import { DataTable, type DataTableColumn } from "@/components/data-table"
+import { SortControl } from "@/components/sort-control"
 import { StackedHead } from "@/components/stacked-head"
 import {
   Table,
@@ -8,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useIsMobile } from "@/hooks/use-mobile"
 import type { ClosedPosition } from "@/lib/api"
 import {
   amountSign,
@@ -16,45 +21,194 @@ import {
   formatVolume,
   signColour,
 } from "@/lib/format"
+import {
+  decimalSortValue,
+  sortRows,
+  textSortValue,
+  timeSortValue,
+} from "@/lib/table-sort"
+import {
+  tableViewRules,
+  type TableViewProps,
+  type TableViewRules,
+} from "@/lib/table-view"
 import { cn } from "@/lib/utils"
 
+// CLOSED_POSITIONS_VIEW_STORAGE_KEY is the localStorage key of the column order and the sorting of this table.
+// All Accounts share it.
+export const CLOSED_POSITIONS_VIEW_STORAGE_KEY =
+  "profit-tracker:table:closed-positions"
+
+// FIXED_COLUMN_IDS are the leading columns that the user cannot move.
+const FIXED_COLUMN_IDS = ["time", "instrument"]
+
+// closedPositionColumns gives the columns of the table in the default order. Each column has a sortValue.
+// The view rules read the column ids from here, so a new column needs one edit.
+export function closedPositionColumns(
+  currency: string
+): DataTableColumn<ClosedPosition>[] {
+  return [
+    {
+      id: "time",
+      header: "Date",
+      // The date of a Closed Position is in Polish time, so that it agrees with the year filter.
+      sortValue: (closedPosition) => timeSortValue(closedPosition.time),
+      cell: ({ row }) => (
+        <span className="num text-muted-foreground">
+          {formatPolishDate(row.original.time)}
+        </span>
+      ),
+    },
+    {
+      id: "instrument",
+      header: "Instrument",
+      sortValue: (closedPosition) => textSortValue(closedPosition.ticker),
+      cell: ({ row }) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium">{row.original.ticker}</span>
+          <span className="max-w-32 truncate text-xs text-muted-foreground md:max-w-56">
+            {row.original.name}
+          </span>
+        </div>
+      ),
+    },
+    {
+      id: "volume",
+      header: "Volume",
+      meta: { align: "right" },
+      sortValue: (closedPosition) => decimalSortValue(closedPosition.volume),
+      cell: ({ row }) => formatVolume(row.original.volume),
+    },
+    {
+      id: "amount",
+      header: "Sale amount",
+      meta: { align: "right" },
+      sortValue: (closedPosition) => decimalSortValue(closedPosition.amount),
+      cell: ({ row }) => formatAmount(row.original.amount, currency),
+    },
+    {
+      id: "cost",
+      header: "Cost",
+      meta: { align: "right" },
+      sortValue: (closedPosition) => decimalSortValue(closedPosition.cost),
+      cell: ({ row }) => formatAmount(row.original.cost, currency),
+    },
+    {
+      id: "realizedProfit",
+      header: "Realized Profit",
+      meta: { align: "right" },
+      sortValue: (closedPosition) =>
+        decimalSortValue(closedPosition.realizedProfit),
+      cell: ({ row }) => (
+        <span
+          className={cn(
+            "font-medium",
+            signColour(amountSign(row.original.realizedProfit))
+          )}
+        >
+          {formatAmount(row.original.realizedProfit, currency, {
+            signed: true,
+          })}
+        </span>
+      ),
+    },
+  ]
+}
+
+// closedPositionsViewRules gives the rules of a stored view of this table. They come from the column definitions.
+export function closedPositionsViewRules(
+  columns: DataTableColumn<ClosedPosition>[]
+): TableViewRules {
+  return tableViewRules(columns, FIXED_COLUMN_IDS)
+}
+
 type ClosedPositionsTableProps = {
-  // closedPositions are in the order of the rows, newest first.
+  // columns come from closedPositionColumns. The owner builds them once, for the table and for the view rules.
+  columns: DataTableColumn<ClosedPosition>[]
+  // closedPositions are in the default order, newest first. An empty sorting keeps this order.
   closedPositions: ClosedPosition[]
   currency: string
   // totalRealizedProfit is the exact sum of the Realized Profit of the Closed Positions.
   totalRealizedProfit: string
+  // view is the column order and the sorting, which the owner keeps with useTableView.
+  view: TableViewProps
 }
 
-// ClosedPositionsTable shows each Closed Position with its Realized Profit, and a total row.
-// The date of a Closed Position is in Polish time, so that it agrees with the year filter.
+// ClosedPositionsTable shows each Closed Position with its Realized Profit, and a total row that no sort moves.
+// A wide screen shows the shared table. A narrow screen shows stacked cells and a select control for one sort.
 export function ClosedPositionsTable({
+  columns,
   closedPositions,
   currency,
   totalRealizedProfit,
+  view,
 }: ClosedPositionsTableProps) {
+  const isMobile = useIsMobile()
+  // The narrow layout uses only the first sort column.
+  const sorted = useMemo(
+    () =>
+      sortRows(
+        closedPositions,
+        isMobile ? view.sorting.slice(0, 1) : view.sorting,
+        columns
+      ),
+    [closedPositions, view.sorting, columns, isMobile]
+  )
+  if (isMobile) {
+    return (
+      <div className="flex flex-col gap-3">
+        <SortControl
+          options={columns.filter((column) => column.sortValue)}
+          sorting={view.sorting}
+          onSortingChange={view.onSortingChange}
+        />
+        <StackedTable
+          closedPositions={sorted}
+          currency={currency}
+          totalRealizedProfit={totalRealizedProfit}
+        />
+      </div>
+    )
+  }
+  return (
+    <DataTable
+      {...view}
+      columns={columns}
+      rows={sorted}
+      getRowId={(closedPosition) => closedPosition.xtbId}
+      footer={{
+        label: "Total",
+        cells: {
+          realizedProfit: (
+            <span className={signColour(amountSign(totalRealizedProfit))}>
+              {formatAmount(totalRealizedProfit, currency, { signed: true })}
+            </span>
+          ),
+        },
+      }}
+    />
+  )
+}
+
+// StackedTable is the narrow layout: one column holds the Instrument, the date and the volume,
+// and one column holds the Realized Profit, the sale amount and the cost. The rows are already sorted.
+function StackedTable({
+  closedPositions,
+  currency,
+  totalRealizedProfit,
+}: {
+  closedPositions: ClosedPosition[]
+  currency: string
+  totalRealizedProfit: string
+}) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="hidden md:table-cell">Date</TableHead>
           <TableHead>
-            <span className="hidden md:inline">Instrument</span>
-            {/* On a narrow screen, one column holds the Instrument, the date and the volume. */}
             <StackedHead labels={["Instrument", "Date", "Volume"]} />
           </TableHead>
-          <TableHead className="hidden text-right md:table-cell">
-            Volume
-          </TableHead>
-          <TableHead className="hidden text-right md:table-cell">
-            Sale amount
-          </TableHead>
-          <TableHead className="hidden text-right md:table-cell">
-            Cost
-          </TableHead>
           <TableHead className="text-right">
-            <span className="hidden md:inline">Realized Profit</span>
-            {/* On a narrow screen, one column holds the three amounts. */}
             <StackedHead
               labels={["Realized Profit", "Sale amount", "Cost"]}
               alignEnd
@@ -65,16 +219,13 @@ export function ClosedPositionsTable({
       <TableBody>
         {closedPositions.map((closedPosition) => (
           <TableRow key={closedPosition.xtbId}>
-            <TableCell className="hidden num text-muted-foreground md:table-cell">
-              {formatPolishDate(closedPosition.time)}
-            </TableCell>
-            <TableCell className="align-top md:align-middle">
+            <TableCell className="align-top">
               <div className="flex flex-col gap-0.5">
                 <span className="font-medium">{closedPosition.ticker}</span>
-                <span className="max-w-32 truncate text-xs text-muted-foreground md:max-w-56">
+                <span className="max-w-32 truncate text-xs text-muted-foreground">
                   {closedPosition.name}
                 </span>
-                <span className="flex flex-col gap-0.5 text-xs text-muted-foreground md:hidden">
+                <span className="flex flex-col gap-0.5 text-xs text-muted-foreground">
                   <span className="num">
                     {formatPolishDate(closedPosition.time)}
                   </span>
@@ -84,16 +235,7 @@ export function ClosedPositionsTable({
                 </span>
               </div>
             </TableCell>
-            <TableCell className="hidden text-right num md:table-cell">
-              {formatVolume(closedPosition.volume)}
-            </TableCell>
-            <TableCell className="hidden text-right num md:table-cell">
-              {formatAmount(closedPosition.amount, currency)}
-            </TableCell>
-            <TableCell className="hidden text-right num md:table-cell">
-              {formatAmount(closedPosition.cost, currency)}
-            </TableCell>
-            <TableCell className="text-right align-top md:align-middle">
+            <TableCell className="text-right align-top">
               <span className="flex flex-col items-end gap-0.5">
                 <span
                   className={cn(
@@ -105,7 +247,7 @@ export function ClosedPositionsTable({
                     signed: true,
                   })}
                 </span>
-                <span className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground md:hidden">
+                <span className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground">
                   <span className="num">
                     {formatAmount(closedPosition.amount, currency)}
                   </span>
@@ -121,7 +263,6 @@ export function ClosedPositionsTable({
       <TableFooter>
         <TableRow>
           <TableCell>Total</TableCell>
-          <TableCell className="hidden md:table-cell" colSpan={4} />
           <TableCell
             className={cn(
               "text-right num",

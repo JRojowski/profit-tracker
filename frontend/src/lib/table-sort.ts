@@ -8,14 +8,23 @@ export type SortingProps = {
   onSortingChange: (sorting: SortingState) => void
 }
 
-// SortValue is the value that a sort compares: text, or a decimal amount as exact text.
+// SortValue is the value that a sort compares: text, a decimal amount as exact text, or a time as RFC 3339 UTC text.
 // A row with no value uses null.
 export type SortValue =
-  { kind: "text"; text: string } | { kind: "decimal"; amount: string } | null
+  | { kind: "text"; text: string }
+  | { kind: "decimal"; amount: string }
+  | { kind: "time"; time: string }
+  | null
 
 // textSortValue makes the sort value of a text, for example a ticker.
 export function textSortValue(text: string): SortValue {
   return { kind: "text", text }
+}
+
+// timeSortValue makes the sort value of a time from the backend. The backend sends RFC 3339 in UTC,
+// so a text comparison of two times is a comparison of the two instants.
+export function timeSortValue(time: string): SortValue {
+  return { kind: "time", time }
 }
 
 // decimalSortValue makes the sort value of a decimal amount from the backend. A null amount gives no value.
@@ -79,6 +88,9 @@ function compareSortValues(
   }
   if (a.kind === "text" && b.kind === "text")
     return a.text.localeCompare(b.text)
+  if (a.kind === "time" && b.kind === "time") {
+    return a.time < b.time ? -1 : a.time > b.time ? 1 : 0
+  }
   return 0
 }
 

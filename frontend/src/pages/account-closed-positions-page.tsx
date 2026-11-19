@@ -1,11 +1,25 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 import { FigureLabel } from "@/components/figure-label"
 import { LoadedView } from "@/components/loaded-view"
-import { ClosedPositionsTable } from "@/components/closed-positions-table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  CLOSED_POSITIONS_VIEW_STORAGE_KEY,
+  closedPositionColumns,
+  ClosedPositionsTable,
+  closedPositionsViewRules,
+} from "@/components/closed-positions-table"
+import { ResetColumnsButton } from "@/components/reset-columns-button"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useLoad } from "@/hooks/use-load"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useTableView } from "@/hooks/use-table-view"
 import { fetchClosedPositions, type ClosedPosition } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { sumDecimals } from "@/lib/decimal"
@@ -63,6 +77,13 @@ function ClosedPositionsView({
   year,
   onYearChange,
 }: ClosedPositionsViewProps) {
+  // The hook is here, and not in the table, so that the card header can hold the "Reset columns" button.
+  const isMobile = useIsMobile()
+  const columns = useMemo(() => closedPositionColumns(currency), [currency])
+  const view = useTableView(
+    CLOSED_POSITIONS_VIEW_STORAGE_KEY,
+    useMemo(() => closedPositionsViewRules(columns), [columns])
+  )
   const newestFirst = closedPositions.toReversed()
   const years = [
     ...new Set(
@@ -115,6 +136,14 @@ function ClosedPositionsView({
       <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Closed Positions</CardTitle>
+          {!isMobile && (
+            <CardAction>
+              <ResetColumnsButton
+                isDefault={view.isDefault}
+                onReset={view.reset}
+              />
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
           {years.length > 0 && (
@@ -153,9 +182,11 @@ function ClosedPositionsView({
             </p>
           ) : (
             <ClosedPositionsTable
+              columns={columns}
               closedPositions={shown}
               currency={currency}
               totalRealizedProfit={total}
+              view={view.props}
             />
           )}
         </CardContent>
