@@ -70,6 +70,7 @@ export function AccountClosedPositionsPage() {
           ticker={overview.state.ticker}
           closed={overview.state.closed}
           currency={account.currency}
+          onSelectClosed={overview.select}
           onClose={overview.close}
         />
       )}

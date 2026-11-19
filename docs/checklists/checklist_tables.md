@@ -175,6 +175,14 @@ Open from the Closed Positions table:
 - [ ] The row of that Closed Position in the list has a ring. The list scrolls to it. Its sell marker and each Fill marker of its Lot are large. The other markers are dim.
 - [ ] Click another row of the same Instrument. The highlight moves to the other Closed Position.
 - [ ] Press Tab until a row has focus. Press Enter. The panel opens with the highlight.
+- [ ] In the panel, click a card that is not highlighted. The card gets a ring. The markers of that Closed Position get large.
+- [ ] After that click, the URL has `closed=<xtbId>` of the card. The list does not scroll.
+- [ ] Click another card. The highlight moves. The Back button does not step back to the earlier card.
+- [ ] Click the highlighted card. The highlight goes. `closed` leaves the URL. The other parameters stay.
+- [ ] Do the same on the Holdings page and on the Closed Positions page. On the Closed Positions page, the filters stay in the URL.
+- [ ] Press Tab until a card has focus. Press Enter. The card is highlighted. Press Space. The highlight goes.
+- [ ] Move the pointer over a card. The pointer shows as a hand. The card changes its background.
+- [ ] Reload the page after you select a card. The card is still highlighted and the list scrolls to it.
 - [ ] Open `?overview=<ticker>&closed=NOPE`. The panel opens. No row is highlighted. The page shows no error.
 
 Chart and lists:
@@ -183,7 +191,8 @@ Chart and lists:
 - [ ] Hover over a marker day. The tooltip lists each Fill or sell with its time, volume and price. A day with two or more operations shows the average price.
 - [ ] Open an Instrument that you sold in full, for example INTC.US. The panel shows the header, the chart and the Closed Positions. It has no Holding and no open Lots.
 - [ ] The price line continues after the last sell.
-- [ ] Each Closed Position in the list shows the Close date, Open date, Volume, Open price, Close price, Sale amount, Cost and Realized Profit.
+- [ ] Each Closed Position in the list is a card with two columns. The left column shows Open date, Open price, Volume and Cost.
+- [ ] The right column of each card shows Close date, Close price, Sale amount and Realized Profit.
 - [ ] Open an Instrument with no price data, for example ZZQX.US. The panel shows a message. The chart still shows the markers.
 
 URL state and the Back button:

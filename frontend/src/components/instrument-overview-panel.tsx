@@ -53,6 +53,8 @@ type InstrumentOverviewPanelProps = {
   // closed is the XTB ID of the Closed Position to highlight, or null. An ID that no Closed Position of the
   // Instrument has gives no highlight.
   closed: string | null
+  // onSelectClosed highlights a Closed Position, or removes the highlight for null. A click on a card runs it.
+  onSelectClosed: (closed: string | null) => void
   onClose: () => void
 }
 
@@ -64,6 +66,7 @@ export function InstrumentOverviewPanel({
   ticker,
   currency,
   closed,
+  onSelectClosed,
   onClose,
 }: InstrumentOverviewPanelProps) {
   const { valuesVersion, refreshAllPrices } = useAppState()
@@ -130,6 +133,7 @@ export function InstrumentOverviewPanel({
                     overview={data}
                     currency={currency}
                     closed={closed}
+                    onSelectClosed={onSelectClosed}
                   />
                 )
               }
@@ -194,10 +198,12 @@ function OverviewBody({
   overview,
   currency: accountCurrency,
   closed,
+  onSelectClosed,
 }: {
   overview: InstrumentOverview
   currency: string
   closed: string | null
+  onSelectClosed: (closed: string | null) => void
 }) {
   const { prices, quoteCurrency, fills, closedPositions } = overview
   const highlight = useMemo(
@@ -283,6 +289,7 @@ function OverviewBody({
           closedPositions={closedPositions}
           currency={accountCurrency}
           highlightedId={highlight?.xtbId ?? null}
+          onSelect={onSelectClosed}
         />
       )}
     </>
@@ -437,16 +444,26 @@ function LotList({
 }
 
 // ClosedPositionList lists the Closed Positions of the Instrument, newest first, with all their figures.
-// The highlighted one has a ring and scrolls into view.
+// A click on a card highlights it, and a click on the highlighted card removes the highlight.
+// A highlight from the URL scrolls its card into view. A highlight from a click does not scroll the list.
 function ClosedPositionList({
   closedPositions,
   currency,
   highlightedId,
+  onSelect,
 }: {
   closedPositions: ClosedPosition[]
   currency: string
   highlightedId: string | null
+  onSelect: (closed: string | null) => void
 }) {
+  // selectedByClick is true from a click that highlights a card until that card has rendered as highlighted.
+  const selectedByClick = useRef(false)
+  const consumeClick = () => {
+    const clicked = selectedByClick.current
+    selectedByClick.current = false
+    return clicked
+  }
   return (
     <section className="flex flex-col gap-2">
       <h3 className="font-heading text-sm font-medium">
@@ -456,41 +473,59 @@ function ClosedPositionList({
         </span>
       </h3>
       <ul className="flex flex-col divide-y rounded-lg border text-sm">
-        {closedPositions.toReversed().map((closedPosition) => (
-          <ClosedPositionRow
-            key={closedPosition.xtbId}
-            closedPosition={closedPosition}
-            currency={currency}
-            highlighted={closedPosition.xtbId === highlightedId}
-          />
-        ))}
+        {closedPositions.toReversed().map((closedPosition) => {
+          const highlighted = closedPosition.xtbId === highlightedId
+          return (
+            <ClosedPositionRow
+              key={closedPosition.xtbId}
+              closedPosition={closedPosition}
+              currency={currency}
+              highlighted={highlighted}
+              consumeClick={consumeClick}
+              onToggle={() => {
+                selectedByClick.current = !highlighted
+                onSelect(highlighted ? null : closedPosition.xtbId)
+              }}
+            />
+          )
+        })}
       </ul>
     </section>
   )
 }
 
-// ClosedPositionRow shows one Closed Position as pairs of a label and a value.
+// ClosedPositionRow shows one Closed Position as a card in two columns: the open figures at the left and the close
+// figures at the right. The card is a toggle button. Enter and Space select it.
 function ClosedPositionRow({
   closedPosition,
   currency,
   highlighted,
+  consumeClick,
+  onToggle,
 }: {
   closedPosition: ClosedPosition
   currency: string
   highlighted: boolean
+  // consumeClick tells whether a click highlighted the card, and clears that fact.
+  consumeClick: () => boolean
+  onToggle: () => void
 }) {
-  const ref = useRef<HTMLLIElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (highlighted) ref.current?.scrollIntoView({ block: "nearest" })
+    if (!highlighted) return
+    if (!consumeClick()) ref.current?.scrollIntoView({ block: "nearest" })
+    // consumeClick changes on each render, but only a change of the highlight must scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlighted])
+  // The figures are in row order of a two-column grid: open figure, close figure, open figure, close figure, ...
   const figures: [string, ReactNode][] = [
-    ["Close date", formatPolishDate(closedPosition.time)],
     ["Open date", formatPolishDate(closedPosition.openTime)],
-    ["Volume", formatVolume(closedPosition.volume)],
-    ["Cost", formatAmount(closedPosition.cost, currency)],
+    ["Close date", formatPolishDate(closedPosition.time)],
     ["Open price", <OptionalPrice price={closedPosition.openPrice} />],
     ["Close price", <OptionalPrice price={closedPosition.closePrice} />],
+    ["Volume", formatVolume(closedPosition.volume)],
     ["Sale amount", formatAmount(closedPosition.amount, currency)],
+    ["Cost", formatAmount(closedPosition.cost, currency)],
     [
       "Realized Profit",
       <span
@@ -507,25 +542,35 @@ function ClosedPositionRow({
   ]
   return (
     <li
-      ref={ref}
-      aria-current={highlighted ? "true" : undefined}
       data-highlighted={highlighted ? "" : undefined}
-      className={cn(
-        "flex flex-col gap-2 px-3 py-2.5",
-        highlighted && "bg-primary/10 ring-2 ring-primary ring-inset"
-      )}
+      aria-current={highlighted ? "true" : undefined}
     >
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+      <div
+        ref={ref}
+        role="button"
+        tabIndex={0}
+        aria-pressed={highlighted}
+        onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return
+          event.preventDefault()
+          onToggle()
+        }}
+        className={cn(
+          "grid cursor-pointer grid-cols-2 gap-x-6 gap-y-1 px-3 py-2.5 outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+          highlighted && "bg-primary/10 ring-2 ring-primary ring-inset"
+        )}
+      >
         {figures.map(([label, value]) => (
           <div
             key={label}
             className="flex items-baseline justify-between gap-2"
           >
-            <dt className="text-xs text-muted-foreground">{label}</dt>
-            <dd className="text-right num">{value}</dd>
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-right num">{value}</span>
           </div>
         ))}
-      </dl>
+      </div>
     </li>
   )
 }

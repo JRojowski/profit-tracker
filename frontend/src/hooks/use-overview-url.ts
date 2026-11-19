@@ -16,6 +16,8 @@ export type OverviewUrl = {
   open: (ticker: string, closed?: string) => void
   // close removes the overview and closed parameters together. It replaces the entry, so that Back does not open the panel again.
   close: () => void
+  // select highlights a Closed Position of the open panel, or removes the highlight for null. It replaces the entry.
+  select: (closed: string | null) => void
 }
 
 // useOverviewUrl reads and writes the search parameters of the Instrument Overview. It keeps each other parameter,
@@ -40,5 +42,18 @@ export function useOverviewUrl(): OverviewUrl {
       }),
     [setSearchParams]
   )
-  return { state, open, close }
+  const ticker = state?.ticker ?? null
+  const select = useCallback(
+    (closed: string | null) => {
+      if (ticker === null) return
+      setSearchParams(
+        (params) => writeOverviewState(params, { ticker, closed }),
+        {
+          replace: true,
+        }
+      )
+    },
+    [setSearchParams, ticker]
+  )
+  return { state, open, close, select }
 }
