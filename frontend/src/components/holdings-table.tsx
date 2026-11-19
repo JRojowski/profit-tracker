@@ -1,25 +1,15 @@
-import { ArrowDown, ArrowUp, RotateCcw } from "lucide-react"
 import { useMemo } from "react"
-import { createPortal } from "react-dom"
 
 import { CurrencyBadge } from "@/components/account-badges"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
+import { SortControl } from "@/components/sort-control"
 import { PriceSourceDialog } from "@/components/price-source-dialog"
 import {
   PriceWarningBadge,
   PriceWarningBadgeButton,
 } from "@/components/price-warnings"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useTableView } from "@/hooks/use-table-view"
 import type { Holding } from "@/lib/api"
 import { percentOf, sumDecimals } from "@/lib/decimal"
 import {
@@ -37,48 +27,50 @@ import {
   textSortValue,
   type SortingProps,
 } from "@/lib/table-sort"
-import type { TableViewProps } from "@/lib/table-view"
+import {
+  tableViewRules,
+  type TableViewProps,
+  type TableViewRules,
+} from "@/lib/table-view"
 import { cn } from "@/lib/utils"
 
 type HoldingsTableProps = {
   holdings: Holding[]
+  // columns come from holdingColumns. The owner builds them once, for the table and for the view rules.
+  columns: DataTableColumn<Holding>[]
   currency: string
   // onPriceSourceChanged runs after the user changed the price source of an Instrument.
   onPriceSourceChanged: () => void
-  // actionSlot is the element in the card header that holds the "Reset columns" button. It is null until the header is ready.
-  actionSlot: HTMLElement | null
+  // view is the column order and the sorting, which the owner keeps with useTableView.
+  view: TableViewProps
 }
 
-// VIEW_STORAGE_KEY is the localStorage key of the column order and the sorting of this table.
-const VIEW_STORAGE_KEY = "profit-tracker:table:holdings"
+// HOLDINGS_VIEW_STORAGE_KEY is the localStorage key of the column order and the sorting of this table.
+export const HOLDINGS_VIEW_STORAGE_KEY = "profit-tracker:table:holdings"
 
 // FIXED_COLUMN_IDS are the leading columns that the user cannot move.
 const FIXED_COLUMN_IDS = ["instrument"]
+
+// holdingsViewRules gives the rules of a stored view of this table. They come from the column definitions.
+export function holdingsViewRules(
+  columns: DataTableColumn<Holding>[]
+): TableViewRules {
+  return tableViewRules(columns, FIXED_COLUMN_IDS)
+}
 
 // HoldingsTable shows the Holdings of an Account: a table on a wide screen and a list of compact rows on a narrow screen.
 // Each row opens the price source dialog. A Holding with a Price Warning has a badge.
 // A note under the table lists the Holdings with no value.
 export function HoldingsTable({
   holdings,
+  columns,
   currency,
   onPriceSourceChanged,
-  actionSlot,
+  view,
 }: HoldingsTableProps) {
   const isMobile = useIsMobile()
-  const columns = useMemo(
-    () => holdingColumns(currency, onPriceSourceChanged),
-    [currency, onPriceSourceChanged]
-  )
   // The wide table and the cards share one view. The default sorting is the order of the response.
-  // The default column order comes from the column definitions, so a new column needs one edit.
-  const view = useTableView(VIEW_STORAGE_KEY, {
-    defaultColumnOrder: columns.map((column) => column.id),
-    sortableColumnIds: columns
-      .filter((column) => column.sortValue)
-      .map((column) => column.id),
-    fixedColumnIds: FIXED_COLUMN_IDS,
-  })
-  const { sorting, onSortingChange } = view.props
+  const { sorting, onSortingChange } = view
   // The rows are sorted once, here. The cards use only the first sort column.
   const sorted = useMemo(
     () => sortRows(holdings, isMobile ? sorting.slice(0, 1) : sorting, columns),
@@ -107,29 +99,13 @@ export function HoldingsTable({
           onSortingChange={onSortingChange}
         />
       ) : (
-        <>
-          {actionSlot &&
-            createPortal(
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={view.isDefault}
-                onClick={view.reset}
-              >
-                <RotateCcw data-icon="inline-start" />
-                Reset columns
-              </Button>,
-              actionSlot
-            )}
-          <WideTable
-            holdings={sorted}
-            totals={totals}
-            columns={columns}
-            currency={currency}
-            view={view.props}
-          />
-        </>
+        <WideTable
+          holdings={sorted}
+          totals={totals}
+          columns={columns}
+          currency={currency}
+          view={view}
+        />
       )}
       <NoValueNote holdings={holdings} />
     </div>
@@ -138,7 +114,7 @@ export function HoldingsTable({
 
 // holdingColumns gives the columns of the wide table. Each sortable column has its own sortValue.
 // The select control of the cards reads the sortable columns from here, so a new column needs one edit.
-function holdingColumns(
+export function holdingColumns(
   currency: string,
   onPriceSourceChanged: () => void
 ): DataTableColumn<Holding>[] {
@@ -403,57 +379,6 @@ function WideTable({
     />
   )
 }
-
-// SortControl is the select control of the cards: the column and the direction of one sort.
-// An empty sorting is the default order.
-function SortControl({
-  options,
-  sorting,
-  onSortingChange,
-}: SortingProps & { options: DataTableColumn<Holding>[] }) {
-  const sort = sorting[0]
-  const Arrow = sort?.desc ? ArrowDown : ArrowUp
-  return (
-    <div className="flex items-center gap-2">
-      <Select
-        value={sort?.id ?? DEFAULT_ORDER}
-        onValueChange={(id) =>
-          onSortingChange(
-            id === DEFAULT_ORDER ? [] : [{ id, desc: sort?.desc ?? false }]
-          )
-        }
-      >
-        <SelectTrigger className="min-w-0 flex-1" aria-label="Sort by">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={DEFAULT_ORDER}>Default order</SelectItem>
-          {options.map((option) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.header}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        disabled={sort === undefined}
-        aria-label={sort?.desc ? "Descending" : "Ascending"}
-        title={sort?.desc ? "Descending" : "Ascending"}
-        onClick={() =>
-          sort && onSortingChange([{ id: sort.id, desc: !sort.desc }])
-        }
-      >
-        <Arrow />
-      </Button>
-    </div>
-  )
-}
-
-// DEFAULT_ORDER is the value of the select option for no sort.
-const DEFAULT_ORDER = "default"
 
 // HoldingRows shows a select control for the sort, each Holding as one compact row, and the totals as the last row.
 // A tap on a row opens the price source dialog.

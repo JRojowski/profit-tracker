@@ -87,6 +87,7 @@ func withNewOperations(l ledger.Ledger, ops []store.CashOperation, newOps map[st
 			Amount:     op.Amount,
 			PositionID: op.PositionID,
 			Volume:     op.Volume.Decimal,
+			Price:      op.Price,
 		})
 		if !op.IsFill {
 			continue
@@ -100,7 +101,7 @@ func withNewOperations(l ledger.Ledger, ops []store.CashOperation, newOps map[st
 				Instrument: ledger.Instrument{Ticker: op.Ticker, Name: op.InstrumentName},
 			})
 		}
-		l.Lots[i].Fills = append(l.Lots[i].Fills, ledger.Fill{XTBID: op.XTBID, Volume: op.Volume.Decimal, Amount: op.Amount})
+		l.Lots[i].Fills = append(l.Lots[i].Fills, ledger.Fill{XTBID: op.XTBID, Time: op.Time, Volume: op.Volume.Decimal, Price: op.Price, Amount: op.Amount})
 	}
 	return l
 }

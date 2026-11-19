@@ -32,6 +32,21 @@ export type TableViewRules = {
   fixedColumnIds: string[]
 }
 
+// tableViewRules gives the rules of a table from its column definitions, so a new column needs one edit.
+// A column with a sortValue is sortable.
+export function tableViewRules(
+  columns: { id: string; sortValue?: unknown }[],
+  fixedColumnIds: string[]
+): TableViewRules {
+  return {
+    defaultColumnOrder: columns.map((column) => column.id),
+    sortableColumnIds: columns
+      .filter((column) => column.sortValue)
+      .map((column) => column.id),
+    fixedColumnIds,
+  }
+}
+
 // STORED_VIEW_VERSION is the version of the stored value. A stored value with another version is not used.
 const STORED_VIEW_VERSION = 1
 

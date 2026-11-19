@@ -85,6 +85,7 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 			PositionID: row.PositionID.String,
 			// A missing volume gives zero. The Ledger calculator uses the volume only for a Closed Position.
 			Volume: row.Volume.Decimal,
+			Price:  row.Price,
 		})
 	}
 	// The rows are ordered by position ID, so the Fills of one Lot are next to each other.
@@ -99,7 +100,11 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 			})
 		}
 		lot := &l.Lots[len(l.Lots)-1]
-		lot.Fills = append(lot.Fills, ledger.Fill{XTBID: row.XtbID, Volume: row.Volume.Decimal, Amount: row.Amount})
+		at, err := time.Parse(timeLayout, row.Time)
+		if err != nil {
+			return ledger.Ledger{}, fmt.Errorf("fill %s of account %d: parse time %q: %w", row.XtbID, accountID, row.Time, err)
+		}
+		lot.Fills = append(lot.Fills, ledger.Fill{XTBID: row.XtbID, Time: at.UTC(), Volume: row.Volume.Decimal, Price: row.Price, Amount: row.Amount})
 	}
 	return l, nil
 }

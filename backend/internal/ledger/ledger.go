@@ -121,6 +121,8 @@ type CashOperation struct {
 	// Volume is the parsed volume. For a Stock sell, it is the closed volume of the Lot.
 	// It is zero for an operation with no volume.
 	Volume decimal.Decimal
+	// Price is the stored price of one unit. It is not valid for an operation with no price.
+	Price decimal.NullDecimal
 }
 
 // Instrument is one security, identified by its broker ticker.
@@ -140,8 +142,12 @@ type Lot struct {
 // Fill is one purchase Cash Operation of a Lot.
 type Fill struct {
 	// XTBID is the XTB ID of the purchase.
-	XTBID  string
+	XTBID string
+	// Time is the time of the purchase.
+	Time   time.Time
 	Volume decimal.Decimal
+	// Price is the stored price of one unit. It is not valid for a purchase with no price.
+	Price decimal.NullDecimal
 	// Amount is the purchase amount in the Account currency. It is negative.
 	Amount decimal.Decimal
 }
@@ -195,6 +201,13 @@ type ClosedPosition struct {
 	Cost decimal.Decimal
 	// RealizedProfit is Amount minus Cost. It can be negative.
 	RealizedProfit decimal.Decimal
+	// OpenTime is the time of the first Fill of the Lot.
+	OpenTime time.Time
+	// OpenPrice is the average of the Fill prices of the Lot with the Fill volumes as weights.
+	// It is not valid if a Fill has no price. The division keeps decimal.DivisionPrecision (16) decimal places.
+	OpenPrice decimal.NullDecimal
+	// ClosePrice is the stored price of the sell Cash Operation. It is not valid if the operation has no price.
+	ClosePrice decimal.NullDecimal
 }
 
 // Holding is all open Lots of one Instrument, taken together.
@@ -345,13 +358,29 @@ type lotState struct {
 	// closedVolume and closedCost are the sums over the Closed Positions of the Lot.
 	closedVolume decimal.Decimal
 	closedCost   decimal.Decimal
+	// openTime and openPrice come from all Fills of the Lot, like the purchase amount.
+	openTime  time.Time
+	openPrice decimal.NullDecimal
 }
 
 func newLotState(lot Lot) *lotState {
 	st := &lotState{instrument: lot.Instrument, volume: decimal.Zero, purchase: decimal.Zero, closedVolume: decimal.Zero, closedCost: decimal.Zero}
+	weighted, priced := decimal.Zero, true
 	for _, f := range lot.Fills {
 		st.volume = st.volume.Add(f.Volume)
 		st.purchase = st.purchase.Sub(f.Amount)
+		if st.openTime.IsZero() || f.Time.Before(st.openTime) {
+			st.openTime = f.Time
+		}
+		if !f.Price.Valid {
+			priced = false
+			continue
+		}
+		weighted = weighted.Add(f.Price.Decimal.Mul(f.Volume))
+	}
+	// One Fill gives its exact price. The multiplication comes first, so an exact result stays exact.
+	if priced && st.volume.IsPositive() {
+		st.openPrice = decimal.NewNullDecimal(weighted.Div(st.volume))
 	}
 	return st
 }
@@ -399,6 +428,9 @@ func closeLots(ops []CashOperation, lots map[string]*lotState) ([]ClosedPosition
 			Amount:         op.Amount,
 			Cost:           cost,
 			RealizedProfit: op.Amount.Sub(cost),
+			OpenTime:       st.openTime,
+			OpenPrice:      st.openPrice,
+			ClosePrice:     op.Price,
 		})
 	}
 	slices.SortStableFunc(closedPositions, func(a, b ClosedPosition) int {

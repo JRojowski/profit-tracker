@@ -67,6 +67,18 @@ export function formatVolume(volume: string): string {
   }).format(Number(volume))
 }
 
+// formatPrice shows a decimal price from the broker with 2 to 4 decimal places and no currency symbol.
+// It rounds a longer price to 4 decimal places. The response does not state the currency of the price.
+// The conversion to a float is for display only. Never calculate with the result.
+export function formatPrice(price: string): string {
+  return withMinusSign(
+    new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    }).format(Number(price))
+  )
+}
+
 // formatRate shows an Exchange Rate with all its digits. The NBP gives at most 4 decimal places.
 export function formatRate(rate: string): string {
   return new Intl.NumberFormat(undefined, {
@@ -126,4 +138,18 @@ export function formatPolishDate(time: string): string {
 export function formatDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number)
   return new Date(year, month - 1, day).toLocaleDateString()
+}
+
+// polishDate gives the calendar date of an RFC 3339 time in Polish time, as YYYY-MM-DD.
+// Date text in this form compares in the right order with a plain string comparison.
+export function polishDate(time: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: polishTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(time))
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? ""
+  return `${part("year")}-${part("month")}-${part("day")}`
 }
