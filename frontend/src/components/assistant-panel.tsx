@@ -1,5 +1,5 @@
-import { LoaderCircleIcon, SendIcon } from "lucide-react"
-import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import { LoaderCircleIcon, MessageSquarePlusIcon, SendIcon } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -11,9 +11,16 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
+import { useOverviewUrl } from "@/hooks/use-overview-url"
+import { useRouteAccount } from "@/hooks/use-route-account"
+import type { AssistantContext } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { assistantStepText } from "@/lib/assistant-step-text"
-import { useAssistant, type AssistantTurn } from "@/lib/assistant-state"
+import {
+  maxQuestionLength,
+  useAssistant,
+  type AssistantTurn,
+} from "@/lib/assistant-state"
 
 // failedAnswerText is the one message for each error. The panel shows it in place of the answer.
 const failedAnswerText =
@@ -24,9 +31,24 @@ const failedAnswerText =
 // It stands above the Instrument Overview panel. Escape closes it first, because it is the layer that opened
 // last, or because the Instrument Overview panel passes the key on to it.
 export function AssistantPanel() {
-  const { available, open, setOpen, turns, asking, ask } = useAssistant()
+  const { available, open, setOpen, turns, asking, ask, newConversation } =
+    useAssistant()
+  const { accounts } = useAppState()
+  const account = useRouteAccount(accounts)
+  const overview = useOverviewUrl().state
   const [draft, setDraft] = useState("")
   const listEnd = useRef<HTMLDivElement>(null)
+
+  // The page context comes from the URL, so it stays correct while the Assistant covers the Instrument Overview.
+  const accountId = account?.id
+  const instrument = overview?.ticker
+  const context = useMemo<AssistantContext>(
+    () => ({
+      ...(accountId !== undefined && { accountId }),
+      ...(instrument !== undefined && { instrument }),
+    }),
+    [accountId, instrument]
+  )
 
   // The list shows the newest turn.
   useEffect(() => {
@@ -37,7 +59,7 @@ export function AssistantPanel() {
 
   const send = () => {
     if (draft.trim() === "" || asking) return
-    ask(draft)
+    ask(draft, context)
     setDraft("")
   }
   // Enter sends the question. Shift+Enter makes a new line. A key that confirms a text composition does neither.
@@ -61,13 +83,24 @@ export function AssistantPanel() {
           <SheetDescription>
             Ask a question about your Holdings.
           </SheetDescription>
+          {turns.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-3 right-12"
+              onClick={newConversation}
+            >
+              <MessageSquarePlusIcon data-icon="inline-start" />
+              New conversation
+            </Button>
+          )}
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4">
           {turns.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              The Assistant answers with the numbers that the tool calculates.
-              It does not recommend a purchase or a sale.
-            </p>
+            <EmptyConversation
+              instrument={instrument}
+              onPick={(question) => ask(question, context)}
+            />
           )}
           {turns.map((turn) => (
             <TurnView key={turn.id} turn={turn} />
@@ -75,11 +108,13 @@ export function AssistantPanel() {
           <div ref={listEnd} />
         </div>
         <div className="flex flex-col gap-2 border-t p-4">
+          <ContextLine accountName={account?.name} instrument={instrument} />
           <Textarea
             aria-label="Question for the Assistant"
             placeholder="Ask about your Holdings"
             value={draft}
             rows={2}
+            maxLength={maxQuestionLength}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
             className="max-h-40 min-h-10"
@@ -100,6 +135,66 @@ export function AssistantPanel() {
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+// ContextLine tells the user what the Assistant knows about the open page: the Account and the Instrument.
+function ContextLine({
+  accountName,
+  instrument,
+}: {
+  accountName: string | undefined
+  instrument: string | undefined
+}) {
+  const parts = [accountName, instrument].filter(
+    (part): part is string => part !== undefined
+  )
+  if (parts.length === 0) return null
+  return (
+    <p className="text-xs break-words text-muted-foreground">
+      Open page: <span className="num font-mono">{parts.join(" · ")}</span>
+    </p>
+  )
+}
+
+// EmptyConversation shows what the Assistant does and the example questions. A click on an example sends it.
+// With an open Instrument Overview, the first example asks about that Instrument.
+function EmptyConversation({
+  instrument,
+  onPick,
+}: {
+  instrument: string | undefined
+  onPick: (question: string) => void
+}) {
+  const year = new Date().getFullYear() - 1
+  const examples = [
+    instrument === undefined
+      ? "What is my Total Result, and what are its parts?"
+      : `How much did I earn on ${instrument}, with the dividends?`,
+    `What was my Total Result in ${year}?`,
+    `Which Closed Position was the worst in ${year}?`,
+    "How much of the IKZE Limit is left this year?",
+  ]
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        The Assistant answers with the numbers that the tool calculates. It does
+        not recommend a purchase or a sale.
+      </p>
+      <ul aria-label="Example questions" className="flex flex-col gap-2">
+        {examples.map((example) => (
+          <li key={example}>
+            <Button
+              variant="outline"
+              className="h-auto w-full justify-start py-2 text-left whitespace-normal"
+              onClick={() => onPick(example)}
+            >
+              {example}
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

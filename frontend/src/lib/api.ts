@@ -752,6 +752,14 @@ export type AssistantStep = {
   arguments: Record<string, unknown>
 }
 
+// AssistantContext is the page that the user has open when the user asks. Each field is optional.
+export type AssistantContext = {
+  // accountId is the Account of the page.
+  accountId?: number
+  // instrument is the broker ticker of the open Instrument Overview.
+  instrument?: string
+}
+
 // AssistantAnswer is the answer of the Assistant and the steps that the model used.
 export type AssistantAnswer = {
   answer: string
@@ -767,14 +775,20 @@ export async function fetchAssistantAvailable(
   return body.available
 }
 
-// askAssistant sends the conversation to the Assistant. The last message is the new question.
+// askAssistant sends the conversation and the page context to the Assistant. The last message is the new question.
+// A context without a field is left out of the request.
 export async function askAssistant(
-  messages: AssistantMessage[]
+  messages: AssistantMessage[],
+  context: AssistantContext,
+  signal?: AbortSignal
 ): Promise<AssistantAnswer> {
+  const hasContext =
+    context.accountId !== undefined || context.instrument !== undefined
   const response = await fetch("/api/assistant/questions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify(hasContext ? { messages, context } : { messages }),
+    signal,
   })
   return readJSON<AssistantAnswer>(response)
 }

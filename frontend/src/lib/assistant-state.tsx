@@ -12,9 +12,16 @@ import {
 import {
   askAssistant,
   fetchAssistantAvailable,
+  type AssistantContext,
   type AssistantMessage,
   type AssistantStep,
 } from "@/lib/api"
+
+// maxQuestionLength is the longest message that the backend accepts, in characters.
+export const maxQuestionLength = 4000
+
+// maxMessages is the largest number of messages that the backend accepts in one request.
+const maxMessages = 40
 
 // AssistantTurn is one question of the user and what the Assistant did with it.
 export type AssistantTurn = {
@@ -35,11 +42,15 @@ type AssistantState = {
   turns: AssistantTurn[]
   // asking is true while one question waits for its answer. The Assistant takes one question at a time.
   asking: boolean
-  // ask sends one question. It does nothing when the text is empty or another question waits.
-  ask: (question: string) => void
+  // ask sends one question with the page context. It does nothing when the text is empty or another question waits.
+  ask: (question: string, context: AssistantContext) => void
+  // newConversation removes all questions and answers. A question that waits is dropped.
+  newConversation: () => void
 }
 
-const AssistantContext = createContext<AssistantState | undefined>(undefined)
+const AssistantContextValue = createContext<AssistantState | undefined>(
+  undefined
+)
 
 // AssistantProvider holds the conversation with the Assistant above the routes. The conversation stays
 // while the user moves between pages, and it ends when the tab reloads.
@@ -48,6 +59,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [turns, setTurns] = useState<AssistantTurn[]>([])
   const nextId = useRef(1)
+  // request is the controller of the question that waits. A new conversation aborts it.
+  const request = useRef<AbortController | null>(null)
   const asking = turns.some((turn) => turn.status === "pending")
 
   useEffect(() => {
@@ -61,20 +74,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     return () => controller.abort()
   }, [])
 
-  const ask = useCallback(
-    (question: string) => {
-      const text = question.trim()
-      if (text === "" || asking) return
-      const id = nextId.current++
-      setTurns((list) => [
-        ...list,
-        { id, question: text, status: "pending", answer: "", steps: [] },
-      ])
+  // run sends the question of the turn with its id and writes the outcome into the turn.
+  // history holds the turns that come before the question.
+  const run = useCallback(
+    (
+      id: number,
+      question: string,
+      context: AssistantContext,
+      history: AssistantTurn[]
+    ) => {
+      const controller = new AbortController()
+      request.current = controller
       const finish = (change: Partial<AssistantTurn>) =>
         setTurns((list) =>
           list.map((turn) => (turn.id === id ? { ...turn, ...change } : turn))
         )
-      askAssistant(messagesFor(text))
+      askAssistant(messagesFor(history, question), context, controller.signal)
         .then((result) =>
           finish({
             status: "answered",
@@ -82,32 +97,90 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             steps: result.steps,
           })
         )
-        .catch(() => finish({ status: "failed" }))
+        .catch(() => {
+          if (controller.signal.aborted) return
+          finish({ status: "failed" })
+        })
     },
-    [asking]
+    []
   )
 
+  const ask = useCallback(
+    (question: string, context: AssistantContext) => {
+      const text = question.trim()
+      if (text === "" || asking) return
+      const id = nextId.current++
+      setTurns((list) => [
+        ...list,
+        {
+          id,
+          question: text,
+          status: "pending",
+          answer: "",
+          steps: [],
+        },
+      ])
+      run(id, text, context, turns)
+    },
+    [asking, turns, run]
+  )
+
+  const newConversation = useCallback(() => {
+    request.current?.abort()
+    request.current = null
+    setTurns([])
+  }, [])
+
   const value = useMemo(
-    () => ({ available, open, setOpen, turns, asking, ask }),
-    [available, open, turns, asking, ask]
+    () => ({
+      available,
+      open,
+      setOpen,
+      turns,
+      asking,
+      ask,
+      newConversation,
+    }),
+    [available, open, turns, asking, ask, newConversation]
   )
 
   return (
-    <AssistantContext.Provider value={value}>
+    <AssistantContextValue.Provider value={value}>
       {children}
-    </AssistantContext.Provider>
+    </AssistantContextValue.Provider>
   )
 }
 
-// messagesFor gives the messages that go to the backend for a new question. Today it is the question alone.
-// A later ticket adds the earlier questions and answers here.
-function messagesFor(question: string): AssistantMessage[] {
-  return [{ role: "user", content: question }]
+// messagesFor gives the messages that go to the backend for a new question: each answered turn before it, in
+// order, and the question. A turn that failed has no answer and is left out. The backend takes at most 40 messages
+// of at most 4000 characters. A longer conversation sends its newest messages, and the first of them is a question.
+function messagesFor(
+  history: AssistantTurn[],
+  question: string
+): AssistantMessage[] {
+  const messages: AssistantMessage[] = []
+  for (const turn of history) {
+    if (turn.status !== "answered" || turn.answer.trim() === "") continue
+    messages.push(
+      { role: "user", content: clip(turn.question) },
+      { role: "assistant", content: clip(turn.answer) }
+    )
+  }
+  messages.push({ role: "user", content: clip(question) })
+  const newest = messages.slice(-maxMessages)
+  const firstQuestion = newest.findIndex((message) => message.role === "user")
+  return newest.slice(firstQuestion)
+}
+
+// clip cuts a text to the length that the backend accepts. The length is in characters, not in code units.
+function clip(text: string): string {
+  if (text.length <= maxQuestionLength) return text
+  return Array.from(text).slice(0, maxQuestionLength).join("")
 }
 
 // useAssistant gives the conversation with the Assistant.
 export function useAssistant(): AssistantState {
-  const state = useContext(AssistantContext)
+  const state = useContext(AssistantContextValue)
   if (state === undefined) {
     throw new Error("Use useAssistant only inside an AssistantProvider.")
   }
