@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 
 import { CurrencyBadge } from "@/components/account-badges"
+import { NoValue, ProfitFigure, Stacked } from "@/components/value-figures"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
 import { SortControl } from "@/components/sort-control"
 import { PriceSourceDialog } from "@/components/price-source-dialog"
@@ -241,28 +242,6 @@ export function holdingColumns(
   ]
 }
 
-// ProfitFigure shows an Unrealized Profit with its percentage under it, in the colour of its sign.
-export function ProfitFigure({
-  profit,
-  percent,
-  currency,
-}: {
-  profit: string
-  percent: string | null
-  currency: string
-}) {
-  return (
-    <div className={cn("flex flex-col", signColour(amountSign(profit)))}>
-      <span>{formatAmount(profit, currency, { signed: true })}</span>
-      {percent !== null && (
-        <span className="text-xs">
-          {formatPercent(percent, { signed: true })}
-        </span>
-      )}
-    </div>
-  )
-}
-
 // hasKnownValue tells that a Holding has a value and an Unrealized Profit. The totals and the note use only this test.
 function hasKnownValue(holding: Holding): boolean {
   return holding.value !== null && holding.unrealizedProfit !== null
@@ -494,20 +473,4 @@ function NoValueNote({ holdings }: { holdings: Holding[] }) {
       </ul>
     </div>
   )
-}
-
-// Stacked shows a value with a small muted line under it, for example a price and its date.
-export function Stacked({ main, sub }: { main: string; sub: string }) {
-  return (
-    <div className="flex flex-col">
-      <span>{main}</span>
-      <span className="text-xs text-muted-foreground">{sub}</span>
-    </div>
-  )
-}
-
-// NoValue marks an empty cell. The note under the table tells why a Holding has no value.
-// A Holding in the Account currency has no Exchange Rate.
-export function NoValue() {
-  return <span className="text-muted-foreground">—</span>
 }

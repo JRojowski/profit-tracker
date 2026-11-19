@@ -11,8 +11,9 @@ import (
 )
 
 // overviewResponse is the body of GET /api/accounts/{id}/instruments/{ticker}/overview.
-// It is the Instrument Overview of one Instrument on one Account. Later tickets add the Holding,
-// the open Lots and the Closed Positions as new fields.
+// It is the Instrument Overview of one Instrument on one Account. It has the identity and the price source state,
+// the daily price series, the Fills, the Holding (nil when the Account has no open volume), the open Lots
+// and the Closed Positions.
 type overviewResponse struct {
 	Ticker string `json:"ticker"`
 	Name   string `json:"name"`

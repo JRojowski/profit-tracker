@@ -70,7 +70,7 @@ export function dayValue(date: string): number {
 // An operation is highlighted when isHighlighted says so, and then its marker is highlighted.
 function joinMarkers(
   kind: MarkerKind,
-  operations: (MarkerOperation & { time: string })[],
+  operations: MarkerOperation[],
   isHighlighted: (operation: MarkerOperation) => boolean
 ): { markers: ChartMarker[]; unplaced: number } {
   const days = new Map<string, MarkerOperation[]>()

@@ -60,6 +60,10 @@ _Avoid_: Alert, error, problem
 The share of each part in the value of one Account or of all Accounts. The parts are the cash and the Holdings with a known value. One Instrument on two Accounts is one part. A Holding with no known value is not a part.
 _Avoid_: Portfolio share, breakdown, udział
 
+**Instrument Overview**:
+The view of one Instrument on one Account. It shows the price history of the Instrument with each Fill and each Closed Position marked on it, the Holding, the open Lots and the Closed Positions.
+_Avoid_: Position overview, details, pop-up
+
 ### Currencies
 
 **Exchange Rate**:

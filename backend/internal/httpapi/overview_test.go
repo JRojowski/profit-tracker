@@ -455,3 +455,18 @@ func TestInstrumentOverview_SameInstrumentOnTwoAccounts_EachAccountGivesItsOwnCl
 	assert.Len(t, firstGot.ClosedPositions, 2)
 	assert.Len(t, secondGot.ClosedPositions, 1)
 }
+
+func TestInstrumentOverview_ClosesInTwoCurrencies_SeriesHasOnlyTheCurrencyOfTheNewestClose(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, overviewExport(), "XTB USD")
+	srv.storeDailyCloses(t, "ABC.US", "EUR", "2026-02-03=90", "2026-02-04=91")
+	srv.storeDailyCloses(t, "ABC.US", "USD", "2026-02-05=101", "2026-02-06=102")
+
+	got := srv.overview(t, accountID, "ABC.US")
+
+	assert.Equal(t, overviewPrices{
+		Currency: ptr("USD"),
+		Series:   []overviewPoint{{Date: "2026-02-05", Close: "101"}, {Date: "2026-02-06", Close: "102"}},
+	}, got.Prices)
+}
