@@ -739,3 +739,42 @@ export async function fetchAllAccountsAllocation(
   const response = await fetch("/api/all-accounts/allocation", { signal })
   return readJSON<Allocation>(response)
 }
+
+// AssistantMessage is one message of a conversation with the Assistant.
+export type AssistantMessage = {
+  role: "user" | "assistant"
+  content: string
+}
+
+// AssistantStep is one call of a function by the model, with its arguments.
+export type AssistantStep = {
+  function: string
+  arguments: Record<string, unknown>
+}
+
+// AssistantAnswer is the answer of the Assistant and the steps that the model used.
+export type AssistantAnswer = {
+  answer: string
+  steps: AssistantStep[]
+}
+
+// fetchAssistantAvailable tells whether the Assistant is on. It is off when the backend has no API key.
+export async function fetchAssistantAvailable(
+  signal?: AbortSignal
+): Promise<boolean> {
+  const response = await fetch("/api/assistant", { signal })
+  const body = await readJSON<{ available: boolean }>(response)
+  return body.available
+}
+
+// askAssistant sends the conversation to the Assistant. The last message is the new question.
+export async function askAssistant(
+  messages: AssistantMessage[]
+): Promise<AssistantAnswer> {
+  const response = await fetch("/api/assistant/questions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  })
+  return readJSON<AssistantAnswer>(response)
+}

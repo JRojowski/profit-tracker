@@ -1,7 +1,8 @@
-import { RefreshCwIcon } from "lucide-react"
+import { MessageSquareIcon, RefreshCwIcon } from "lucide-react"
 import { Outlet, useLocation, useMatch } from "react-router"
 
 import { AccountBadges } from "@/components/account-badges"
+import { AssistantPanel } from "@/components/assistant-panel"
 import { AppSidebar } from "@/components/app-sidebar"
 import {
   PriceAlerts,
@@ -25,12 +26,14 @@ import {
   type Account,
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
+import { useAssistant } from "@/lib/assistant-state"
 import { accountPattern, paths } from "@/lib/routes"
 
 // AppShell holds the sidebar and the top bar. Each page renders only its content in the Outlet.
 export function AppShell() {
   const { accounts, backendUnavailable, priceRefresh, refreshAllPrices } =
     useAppState()
+  const assistant = useAssistant()
   const account = useRouteAccount(accounts)
   const accountRoute = useMatch(`${accountPattern}/*`) !== null
   // On the page of an Account, the view is not known until the Accounts load.
@@ -53,6 +56,16 @@ export function AppShell() {
               />
               {backendUnavailable && (
                 <Badge variant="destructive">Backend unavailable</Badge>
+              )}
+              {assistant.available && (
+                <Button
+                  variant="outline"
+                  aria-label="Assistant"
+                  onClick={() => assistant.setOpen(true)}
+                >
+                  <MessageSquareIcon data-icon="inline-start" />
+                  <span className="hidden sm:inline">Assistant</span>
+                </Button>
               )}
               <Button
                 variant="outline"
@@ -80,6 +93,7 @@ export function AppShell() {
           <Outlet />
         </div>
       </SidebarInset>
+      <AssistantPanel />
     </SidebarProvider>
   )
 }

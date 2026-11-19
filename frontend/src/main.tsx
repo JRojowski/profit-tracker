@@ -6,13 +6,16 @@ import App from "./App.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 import { AppStateProvider } from "@/lib/app-state.tsx"
+import { AssistantProvider } from "@/lib/assistant-state.tsx"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="dark">
       <TooltipProvider>
         <AppStateProvider>
-          <App />
+          <AssistantProvider>
+            <App />
+          </AssistantProvider>
         </AppStateProvider>
       </TooltipProvider>
     </ThemeProvider>
