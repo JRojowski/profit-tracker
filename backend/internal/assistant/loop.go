@@ -14,6 +14,11 @@ import (
 // says that it cannot answer.
 const MaxRounds = 5
 
+// MaxStepsPerRound is the highest number of steps that the loop runs for one reply of the model. A weak model can
+// send many steps in one reply, and each step can need much calculation. The steps over the limit get an error
+// result that tells the model to ask for fewer steps.
+const MaxStepsPerRound = 8
+
 // CannotAnswer is the answer text when the loop gets no text answer from the model in MaxRounds rounds.
 const CannotAnswer = "I cannot answer this question with the data of the tool."
 
@@ -99,7 +104,22 @@ func Ask(ctx context.Context, model Model, messages []Message, functions []Funct
 			break
 		}
 		conversation = append(conversation, Message{Role: RoleAssistant, Content: reply.Text, Steps: reply.Steps})
-		for _, s := range reply.Steps {
+		for i, s := range reply.Steps {
+			// A function does not check the context in all of its calculation. Thus the loop checks it here.
+			if err := ctx.Err(); err != nil {
+				return Answer{}, fmt.Errorf("stop before step %d of round %d: %w", i+1, round, err)
+			}
+			if i >= MaxStepsPerRound {
+				// The provider needs a result for each tool call, so the step gets an error result.
+				result, err := jsonResult(errorResult{Error: fmt.Sprintf(
+					"the step is not run. Run at most %d steps in one turn. Ask for fewer steps, or ask for the rest in the next turn.",
+					MaxStepsPerRound)})
+				if err != nil {
+					return Answer{}, err
+				}
+				conversation = append(conversation, Message{Role: RoleFunction, StepID: s.ID, Content: string(result)})
+				continue
+			}
 			result, err := run(ctx, byName, s)
 			if err != nil {
 				return Answer{}, err
