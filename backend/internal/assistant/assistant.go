@@ -9,6 +9,7 @@ package assistant
 import (
 	"context"
 	"encoding/json"
+	"errors"
 )
 
 // Role is the role of a message in the conversation.
@@ -66,3 +67,11 @@ type Model interface {
 	// Reply sends the messages and the function definitions to the model and returns its answer.
 	Reply(ctx context.Context, messages []Message, functions []FunctionDefinition) (Reply, error)
 }
+
+// ErrRateLimited tells that the provider of the model refuses the question because of a rate limit.
+// For a free model, the daily limit can be the cause.
+var ErrRateLimited = errors.New("the provider refuses the request because of a rate limit")
+
+// ErrProviderFailure tells that the provider of the model fails: it returns an error, or a response that
+// the client cannot use.
+var ErrProviderFailure = errors.New("the provider fails")

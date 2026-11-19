@@ -330,3 +330,8 @@ func (a *api) writeInternalError(w http.ResponseWriter, r *http.Request, err err
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, errorResponse{Error: message})
 }
+
+// writeCodedError writes an error body with a stable code.
+func writeCodedError(w http.ResponseWriter, status int, code, message string) {
+	writeJSON(w, status, errorResponse{Error: message, Code: code})
+}
