@@ -21,6 +21,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/httpapi"
 	"github.com/jrojowski/profit-tracker/backend/internal/price"
@@ -96,6 +97,37 @@ func startServerWithPrices(t *testing.T, provider *fakeProvider) *testServer {
 // The clock starts at testToday.
 func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *testServer {
 	t.Helper()
+	return startServerWithOptions(t, serverOptions{frontend: frontend, provider: provider})
+}
+
+// serverOptions are the parts of the test server that a test can change.
+type serverOptions struct {
+	// frontend is the built frontend. If it is nil, the server uses testFrontend.
+	frontend fs.FS
+	// provider is the price provider. If it is nil, the server uses a new fake provider with no prices.
+	provider price.Provider
+	// model is the model of the Assistant. If it is nil, the Assistant is off.
+	model assistant.Model
+	// logs receives the log lines of the server. If it is nil, the server discards them.
+	logs io.Writer
+}
+
+// startServerWithOptions starts the backend with the options. The clock starts at testToday.
+func startServerWithOptions(t *testing.T, opts serverOptions) *testServer {
+	t.Helper()
+
+	frontend := opts.frontend
+	if frontend == nil {
+		frontend = testFrontend
+	}
+	var provider price.Provider = newFakeProvider()
+	if opts.provider != nil {
+		provider = opts.provider
+	}
+	logger := slog.New(slog.DiscardHandler)
+	if opts.logs != nil {
+		logger = slog.New(slog.NewTextHandler(opts.logs, nil))
+	}
 
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "profit-tracker.db"))
 	require.NoError(t, err)
@@ -109,10 +141,11 @@ func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *tes
 	handler := httpapi.NewHandler(httpapi.Options{
 		Store:         db,
 		Frontend:      frontend,
-		Logger:        slog.New(slog.DiscardHandler),
+		Logger:        logger,
 		Prices:        prices,
 		ExchangeRates: rates,
 		Now:           clock.Now,
+		Assistant:     opts.model,
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

@@ -437,3 +437,26 @@ func assertRealizedProfitSum(t *testing.T, ticker string, closedPositions []json
 	require.NotNil(t, got, "%s: the Closed Positions give a sum", ticker)
 	assert.True(t, want.Equal(decimal.RequireFromString(*got)), "%s: want sum %s, got %s", ticker, want, *got)
 }
+
+// TestRealExports_AssistantHoldings_MatchTheHoldingsEndpoint checks that the function get_holdings gives the
+// same numbers as the Holdings endpoint, for each Account and for all Accounts. The fake model calls the
+// function. No test calls a real model.
+func TestRealExports_AssistantHoldings_MatchTheHoldingsEndpoint(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i, export := range exports {
+		_, got := askHoldings(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		require.Len(t, got.Accounts, 1, "export %s", export.label)
+		checkHoldingsMatchEndpoint(t, srv, got, "")
+	}
+	_, got := askHoldings(t, srv, model, `{}`)
+	require.Len(t, got.Accounts, len(exports), "all Accounts")
+	checkHoldingsMatchEndpoint(t, srv, got, "")
+}

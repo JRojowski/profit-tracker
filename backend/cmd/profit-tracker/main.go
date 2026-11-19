@@ -14,9 +14,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange/nbp"
 	"github.com/jrojowski/profit-tracker/backend/internal/httpapi"
+	"github.com/jrojowski/profit-tracker/backend/internal/openrouter"
 	"github.com/jrojowski/profit-tracker/backend/internal/price"
 	"github.com/jrojowski/profit-tracker/backend/internal/price/yahoo"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
@@ -77,12 +79,19 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 			Prices:        prices,
 			ExchangeRates: rates,
 			Now:           time.Now,
+			Assistant:     assistantModel(cfg),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	serveErr := make(chan error, 1)
 	logger.Info("profit-tracker started", "url", "http://"+ln.Addr().String(), "db", cfg.dbPath)
+	// The log line never holds the key.
+	if cfg.openRouterKey == "" {
+		logger.Info("assistant is off, because " + envOpenRouterKey + " is not set")
+	} else {
+		logger.Info("assistant is on", "model", cfg.assistantModel, "provider", cfg.openRouterURL)
+	}
 	go func() { serveErr <- srv.Serve(ln) }()
 
 	// The refresh at start runs in the background. The server answers while it runs.
@@ -113,6 +122,14 @@ func run(ctx context.Context, cfg config, logger *slog.Logger) error {
 		return fmt.Errorf("shut down server: %w", err)
 	}
 	return nil
+}
+
+// assistantModel returns the model of the Assistant, or nil if the configuration has no API key.
+func assistantModel(cfg config) assistant.Model {
+	if cfg.openRouterKey == "" {
+		return nil
+	}
+	return openrouter.New(cfg.openRouterURL, cfg.openRouterKey, cfg.assistantModel)
 }
 
 // refreshPricesAtStart gets new prices when a held Instrument has no current price fetched today,
