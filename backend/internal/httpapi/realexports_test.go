@@ -460,3 +460,30 @@ func TestRealExports_AssistantHoldings_MatchTheHoldingsEndpoint(t *testing.T) {
 	require.Len(t, got.Accounts, len(exports), "all Accounts")
 	checkHoldingsMatchEndpoint(t, srv, got, "")
 }
+
+// TestRealExports_AssistantIncomeAndFees_MatchTheSummaryEndpoints checks that the function get_income_and_fees
+// with no filter gives the same net dividends, net interest and fees as the summary endpoint, for each Account and
+// for all Accounts. It also checks that a period that covers each day gives the same sums as no filter.
+// The fake model calls the function. No test calls a real model.
+func TestRealExports_AssistantIncomeAndFees_MatchTheSummaryEndpoints(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i, export := range exports {
+		_, got := askIncome(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		require.Len(t, got.Accounts, 1, "export %s", export.label)
+		checkIncomeMatchesSummaries(t, srv, got)
+
+		_, whole := askIncome(t, srv, model, accountPeriod(accountIDs[i], "1900-01-01", "2999-12-31"))
+		assert.Equal(t, got.Totals, whole.Totals, "export %s: a period that covers each day", export.label)
+	}
+	_, got := askIncome(t, srv, model, `{}`)
+	require.Len(t, got.Accounts, len(exports), "all Accounts")
+	checkIncomeMatchesSummaries(t, srv, got)
+}
