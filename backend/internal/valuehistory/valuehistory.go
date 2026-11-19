@@ -49,6 +49,9 @@ type Point struct {
 	returns.DayValue
 	// NetDeposits are the Net Deposits at the end of the day.
 	NetDeposits decimal.Decimal
+	// ValuedAtCost are the broker tickers of the Instruments that Calculate valued at the cost of their open Lots
+	// on this day, in ticker order. It is nil if there is none.
+	ValuedAtCost []string
 }
 
 // History is the result of Calculate.
@@ -100,8 +103,9 @@ func Calculate(in Input) (History, error) {
 		for ; next < len(l.CashOperations) && !dayOf(l.CashOperations[next].Time, l.Today.Location()).After(day); next++ {
 			flow = flow.Add(c.apply(l.CashOperations[next]))
 		}
+		value, atCost := c.value(day)
 		points = append(points, Point{
-			DayValue: returns.DayValue{Date: day, Value: c.value(day), Flow: flow}, NetDeposits: c.netDeposits,
+			DayValue: returns.DayValue{Date: day, Value: value, Flow: flow}, NetDeposits: c.netDeposits, ValuedAtCost: atCost,
 		})
 	}
 	points = append(points, c.todayPoint(today, state, l.CashOperations[next:]))
@@ -232,7 +236,9 @@ func (c *calculator) changeLot(positionID string, change func(*lotState)) {
 }
 
 // value returns the cash balance plus the value of the Holdings at the end of a past day.
-func (c *calculator) value(day time.Time) decimal.Decimal {
+// It also returns the tickers of the Instruments that it valued at cost, in ticker order.
+func (c *calculator) value(day time.Time) (decimal.Decimal, []string) {
+	var atCost []string
 	value := c.cash
 	for _, ticker := range c.tickers {
 		h := c.holdings[ticker]
@@ -242,11 +248,12 @@ func (c *calculator) value(day time.Time) decimal.Decimal {
 		v, ok := c.marketValue(ticker, h.volume, day)
 		if !ok {
 			c.atCost[ticker] = true
+			atCost = append(atCost, ticker)
 			v = h.cost
 		}
 		value = value.Add(v)
 	}
-	return value
+	return value, atCost
 }
 
 // marketValue returns the value of the volume of the Instrument on a past day in the Account currency,
@@ -302,13 +309,18 @@ func (c *calculator) todayPoint(today time.Time, state ledger.State, rest []ledg
 		flow = flow.Add(c.apply(op))
 	}
 	value := state.Value
+	var atCost []string
 	for _, h := range state.Holdings {
 		if !h.HasValue() {
 			c.atCost[h.Instrument.Ticker] = true
+			atCost = append(atCost, h.Instrument.Ticker)
 			value = value.Add(h.Cost)
 		}
 	}
-	return Point{DayValue: returns.DayValue{Date: today, Value: value, Flow: flow}, NetDeposits: state.NetDeposits}
+	slices.Sort(atCost)
+	return Point{
+		DayValue: returns.DayValue{Date: today, Value: value, Flow: flow}, NetDeposits: state.NetDeposits, ValuedAtCost: atCost,
+	}
 }
 
 // valuedAtCost returns the Instruments that the pass valued at cost, in ticker order.

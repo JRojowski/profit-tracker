@@ -12,7 +12,9 @@ import (
 const resultsParameters = `{
   "type": "object",
   "properties": {
-    "accountId": {"type": "integer", "description": "The ID of the Account. Omit it for all Accounts."}
+    "accountId": {"type": "integer", "description": "The ID of the Account. Omit it for all Accounts."},
+    "from": {"type": "string", "description": "The first day of a period, as YYYY-MM-DD. The day is included. Give from and to together, or neither."},
+    "to": {"type": "string", "description": "The last day of a period, as YYYY-MM-DD. The day is included. Give from and to together, or neither."}
   },
   "additionalProperties": false
 }`
@@ -21,6 +23,9 @@ const resultsParameters = `{
 type resultsArguments struct {
 	// AccountID is the Account. Nil means all Accounts.
 	AccountID *int64 `json:"accountId"`
+	// From and To are the period, as YYYY-MM-DD. Both are empty or both are set.
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // resultsResult is the result of get_results. For one Account, the amounts are in the Account currency.
@@ -83,7 +88,10 @@ func (a *api) resultsFunction() assistant.Function {
 				"(Realized Profit, Unrealized Profit, net dividends, net interest, fees, Currency Result), " +
 				"the Simple Return, the Annual Return and the Time-Weighted Return of one Account or of all Accounts. " +
 				"A return that is not available has no number and a reason. " +
-				"For all Accounts the amounts are in PLN. For one Account they are in the Account currency.",
+				"For all Accounts the amounts are in PLN. For one Account they are in the Account currency. " +
+				"With the arguments from and to (a period, both days included) it returns only the Total Result of the period " +
+				"and the values that give it: the value at the start and at the end, and the Net Deposits of the period. " +
+				"It has no returns and no parts of the Total Result then.",
 			Parameters: json.RawMessage(resultsParameters),
 		},
 		Run: a.runResults,
@@ -98,9 +106,15 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 	if err := assistant.DecodeArguments(arguments, &args); err != nil {
 		return nil, err
 	}
+	if (args.From == "") != (args.To == "") {
+		return nil, assistant.Argumentf("give from and to together, or neither. A period needs its first day and its last day.")
+	}
 	accounts, scope, err := a.assistantScope(ctx, args.AccountID)
 	if err != nil {
 		return nil, err
+	}
+	if args.From != "" {
+		return a.periodResults(ctx, args, accounts, scope)
 	}
 	if args.AccountID == nil {
 		return a.allAccountsResults(ctx, scope)

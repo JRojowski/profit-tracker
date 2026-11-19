@@ -34,6 +34,8 @@ type valueHistoryBody struct {
 	// PriceWarnings are the Price Warnings of the Instruments, also of the sold ones. The points do not change
 	// when a warning exists.
 	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
+	// points are the points of Points with the amounts as decimals. The Assistant calculates with them.
+	points []valuehistory.Point
 }
 
 // valuePointResponse is the state of the Account at the end of one calendar day.
@@ -133,6 +135,7 @@ func newValueHistoryBody(currency string, points []valuehistory.Point, valuedAtC
 		Points:        make([]valuePointResponse, 0, len(points)),
 		ValuedAtCost:  make([]valuedAtCostResponse, 0, len(valuedAtCost)),
 		PriceWarnings: []priceWarningResponse{},
+		points:        points,
 	}
 	days := make([]returns.DayValue, 0, len(points))
 	for _, p := range points {
