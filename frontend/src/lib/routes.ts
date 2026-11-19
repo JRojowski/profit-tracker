@@ -7,7 +7,7 @@ export const paths = {
   allAccounts: "/accounts/all",
   account: (id: number) => `/accounts/${id}`,
   holdings: (id: number) => `/accounts/${id}/holdings`,
-  sales: (id: number) => `/accounts/${id}/sales`,
+  closedPositions: (id: number) => `/accounts/${id}/closed-positions`,
   ikze: (id: number) => `/accounts/${id}/ikze`,
   import: "/import",
   imports: "/imports",

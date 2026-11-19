@@ -36,7 +36,7 @@ const chartConfig = {
   netDeposits: { label: "Net Deposits", color: "var(--chart-other)" },
 } satisfies ChartConfig
 
-// selectedItem marks the selected period with the accent, as the year filter of the Sales page does.
+// selectedItem marks the selected period with the accent, as the year filter of the Closed Positions page does.
 const selectedItem =
   "data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
 

@@ -130,10 +130,10 @@ export function ImportConflictsCard({
         </CardTitle>
         <CardDescription>
           A Cash Operation with a known XTB ID but different data needs a
-          decision: keep the stored data or use the new data. A sale with a
-          Realized Profit that differs from Closed Positions by more than 0.01
-          needs your acceptance. You can confirm the Import when each conflict
-          has a decision.
+          decision: keep the stored data or use the new data. A Closed Position
+          with a Realized Profit that differs from Closed Positions by more than
+          0.01 needs your acceptance. You can confirm the Import when each
+          conflict has a decision.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -150,7 +150,7 @@ export function ImportConflictsCard({
               <span className="min-w-0 text-sm">
                 <span className="font-medium">
                   {conflict.kind === "check-mismatch"
-                    ? "Realized Profit check, sale"
+                    ? "Realized Profit check, Closed Position"
                     : "Changed data"}
                 </span>
                 <span className="text-muted-foreground"> · XTB ID </span>
@@ -174,7 +174,7 @@ export function ImportConflictsCard({
             </div>
             {conflict.kind === "check-mismatch" ? (
               <ProfitCheckList
-                sale={conflict.new}
+                closedPosition={conflict.new}
                 check={conflict.check}
                 currency={currency}
               />
@@ -296,20 +296,25 @@ function DataPanel({
 }
 
 type ProfitCheckListProps = {
-  sale: CashOperationData
+  closedPosition: CashOperationData
   check: ProfitCheck
   currency: string
 }
 
-// ProfitCheckList shows the Realized Profit of a sale next to the Profit/Loss in Closed Positions.
-function ProfitCheckList({ sale, check, currency }: ProfitCheckListProps) {
+// ProfitCheckList shows the Realized Profit of a Closed Position next to the Profit/Loss in Closed Positions.
+function ProfitCheckList({
+  closedPosition,
+  check,
+  currency,
+}: ProfitCheckListProps) {
   return (
     <dl className="flex flex-col rounded-md border bg-muted/30 px-3 py-1 text-sm">
       <div className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-1.5">
-        <dt className="shrink-0 text-muted-foreground">Sale</dt>
+        <dt className="shrink-0 text-muted-foreground">Closed Position</dt>
         <dd className="min-w-0 text-right break-words">
-          {sale.ticker} · {new Date(sale.time).toLocaleString()} ·{" "}
-          {sale.comment}
+          {closedPosition.ticker} ·{" "}
+          {new Date(closedPosition.time).toLocaleString()} ·{" "}
+          {closedPosition.comment}
         </dd>
       </div>
       <div className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-1.5">

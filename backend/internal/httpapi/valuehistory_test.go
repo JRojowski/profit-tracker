@@ -336,13 +336,13 @@ func TestValueHistory_FirstCashOperationToday_HasNoTimeWeightedReturn(t *testing
 		got.PeriodStarts)
 }
 
-// TestValueHistory_SoldInstrument_LeavesTheValueOnTheDayOfTheSale checks a sale with the history of a sold Instrument.
+// TestValueHistory_SoldInstrument_LeavesTheValueOnTheDayOfTheClosedPosition checks a Closed Position with the history of a sold Instrument.
 //
 //	2026-10-19: 800 + ABC 2 × 101                  = 1002
 //	2026-10-20: 750 + ABC 2 × 103 + XYZ 1 × 50.5   = 1006.5
 //	2026-10-21: 960 (ABC sold for 210) + XYZ 51    = 1011
 //	2026-10-22: 960 + XYZ 52                       = 1012, also today with the last stored price
-func TestValueHistory_SoldInstrument_LeavesTheValueOnTheDayOfTheSale(t *testing.T) {
+func TestValueHistory_SoldInstrument_LeavesTheValueOnTheDayOfTheClosedPosition(t *testing.T) {
 	t.Parallel()
 	srv := startServerWithPrices(t, historyProvider(t))
 	id := srv.importAccount(t, historyExport(), "XTB USD")

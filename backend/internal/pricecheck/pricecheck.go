@@ -26,7 +26,7 @@ const (
 var (
 	// medianLimit finds a constant offset, for example a EUR line in place of a USD line.
 	medianLimit = decimal.NewFromInt(5)
-	// singleLimit finds a large error in an Instrument with few Fills and sales.
+	// singleLimit finds a large error in an Instrument with few Fills and Closed Positions.
 	singleLimit = decimal.NewFromInt(30)
 )
 
@@ -42,7 +42,7 @@ type Input struct {
 	NoData bool
 	// Closes are the stored closes of the Instrument, in any currency.
 	Closes []Close
-	// Trades are the XTB prices of each Fill and each sale of the Instrument on any Account.
+	// Trades are the XTB prices of each Fill and each Closed Position of the Instrument on any Account.
 	Trades []Trade
 	// Confirmed tells that the user confirmed that the price ticker and the Quote Currency are correct.
 	Confirmed bool
@@ -57,7 +57,7 @@ type Close struct {
 	Currency string
 }
 
-// Trade is the XTB price of one unit in one Fill or one sale.
+// Trade is the XTB price of one unit in one Fill or one Closed Position.
 type Trade struct {
 	// Time is the time of the Cash Operation. The check uses its day in UTC.
 	Time time.Time
@@ -80,7 +80,7 @@ type Warning struct {
 //   - NoData: the last answer was "no data", and the tool stores no close. The stored closes of a delisted
 //     Instrument are the only copy of its history, so they give no warning.
 //   - DifferentCurrency: the source currency is known and is not the Quote Currency.
-//   - PriceMismatch: for each Fill and each sale with a close in the Quote Currency on its day,
+//   - PriceMismatch: for each Fill and each Closed Position with a close in the Quote Currency on its day,
 //     the difference is |close − XTB price| / XTB price. The median difference is more than 5%,
 //     or one difference is more than 30%. The confirmation of the user removes only this kind.
 func Check(in Input) []Warning {

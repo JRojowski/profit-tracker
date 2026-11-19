@@ -171,29 +171,29 @@ func realAccount(prefix, suggestedCurrency string) (typ, currency string) {
 // ADR 0001: a difference of more than 0.01 from Closed Positions is a check failure.
 var realCheckTolerance = decimal.RequireFromString("0.01")
 
-// checkSales checks that the sales and the Closed Positions rows are one to one, and that the Realized Profit
-// of each sale is within 0.01 of the Profit/Loss of its row.
-// salePrices are the prices of the Stock sell Cash Operations of the export, by XTB ID.
+// checkClosedPositions checks that the Closed Positions and the Closed Positions rows are one to one, and that the Realized Profit
+// of each Closed Position is within 0.01 of the Profit/Loss of its row.
+// closedPositionPrices are the prices of the Stock sell Cash Operations of the export, by XTB ID.
 //
-// A sale and its row have the same position ID and the same closed volume. One Lot can close in parts, so more
-// than one row can fit. Then the row with the close time nearest to the sale time wins. The API gives the sale
+// A Closed Position and its row have the same position ID and the same closed volume. One Lot can close in parts, so more
+// than one row can fit. Then the row with the close time nearest to the Closed Position time wins. The API gives the Closed Position
 // time in whole seconds, and the sheet can have milliseconds. On a tie, the row with the Close Price nearest
 // to the sale price wins. The check does not use the Realized Profit to select a row, because that value is
 // the value under test.
-func checkSales(t *testing.T, sales []saleResponse, salePrices map[string]decimal.Decimal, rows []xtb.ClosedPosition) {
+func checkClosedPositions(t *testing.T, closedPositions []closedPositionResponse, closedPositionPrices map[string]decimal.Decimal, rows []xtb.ClosedPosition) {
 	t.Helper()
 
 	used := make([]bool, len(rows))
-	for _, sale := range sales {
-		volume := decimal.RequireFromString(sale.Volume)
-		profit := decimal.RequireFromString(sale.RealizedProfit)
-		at, err := time.Parse(time.RFC3339, sale.Time)
-		require.NoError(t, err, "time of sale %s", sale.XTBID)
-		price, hasPrice := salePrices[sale.XTBID]
+	for _, closedPosition := range closedPositions {
+		volume := decimal.RequireFromString(closedPosition.Volume)
+		profit := decimal.RequireFromString(closedPosition.RealizedProfit)
+		at, err := time.Parse(time.RFC3339, closedPosition.Time)
+		require.NoError(t, err, "time of closed position %s", closedPosition.XTBID)
+		price, hasPrice := closedPositionPrices[closedPosition.XTBID]
 
 		best := -1
 		for i, row := range rows {
-			if used[i] || row.PositionID != sale.PositionID || !row.Volume.Equal(volume) {
+			if used[i] || row.PositionID != closedPosition.PositionID || !row.Volume.Equal(volume) {
 				continue
 			}
 			if best < 0 || fitsBetter(row, rows[best], at, decimal.NullDecimal{Decimal: price, Valid: hasPrice}) {
@@ -201,23 +201,23 @@ func checkSales(t *testing.T, sales []saleResponse, salePrices map[string]decima
 			}
 		}
 		if best < 0 {
-			t.Errorf("sale %s of Lot %s (volume %s) has no Closed Positions row", sale.XTBID, sale.PositionID, sale.Volume)
+			t.Errorf("closed position %s of Lot %s (volume %s) has no Closed Positions row", closedPosition.XTBID, closedPosition.PositionID, closedPosition.Volume)
 			continue
 		}
 		used[best] = true
 		broker := rows[best].ProfitLoss
 		if profit.Sub(broker).Abs().GreaterThan(realCheckTolerance) {
-			t.Errorf("sale %s of Lot %s: Realized Profit %s, Closed Positions Profit/Loss %s", sale.XTBID, sale.PositionID, profit, broker)
+			t.Errorf("closed position %s of Lot %s: Realized Profit %s, Closed Positions Profit/Loss %s", closedPosition.XTBID, closedPosition.PositionID, profit, broker)
 		}
 	}
 	for i, row := range rows {
 		if !used[i] {
-			t.Errorf("Closed Positions row %d of Lot %s (volume %s, Profit/Loss %s) has no sale", row.Row, row.PositionID, row.Volume, row.ProfitLoss)
+			t.Errorf("Closed Positions row %d of Lot %s (volume %s, Profit/Loss %s) has no closed position", row.Row, row.PositionID, row.Volume, row.ProfitLoss)
 		}
 	}
 }
 
-// fitsBetter returns true if the row a is a better match than the row b for a sale with the time at and the price.
+// fitsBetter returns true if the row a is a better match than the row b for a Closed Position with the time at and the price.
 // The row with the nearer close time is the better match. If the two times are equally near, the row with the
 // nearer Close Price is the better match. If a price is not known, the function returns false, so the first row stays.
 // The Close Price cell can carry float noise. Thus the function compares differences, not equality.
@@ -232,8 +232,8 @@ func fitsBetter(a, b xtb.ClosedPosition, at time.Time, price decimal.NullDecimal
 	return a.ClosePrice.Decimal.Sub(price.Decimal).Abs().LessThan(b.ClosePrice.Decimal.Sub(price.Decimal).Abs())
 }
 
-// salePrices returns the prices of the Stock sell Cash Operations, by XTB ID.
-func salePrices(ops []xtb.CashOperation) map[string]decimal.Decimal {
+// closedPositionPrices returns the prices of the Stock sell Cash Operations, by XTB ID.
+func closedPositionPrices(ops []xtb.CashOperation) map[string]decimal.Decimal {
 	prices := make(map[string]decimal.Decimal)
 	for _, op := range ops {
 		if op.Type == xtb.TypeStockSell && op.Sale != nil {
@@ -248,8 +248,8 @@ func salePrices(ops []xtb.CashOperation) map[string]decimal.Decimal {
 //
 // No endpoint shows the Lots, because the Lots are an internal step of the calculation. Thus this check reads
 // the Lots and their Fills with store.Ledger, the same input that the API gives to ledger.Calculate.
-// The open volume of a Lot is the sum of its Fill volumes minus the closed volumes of its sales from the API.
-func checkOpenLots(t *testing.T, db *store.Store, accountID int64, sales []saleResponse, openLots []xtb.OpenLot) {
+// The open volume of a Lot is the sum of its Fill volumes minus the closed volumes of its Closed Positions from the API.
+func checkOpenLots(t *testing.T, db *store.Store, accountID int64, closedPositions []closedPositionResponse, openLots []xtb.OpenLot) {
 	t.Helper()
 
 	l, err := db.Ledger(t.Context(), accountID)
@@ -262,8 +262,8 @@ func checkOpenLots(t *testing.T, db *store.Store, accountID int64, sales []saleR
 		}
 		calculated[lot.PositionID] = volume
 	}
-	for _, sale := range sales {
-		calculated[sale.PositionID] = calculated[sale.PositionID].Sub(decimal.RequireFromString(sale.Volume))
+	for _, closedPosition := range closedPositions {
+		calculated[closedPosition.PositionID] = calculated[closedPosition.PositionID].Sub(decimal.RequireFromString(closedPosition.Volume))
 	}
 	broker := make(map[string]decimal.Decimal, len(openLots))
 	for _, lot := range openLots {
@@ -337,18 +337,18 @@ func TestRealExports_EachExport_MatchesBrokerSheets(t *testing.T) {
 			// the tool themselves. They do not use the Import Conflicts.
 			sheets, err := xtb.Read(export.data)
 			require.NoError(t, err)
-			var sales []saleResponse
-			srv.getRealJSON(t, fmt.Sprintf("/api/accounts/%d/sales", accountID), &sales)
+			var closedPositions []closedPositionResponse
+			srv.getRealJSON(t, fmt.Sprintf("/api/accounts/%d/closed-positions", accountID), &closedPositions)
 			var holdings []holdingResponse
 			srv.getRealJSON(t, fmt.Sprintf("/api/accounts/%d/holdings", accountID), &holdings)
 
-			t.Run("each sale matches Closed Positions", func(t *testing.T) {
+			t.Run("each closed position matches Closed Positions", func(t *testing.T) {
 				t.Parallel()
-				checkSales(t, sales, salePrices(sheets.CashOperations), sheets.ClosedPositions)
+				checkClosedPositions(t, closedPositions, closedPositionPrices(sheets.CashOperations), sheets.ClosedPositions)
 			})
 			t.Run("each open Lot matches Open Positions", func(t *testing.T) {
 				t.Parallel()
-				checkOpenLots(t, srv.db, accountID, sales, sheets.OpenLots)
+				checkOpenLots(t, srv.db, accountID, closedPositions, sheets.OpenLots)
 			})
 			t.Run("each Holding matches Open Positions", func(t *testing.T) {
 				t.Parallel()

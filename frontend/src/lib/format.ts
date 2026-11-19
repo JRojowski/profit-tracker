@@ -101,7 +101,7 @@ export function formatTime(time: Date): string {
   return time.toLocaleTimeString()
 }
 
-// polishTimeZone is the time zone of the calendar year of a sale and of an IKZE Contribution.
+// polishTimeZone is the time zone of the calendar year of a Closed Position and of an IKZE Contribution.
 const polishTimeZone = "Europe/Warsaw"
 
 // polishYear gives the calendar year of an RFC 3339 time in Polish time, not in the time zone of the browser.

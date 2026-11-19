@@ -37,20 +37,20 @@ func adr0002ExampleA() xtbtest.Export {
 //	Observed volume of 1851988998: 0.4396 closed + 1.1773 open = 1.6169, the full order.
 //	Observed volume of 1851989133: 0.
 //	One Lot 1851988998, volume 1.6169, purchase amount 126.35 + 204.59 = 330.94.
-//	Sale: cost = 330.94 × 0.4396 / 1.6169 ≈ 89.98, profit = 198.43 − 89.98 ≈ 108.45.
+//	Closed Position: cost = 330.94 × 0.4396 / 1.6169 ≈ 89.98, profit = 198.43 − 89.98 ≈ 108.45.
 //	Open: volume 1.1773, cost ≈ 240.96.
 func adr0002ExampleB() xtbtest.Export {
 	return xtbtest.Export{
 		AccountNumber: "50000003",
 		Currency:      "PLN",
 		CashOperations: []xtbtest.CashOperation{
-			{Type: "Stock sell", Ticker: "LSMC.DE", Time: saleTime(10), Amount: "198.43", ID: "604", Comment: "CLOSE BUY 0.4396 @ 107.040", PositionID: "1851988998"},
+			{Type: "Stock sell", Ticker: "LSMC.DE", Time: closeTime(10), Amount: "198.43", ID: "604", Comment: "CLOSE BUY 0.4396 @ 107.040", PositionID: "1851988998"},
 			{Type: "Stock purchase", Ticker: "LSMC.DE", Time: orderTime.Add(2 * time.Second), Amount: "-204.59", ID: "603", Comment: "OPEN BUY 1/1.6169 @ 47.705", PositionID: "1851989133"},
 			{Type: "Stock purchase", Ticker: "LSMC.DE", Time: orderTime, Amount: "-126.35", ID: "602", Comment: "OPEN BUY 0.6169/1.6169 @ 47.755", PositionID: "1851988998"},
 			{Type: "Deposit", Time: opTime(1), Amount: "400.00", ID: "601", Comment: "Blik deposit"},
 		},
 		ClosedPositions: []xtbtest.ClosedPosition{
-			{Ticker: "LSMC.DE", Volume: "0.4396", OpenTime: orderTime, CloseTime: saleTime(10), ProfitLoss: "108.45", PositionID: "1851988998"},
+			{Ticker: "LSMC.DE", Volume: "0.4396", OpenTime: orderTime, CloseTime: closeTime(10), ProfitLoss: "108.45", PositionID: "1851988998"},
 		},
 		OpenLots: []xtbtest.OpenLot{
 			{Ticker: "LSMC.DE", PositionID: "1851988998", Volume: "1.1773"},
@@ -68,15 +68,15 @@ func adr0002ExampleC() xtbtest.Export {
 		AccountNumber: "50000004",
 		Currency:      "PLN",
 		CashOperations: []xtbtest.CashOperation{
-			{Type: "Stock sell", Ticker: "EXUS.DE", Time: saleTime(10).Add(time.Second), Amount: "133.47", ID: "706", Comment: "CLOSE BUY 1/16.9887 @ 31.675", PositionID: "1672382360"},
-			{Type: "Stock sell", Ticker: "EXUS.DE", Time: saleTime(10), Amount: "56.92", ID: "705", Comment: "CLOSE BUY 0.4265/16.9887 @ 31.675", PositionID: "1672382331"},
+			{Type: "Stock sell", Ticker: "EXUS.DE", Time: closeTime(10).Add(time.Second), Amount: "133.47", ID: "706", Comment: "CLOSE BUY 1/16.9887 @ 31.675", PositionID: "1672382360"},
+			{Type: "Stock sell", Ticker: "EXUS.DE", Time: closeTime(10), Amount: "56.92", ID: "705", Comment: "CLOSE BUY 0.4265/16.9887 @ 31.675", PositionID: "1672382331"},
 			{Type: "Stock purchase", Ticker: "EXUS.DE", Time: orderTime.Add(time.Second), Amount: "-133.03", ID: "703", Comment: "OPEN BUY 1/1.4265 @ 32.005", PositionID: "1672382360"},
 			{Type: "Stock purchase", Ticker: "EXUS.DE", Time: orderTime, Amount: "-56.74", ID: "702", Comment: "OPEN BUY 0.4265/1.4265 @ 32.005", PositionID: "1672382331"},
 			{Type: "Deposit", Time: opTime(1), Amount: "200.00", ID: "701", Comment: "Blik deposit"},
 		},
 		ClosedPositions: []xtbtest.ClosedPosition{
-			{Ticker: "EXUS.DE", Volume: "1", OpenTime: orderTime, CloseTime: saleTime(10).Add(time.Second), ProfitLoss: "0.44", PositionID: "1672382360"},
-			{Ticker: "EXUS.DE", Volume: "0.4265", OpenTime: orderTime, CloseTime: saleTime(10), ProfitLoss: "0.18", PositionID: "1672382331"},
+			{Ticker: "EXUS.DE", Volume: "1", OpenTime: orderTime, CloseTime: closeTime(10).Add(time.Second), ProfitLoss: "0.44", PositionID: "1672382360"},
+			{Ticker: "EXUS.DE", Volume: "0.4265", OpenTime: orderTime, CloseTime: closeTime(10), ProfitLoss: "0.18", PositionID: "1672382331"},
 		},
 	}
 }
@@ -103,13 +103,13 @@ func TestLots_ADR0002ExampleB_FillsWithDifferentIDsGiveOneMergedLot(t *testing.T
 	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	sales := srv.sales(t, accountID)
+	closedPositions := srv.closedPositions(t, accountID)
 	holdings := srv.holdings(t, accountID)
 
-	require.Len(t, sales, 1)
-	assert.Equal(t, "1851988998", sales[0].PositionID)
-	assert.Equal(t, "89.98", cents(t, sales[0].Cost))
-	assert.Equal(t, "108.45", cents(t, sales[0].RealizedProfit))
+	require.Len(t, closedPositions, 1)
+	assert.Equal(t, "1851988998", closedPositions[0].PositionID)
+	assert.Equal(t, "89.98", cents(t, closedPositions[0].Cost))
+	assert.Equal(t, "108.45", cents(t, closedPositions[0].RealizedProfit))
 	require.Len(t, holdings, 1)
 	assert.Equal(t, "LSMC.DE", holdings[0].Ticker)
 	assert.Equal(t, "1.1773", holdings[0].Volume)
@@ -123,13 +123,13 @@ func TestLots_ADR0002ExampleC_FillsWithDifferentIDsGiveOneLotPerID(t *testing.T)
 	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	sales := srv.sales(t, accountID)
+	closedPositions := srv.closedPositions(t, accountID)
 
-	require.Len(t, sales, 2)
-	assert.Equal(t, "1672382331", sales[0].PositionID)
-	assert.Equal(t, "0.18", cents(t, sales[0].RealizedProfit))
-	assert.Equal(t, "1672382360", sales[1].PositionID)
-	assert.Equal(t, "0.44", cents(t, sales[1].RealizedProfit))
+	require.Len(t, closedPositions, 2)
+	assert.Equal(t, "1672382331", closedPositions[0].PositionID)
+	assert.Equal(t, "0.18", cents(t, closedPositions[0].RealizedProfit))
+	assert.Equal(t, "1672382360", closedPositions[1].PositionID)
+	assert.Equal(t, "0.44", cents(t, closedPositions[1].RealizedProfit))
 	assert.Empty(t, srv.holdings(t, accountID), "both Lots are closed")
 }
 
@@ -206,7 +206,7 @@ func wholeUnitsFirstOrder() xtbtest.Export {
 		AccountNumber: "50000005",
 		Currency:      "PLN",
 		CashOperations: []xtbtest.CashOperation{
-			{Type: "Stock sell", Ticker: "SLOW.UK", Time: saleTime(10), Amount: "13.00", ID: "807", Comment: "CLOSE BUY 2/2.843 @ 6.50", PositionID: "3000000001"},
+			{Type: "Stock sell", Ticker: "SLOW.UK", Time: closeTime(10), Amount: "13.00", ID: "807", Comment: "CLOSE BUY 2/2.843 @ 6.50", PositionID: "3000000001"},
 			{Type: "Stock purchase", Ticker: "SLOW.UK", Time: orderTime.Add(3*time.Minute + 21*time.Second), Amount: "-5.14", ID: "806", Comment: "OPEN BUY 0.843/2.843 @ 6.10", PositionID: "3000000004"},
 			{Type: "Stock purchase", Ticker: "QUIK.DE", Time: orderTime.Add(2 * time.Minute), Amount: "-30.00", ID: "805", Comment: "OPEN BUY 1/1.5 @ 20.00", PositionID: "3000000003"},
 			{Type: "Stock purchase", Ticker: "QUIK.DE", Time: orderTime.Add(2*time.Minute - time.Second), Amount: "-10.00", ID: "804", Comment: "OPEN BUY 0.5/1.5 @ 20.00", PositionID: "3000000003"},
@@ -215,7 +215,7 @@ func wholeUnitsFirstOrder() xtbtest.Export {
 			{Type: "Deposit", Time: opTime(1), Amount: "100.00", ID: "801", Comment: "Blik deposit"},
 		},
 		ClosedPositions: []xtbtest.ClosedPosition{
-			{Ticker: "SLOW.UK", Volume: "2", OpenTime: orderTime, CloseTime: saleTime(10), ProfitLoss: "1.00", PositionID: "3000000001"},
+			{Ticker: "SLOW.UK", Volume: "2", OpenTime: orderTime, CloseTime: closeTime(10), ProfitLoss: "1.00", PositionID: "3000000001"},
 		},
 		OpenLots: []xtbtest.OpenLot{
 			{Ticker: "SLOW.UK", PositionID: "3000000004", Volume: "0.843"},
@@ -232,16 +232,16 @@ func TestLots_WholeUnitsFirstAndFillsMinutesApart_GiveOneLotPerID(t *testing.T) 
 	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	sales := srv.sales(t, accountID)
+	closedPositions := srv.closedPositions(t, accountID)
 	holdings := map[string]holdingResponse{}
 	for _, h := range srv.holdings(t, accountID) {
 		holdings[h.Ticker] = h
 	}
 
-	require.Len(t, sales, 1)
-	assert.Equal(t, "3000000001", sales[0].PositionID)
-	assert.Equal(t, "12.00", cents(t, sales[0].Cost), "the closed Lot holds only the whole-unit Fill")
-	assert.Equal(t, "1.00", cents(t, sales[0].RealizedProfit))
+	require.Len(t, closedPositions, 1)
+	assert.Equal(t, "3000000001", closedPositions[0].PositionID)
+	assert.Equal(t, "12.00", cents(t, closedPositions[0].Cost), "the closed Lot holds only the whole-unit Fill")
+	assert.Equal(t, "1.00", cents(t, closedPositions[0].RealizedProfit))
 	require.Contains(t, holdings, "SLOW.UK")
 	assert.Equal(t, "0.843", holdings["SLOW.UK"].Volume, "the open Lot holds only the fractional Fill")
 	assert.Equal(t, "5.14", cents(t, holdings["SLOW.UK"].Cost))
@@ -279,11 +279,11 @@ func TestLots_OneFillOrderBetweenFillsOfOtherOrder_GivesTwoOrders(t *testing.T) 
 	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	sales := srv.sales(t, accountID)
+	closedPositions := srv.closedPositions(t, accountID)
 	holdings := srv.holdings(t, accountID)
 
-	require.Len(t, sales, 1)
-	assert.Equal(t, "108.45", cents(t, sales[0].RealizedProfit))
+	require.Len(t, closedPositions, 1)
+	assert.Equal(t, "108.45", cents(t, closedPositions[0].RealizedProfit))
 	require.Len(t, holdings, 1)
 	assert.Equal(t, "2.7942", holdings[0].Volume, "1.1773 of Example B plus 1.6169 of the one-Fill order")
 	assert.Equal(t, "440.96", cents(t, holdings[0].Cost))
@@ -292,7 +292,7 @@ func TestLots_OneFillOrderBetweenFillsOfOtherOrder_GivesTwoOrders(t *testing.T) 
 func TestLots_ReimportMovesKnownFillToLotOfADR0002(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
-	// The first file has the two purchases of Example B and no sale. Its Open Positions show
+	// The first file has the two purchases of Example B and no Closed Position. Its Open Positions show
 	// one Lot per Fill (case C). Thus the Account has two Lots, as the code before ADR 0002 saved them.
 	first := adr0002ExampleB()
 	first.CashOperations = first.CashOperations[1:]
@@ -311,10 +311,10 @@ func TestLots_ReimportMovesKnownFillToLotOfADR0002(t *testing.T) {
 	saved := srv.confirm(t, again.ID, nil)
 	assert.Equal(t, 1, saved.NewCashOperations)
 	assert.Equal(t, 3, saved.SkippedCashOperations, "a moved Fill counts as skipped")
-	sales := srv.sales(t, accountID)
-	require.Len(t, sales, 1)
-	assert.Equal(t, "1851988998", sales[0].PositionID)
-	assert.Equal(t, "108.45", cents(t, sales[0].RealizedProfit))
+	closedPositions := srv.closedPositions(t, accountID)
+	require.Len(t, closedPositions, 1)
+	assert.Equal(t, "1851988998", closedPositions[0].PositionID)
+	assert.Equal(t, "108.45", cents(t, closedPositions[0].RealizedProfit))
 	holdings := srv.holdings(t, accountID)
 	require.Len(t, holdings, 1)
 	assert.Equal(t, "1.1773", holdings[0].Volume)

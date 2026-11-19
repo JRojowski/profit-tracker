@@ -205,7 +205,7 @@ func (s *Store) FirstFillTimes(ctx context.Context) (map[string]time.Time, error
 	return times, nil
 }
 
-// TradePrice is the XTB price of one unit in one Fill or one sale.
+// TradePrice is the XTB price of one unit in one Fill or one Closed Position.
 type TradePrice struct {
 	// Ticker is the broker ticker of the Instrument.
 	Ticker string
@@ -215,7 +215,7 @@ type TradePrice struct {
 	Price decimal.Decimal
 }
 
-// TradePrices returns the XTB price of each Fill and each sale on any Account, by broker ticker, in time order.
+// TradePrices returns the XTB price of each Fill and each Closed Position on any Account, by broker ticker, in time order.
 // The price comes from the Comment of the Cash Operation, for example "OPEN BUY 2 @ 100.00".
 func (s *Store) TradePrices(ctx context.Context) (map[string][]TradePrice, error) {
 	rows, err := queries.New(s.db).TradePrices(ctx)

@@ -41,8 +41,8 @@ v3 changes only the user interface and adds the Allocation. Section 12 compares 
 ## 5. Navigation and URLs
 
 - [ ] Click each item in the sidebar. The selected item is highlighted. The top bar shows the title of the view.
-- [ ] Open an Account. The tabs Overview, Holdings and Sales show under the title. Only the IKZE Account also has the tab "IKZE".
-- [ ] Open each tab. The URL changes to `/accounts/{id}`, `/accounts/{id}/holdings`, `/accounts/{id}/sales` or `/accounts/{id}/ikze`.
+- [ ] Open an Account. The tabs Overview, Holdings and Closed Positions show under the title. Only the IKZE Account also has the tab "IKZE".
+- [ ] Open each tab. The URL changes to `/accounts/{id}`, `/accounts/{id}/holdings`, `/accounts/{id}/closed-positions` or `/accounts/{id}/ikze`.
 - [ ] Reload the page on each tab. The same view opens.
 - [ ] Click the browser back button. The previous view opens.
 - [ ] Open `/accounts/999`. The message "The tool has no such Account" shows with the link "Open All Accounts".
@@ -94,11 +94,11 @@ v3 changes only the user interface and adds the Allocation. Section 12 compares 
 - [ ] Wait for the refresh of the prices. The price source shows "manual". The value changes.
 - [ ] A note under the table lists the Holdings with no value.
 
-## 11. Sales and IKZE
+## 11. Closed Positions and IKZE
 
-- [ ] Sales: the total Realized Profit and the number of sales show at the top.
-- [ ] The table shows all sales, newest first, with a total row.
-- [ ] The year filter shows "All years" and each year with a sale. Select a year. The total, the number and the table show only that year.
+- [ ] Closed Positions: the total Realized Profit and the number of Closed Positions show at the top.
+- [ ] The table shows all Closed Positions, newest first, with a total row.
+- [ ] The year filter shows "All years" and each year with a Closed Position. Select a year. The total, the number and the table show only that year.
 - [ ] IKZE: the IKZE Contributions of the current year show as a large figure with the IKZE Limit and a progress bar. The part that is not used shows next to it.
 - [ ] The table of past years shows the contributions, the limit, the used part with a small bar, and the part that is not used.
 - [ ] A year before 2025 shows "Limit unknown". Skip this step when the IKZE Account has no such year.
@@ -116,7 +116,7 @@ Each program refreshes the prices at start. Two refreshes at different times giv
 - [ ] For each Account, the value, the cash, the Net Deposits, the Total Result and its parts are the same in v2 and v3.
 - [ ] For each Account, the Simple Return and the Annual Return are the same in v2 and v3.
 - [ ] For All Accounts, the totals in PLN, the Currency Result and the returns are the same in v2 and v3.
-- [ ] The Holdings, the sales and the IKZE years show the same numbers in v2 and v3. v2 shows the oldest sale first, v3 the newest.
+- [ ] The Holdings, the Closed Positions and the IKZE years show the same numbers in v2 and v3. v2 shows the oldest sale first, v3 the newest.
 - [ ] Stop v2. Run `git worktree remove ../profit-tracker-v2`. Turn on Wi-Fi.
 
 ## 13. Narrow screen (375 px)
@@ -128,4 +128,4 @@ Each program refreshes the prices at start. Two refreshes at different times giv
 - [ ] The Holdings show as a list of compact rows. A row opens the price source dialog.
 - [ ] The charts show in a compact form with the same information.
 - [ ] No number and its currency break into two lines.
-- [ ] Open Import, Imports, Sales and IKZE. No page needs horizontal scrolling.
+- [ ] Open Import, Imports, Closed Positions and IKZE. No page needs horizontal scrolling.

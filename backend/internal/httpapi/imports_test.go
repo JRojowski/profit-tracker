@@ -561,7 +561,7 @@ func usdSummary(accountID int64) summaryResponse {
 	return noResultSummary(accountID, "774.02", "1000.00")
 }
 
-// noResultSummary is the summary of a USD Account with no sales, no income and no costs.
+// noResultSummary is the summary of a USD Account with no Closed Positions, no income and no costs.
 // Each part of the result and the total result are zero.
 func noResultSummary(accountID int64, cash, netDeposits string) summaryResponse {
 	return summaryResponse{

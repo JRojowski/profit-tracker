@@ -7,7 +7,7 @@ import { AccountHoldingsPage } from "@/pages/account-holdings-page"
 import { AccountIkzePage } from "@/pages/account-ikze-page"
 import { AccountLayout } from "@/pages/account-layout"
 import { AccountOverviewPage } from "@/pages/account-overview-page"
-import { AccountSalesPage } from "@/pages/account-sales-page"
+import { AccountClosedPositionsPage } from "@/pages/account-closed-positions-page"
 import { AllAccountsPage } from "@/pages/all-accounts-page"
 import { ImportPage } from "@/pages/import-page"
 import { ImportsPage } from "@/pages/imports-page"
@@ -26,7 +26,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <AccountOverviewPage /> },
           { path: "holdings", element: <AccountHoldingsPage /> },
-          { path: "sales", element: <AccountSalesPage /> },
+          { path: "closed-positions", element: <AccountClosedPositionsPage /> },
           { path: "ikze", element: <AccountIkzePage /> },
         ],
       },

@@ -36,7 +36,7 @@ const (
 	// KindChangedData is a known XTB ID with a different type, time, amount, Comment, ticker,
 	// position ID, volume or price.
 	KindChangedData = "changed-data"
-	// KindCheckMismatch is a new sale whose Realized Profit differs by more than 0.01
+	// KindCheckMismatch is a new Closed Position whose Realized Profit differs by more than 0.01
 	// from the Profit/Loss in the Closed Positions sheet. See ADR 0001.
 	KindCheckMismatch = "check-mismatch"
 )
@@ -48,7 +48,7 @@ const (
 	// DecisionUseNew replaces the stored Cash Operation with the Cash Operation of the file.
 	// It is valid for the kind "changed-data".
 	DecisionUseNew = "use-new"
-	// DecisionAccept imports the sale and notes the difference. It is valid for the kind "check-mismatch".
+	// DecisionAccept imports the Closed Position and notes the difference. It is valid for the kind "check-mismatch".
 	// The Ledger stays the source of truth. The tool copies nothing from Closed Positions.
 	DecisionAccept = "accept"
 )
@@ -134,7 +134,7 @@ type ImportConflict struct {
 	XTBID string
 	// Existing is the stored data. It is nil for the kind "check-mismatch".
 	Existing *CashOperationData
-	// New is the data of the file. For the kind "check-mismatch", it is the sale.
+	// New is the data of the file. For the kind "check-mismatch", it is the Closed Position.
 	New CashOperationData
 	// Check is the Realized Profit check. It is nil for the kind "changed-data".
 	Check *Check
@@ -142,11 +142,11 @@ type ImportConflict struct {
 	Decision string
 }
 
-// Check is the result of the Realized Profit check of one sale. See ADR 0001.
+// Check is the result of the Realized Profit check of one Closed Position. See ADR 0001.
 type Check struct {
 	// Calculated is the Realized Profit from the Ledger.
 	Calculated decimal.Decimal
-	// ClosedPositions is the Profit/Loss of the sale in the Closed Positions sheet.
+	// ClosedPositions is the Profit/Loss of the Closed Position in the Closed Positions sheet.
 	ClosedPositions decimal.Decimal
 }
 
@@ -288,7 +288,7 @@ func IsOpen(state string) bool {
 }
 
 // resolutions reads the decisions for the Import Conflicts of the kind "changed-data", by XTB ID.
-// A conflict of the kind "check-mismatch" changes no write: its sale is new, and the decision "accept" saves it.
+// A conflict of the kind "check-mismatch" changes no write: its Closed Position is new, and the decision "accept" saves it.
 // It returns an *OpenConflictsError if a conflict of any kind has no decision.
 func resolutions(ctx context.Context, q *queries.Queries, importID int64) (map[string]resolution, error) {
 	conflicts, err := importConflicts(ctx, q, importID)

@@ -42,7 +42,7 @@ export type CashOperationData = {
   price: string | null
 }
 
-// ProfitCheck compares the Realized Profit of a sale with the Profit/Loss in Closed Positions.
+// ProfitCheck compares the Realized Profit of a Closed Position with the Profit/Loss in Closed Positions.
 // The values are decimal text in the Account currency.
 export type ProfitCheck = {
   calculated: string
@@ -51,7 +51,7 @@ export type ProfitCheck = {
 
 // ImportConflict is a Cash Operation that needs a decision. The decision is null until the user selects one.
 // A "changed-data" conflict is a known XTB ID with different data.
-// A "check-mismatch" conflict is a sale with a Realized Profit that differs from Closed Positions by more than 0.01.
+// A "check-mismatch" conflict is a Closed Position with a Realized Profit that differs from Closed Positions by more than 0.01.
 export type ImportConflict =
   | {
       id: number
@@ -66,7 +66,7 @@ export type ImportConflict =
       id: number
       kind: "check-mismatch"
       xtbId: string
-      // existing is null, because the check is for a new sale. new holds the data of the sale.
+      // existing is null, because the check is for a new Closed Position. new holds the data of the Closed Position.
       existing: null
       new: CashOperationData
       check: ProfitCheck
@@ -304,9 +304,9 @@ export type RefreshProgress = {
   ticker: string | null
 }
 
-// Sale is one sale with its Realized Profit. The time is RFC 3339 text in UTC.
+// ClosedPosition is one Closed Position with its Realized Profit. The time is RFC 3339 text in UTC.
 // Volumes and amounts are decimal text in the Account currency.
-export type Sale = {
+export type ClosedPosition = {
   xtbId: string
   time: string
   ticker: string
@@ -351,12 +351,14 @@ export async function fetchHoldings(
   return readJSON<Holding[]>(response)
 }
 
-export async function fetchSales(
+export async function fetchClosedPositions(
   id: number,
   signal?: AbortSignal
-): Promise<Sale[]> {
-  const response = await fetch(`/api/accounts/${id}/sales`, { signal })
-  return readJSON<Sale[]>(response)
+): Promise<ClosedPosition[]> {
+  const response = await fetch(`/api/accounts/${id}/closed-positions`, {
+    signal,
+  })
+  return readJSON<ClosedPosition[]>(response)
 }
 
 // refreshPrices gets new prices for the Instruments in the Holdings of all Accounts and new Exchange Rates.
