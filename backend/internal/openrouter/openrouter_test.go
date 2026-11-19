@@ -2,6 +2,7 @@ package openrouter_test
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -173,4 +174,72 @@ func TestReply_BadResponses_ReturnError(t *testing.T) {
 			assert.NotContains(t, err.Error(), testKey)
 		})
 	}
+}
+
+func TestReply_ErrorStatuses_MapToTheErrorsOfTheAssistant(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   error
+	}{
+		{name: "429 is a rate limit", status: http.StatusTooManyRequests, body: `{"error":{"code":429,"message":"Rate limit exceeded"}}`, want: assistant.ErrRateLimited},
+		{name: "429 with no JSON", status: http.StatusTooManyRequests, body: "slow down", want: assistant.ErrRateLimited},
+		{name: "500", status: http.StatusInternalServerError, body: `{"error":{"code":500,"message":"Internal error"}}`, want: assistant.ErrProviderFailure},
+		{name: "502 model is down", status: http.StatusBadGateway, body: `{"error":{"code":502,"message":"Model is down"}}`, want: assistant.ErrProviderFailure},
+		{name: "503 no provider", status: http.StatusServiceUnavailable, body: `{"error":{"code":503,"message":"No provider"}}`, want: assistant.ErrProviderFailure},
+		{name: "408 timeout", status: http.StatusRequestTimeout, body: `{"error":{"code":408,"message":"Timed out"}}`, want: assistant.ErrProviderFailure},
+		{name: "402 no credits", status: http.StatusPaymentRequired, body: `{"error":{"code":402,"message":"Insufficient credits"}}`, want: assistant.ErrProviderFailure},
+		{name: "401 bad key", status: http.StatusUnauthorized, body: `{"error":{"code":401,"message":"No auth"}}`, want: assistant.ErrProviderFailure},
+		{name: "403 blocked", status: http.StatusForbidden, body: `{"error":{"code":403,"message":"Blocked"}}`, want: assistant.ErrProviderFailure},
+		{name: "400", status: http.StatusBadRequest, body: `{"error":{"code":400,"message":"Bad request"}}`, want: assistant.ErrProviderFailure},
+		{name: "200 with an error object", status: http.StatusOK, body: `{"error":{"code":502,"message":"Provider returned error"}}`, want: assistant.ErrProviderFailure},
+		{name: "200 with a rate limit code", status: http.StatusOK, body: `{"error":{"code":429,"message":"Rate limit exceeded"}}`, want: assistant.ErrRateLimited},
+		{name: "200 with a rate limit type", status: http.StatusOK, body: `{"error":{"code":"x","message":"m","metadata":{"error_type":"rate_limit_exceeded"}}}`, want: assistant.ErrRateLimited},
+		{
+			name: "200 with an error in the choice", status: http.StatusOK,
+			body: `{"choices":[{"finish_reason":"error","message":{"role":"assistant","content":"partial"},"error":{"code":502,"message":"Provider disconnected"}}]}`,
+			want: assistant.ErrProviderFailure,
+		},
+		{name: "200 with no choice", status: http.StatusOK, body: `{"choices":[]}`, want: assistant.ErrProviderFailure},
+		{name: "200 with no JSON", status: http.StatusOK, body: "not json", want: assistant.ErrProviderFailure},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client, _ := startOpenRouter(t, tc.status, tc.body)
+
+			_, err := client.Reply(t.Context(), []assistant.Message{{Role: assistant.RoleUser, Content: "Hi"}}, nil)
+
+			require.ErrorIs(t, err, tc.want)
+			if errors.Is(tc.want, assistant.ErrRateLimited) {
+				require.NotErrorIs(t, err, assistant.ErrProviderFailure)
+			}
+			assert.NotContains(t, err.Error(), testKey)
+		})
+	}
+}
+
+func TestReply_ErrorThatRepeatsTheKey_HidesTheKey(t *testing.T) {
+	t.Parallel()
+	body := `{"error":{"code":429,"message":"the key ` + testKey + ` is limited"}}`
+	client, _ := startOpenRouter(t, http.StatusOK, body)
+
+	_, err := client.Reply(t.Context(), []assistant.Message{{Role: assistant.RoleUser, Content: "Hi"}}, nil)
+
+	require.ErrorIs(t, err, assistant.ErrRateLimited)
+	assert.NotContains(t, err.Error(), testKey)
+}
+
+func TestReply_ConnectionFails_IsAProviderFailure(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.NotFoundHandler())
+	client := &openrouter.Client{HTTPClient: srv.Client(), BaseURL: srv.URL, Key: testKey, Model: "m"}
+	srv.Close()
+
+	_, err := client.Reply(t.Context(), []assistant.Message{{Role: assistant.RoleUser, Content: "Hi"}}, nil)
+
+	require.ErrorIs(t, err, assistant.ErrProviderFailure)
+	assert.NotContains(t, err.Error(), testKey)
 }
