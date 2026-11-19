@@ -19,6 +19,7 @@ func (a *api) assistantFunctions() []assistant.Function {
 		a.holdingsFunction(),
 		a.resultsFunction(),
 		a.allocationFunction(),
+		a.closedPositionsFunction(),
 	}
 }
 
