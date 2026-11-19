@@ -460,3 +460,51 @@ func TestRealExports_AssistantHoldings_MatchTheHoldingsEndpoint(t *testing.T) {
 	require.Len(t, got.Accounts, len(exports), "all Accounts")
 	checkHoldingsMatchEndpoint(t, srv, got, "")
 }
+
+// TestRealExports_AssistantResults_MatchThePageEndpoints checks that the function get_results gives the same
+// numbers as the summary and Value History endpoints, for each Account and for all Accounts.
+// The fake model calls the function. No test calls a real model.
+func TestRealExports_AssistantResults_MatchThePageEndpoints(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i := range exports {
+		got := askResults(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		checkAccountResultsMatchPages(t, srv, got, accountIDs[i])
+	}
+	checkAllResultsMatchPages(t, srv, askResults(t, srv, model, `{}`))
+}
+
+// TestRealExports_AssistantAllocation_MatchesThePageEndpoints checks that the function
+// get_allocation_and_net_deposits gives the same numbers as the Allocation, summary and IKZE Limit endpoints,
+// for each Account and for all Accounts. The fake model calls the function. No test calls a real model.
+func TestRealExports_AssistantAllocation_MatchesThePageEndpoints(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	for i := range exports {
+		got := askAllocation(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		var allocation allocationResponse
+		srv.getRealJSON(t, fmt.Sprintf("/api/accounts/%d/allocation", accountIDs[i]), &allocation)
+		assert.Equal(t, allocation, got.Allocation, "Account %d: Allocation", accountIDs[i])
+		checkAllocationAccountsMatchPages(t, srv, got)
+	}
+	got := askAllocation(t, srv, model, `{}`)
+	var allocation allocationResponse
+	srv.getRealJSON(t, "/api/all-accounts/allocation", &allocation)
+	assert.Equal(t, allocation, got.Allocation, "all Accounts: Allocation")
+	assert.Equal(t, srv.allAccounts(t).NetDeposits, got.NetDeposits, "all Accounts: Net Deposits")
+	require.Len(t, got.Accounts, len(exports))
+	checkAllocationAccountsMatchPages(t, srv, got)
+}

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -27,32 +28,36 @@ type allValueHistoryResponse struct {
 // allAccountsValueHistory returns the Value History and the Time-Weighted Returns of all Accounts in PLN.
 // It calculates them on each request and stores nothing. ADR 0004.
 func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	accounts, err := a.store.Accounts(ctx)
+	resp, err := a.allValueHistoryOf(r.Context())
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// allValueHistoryOf calculates the Value History and the Time-Weighted Returns of all Accounts in PLN.
+func (a *api) allValueHistoryOf(ctx context.Context) (allValueHistoryResponse, error) {
+	accounts, err := a.store.Accounts(ctx)
+	if err != nil {
+		return allValueHistoryResponse{}, err
 	}
 	prices, err := a.store.PriceHistory(ctx)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return allValueHistoryResponse{}, err
 	}
 	stored, err := a.store.ExchangeRateSeries(ctx)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return allValueHistoryResponse{}, err
 	}
 	series := rateSeries(stored)
 	instruments, err := a.store.Instruments(ctx)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return allValueHistoryResponse{}, err
 	}
 	warnings, err := a.readPriceWarnings(ctx, instruments, prices)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return allValueHistoryResponse{}, err
 	}
 
 	views := make([]accountView, 0, len(accounts))
@@ -62,13 +67,11 @@ func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
 	for _, acc := range accounts {
 		in, err := a.readHeroInput(ctx, acc)
 		if err != nil {
-			a.writeInternalError(w, r, err)
-			return
+			return allValueHistoryResponse{}, err
 		}
 		view, err := viewOf(acc, in)
 		if err != nil {
-			a.writeInternalError(w, r, err)
-			return
+			return allValueHistoryResponse{}, err
 		}
 		views = append(views, view)
 		// The Instruments are the same for each Account.
@@ -77,16 +80,14 @@ func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		history, err := valuehistory.Calculate(valuehistory.Input{Ledger: in.ledger, Closes: closes, ExchangeRates: series})
 		if err != nil {
-			a.writeInternalError(w, r, fmt.Errorf("calculate the value history of account %d: %w", acc.ID, err))
-			return
+			return allValueHistoryResponse{}, fmt.Errorf("calculate the value history of account %d: %w", acc.ID, err)
 		}
 		histories = append(histories, allaccounts.HistoryAccount{Currency: acc.Currency, Points: history.Points})
 		valuedAtCost = append(valuedAtCost, history.ValuedAtCost...)
 	}
 	hero, err := a.calculateAllAccounts(ctx, views)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return allValueHistoryResponse{}, err
 	}
 
 	resp := allValueHistoryResponse{
@@ -97,19 +98,17 @@ func (a *api) allAccountsValueHistory(w http.ResponseWriter, r *http.Request) {
 	resp.PriceWarnings = warnings.all()
 	// The history uses the same rates as the hero. It is not available when the hero is not available.
 	if !hero.result.Available {
-		writeJSON(w, http.StatusOK, resp)
-		return
+		return resp, nil
 	}
 	history := allaccounts.ValueHistory(histories, hero.rates, series)
 	if !history.Available {
 		resp.Warnings = append(resp.Warnings, historyRateWarnings(history.Missing)...)
-		writeJSON(w, http.StatusOK, resp)
-		return
+		return resp, nil
 	}
 	resp.Available = true
 	resp.valueHistoryBody = newValueHistoryBody(ledger.PLN, history.Points, uniqueInstruments(valuedAtCost))
 	resp.PriceWarnings = warnings.all()
-	writeJSON(w, http.StatusOK, resp)
+	return resp, nil
 }
 
 // unavailableValueHistoryBody returns the body in PLN with no points. Each period is nil, and the lists are empty.
