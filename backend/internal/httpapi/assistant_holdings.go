@@ -106,9 +106,9 @@ func (a *api) runHoldings(ctx context.Context, arguments json.RawMessage) (any, 
 			// The Price Warnings are not a part of the result.
 			row := view.holdingRow(h, nil)
 			part.Holdings = append(part.Holdings, holdingResult{
-				Ticker: row.Ticker, Name: row.Name, Volume: row.Volume, Currency: acc.Currency, Cost: row.Cost,
+				Ticker: row.Ticker, Name: row.Name, Volume: row.Volume, Currency: acc.Currency, Cost: roundAmountText(row.Cost),
 				HasValue: row.Value != nil, Price: row.Price, QuoteCurrency: row.QuoteCurrency, PriceDate: row.PriceDate,
-				Value: row.Value, UnrealizedProfit: row.UnrealizedProfit, UnrealizedProfitPercent: row.UnrealizedProfitPercent,
+				Value: roundAmountPointer(row.Value), UnrealizedProfit: roundAmountPointer(row.UnrealizedProfit), UnrealizedProfitPercent: row.UnrealizedProfitPercent,
 				NoValueReason: row.Note,
 			})
 		}

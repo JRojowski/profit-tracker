@@ -83,8 +83,8 @@ func (a *api) periodResults(ctx context.Context, args resultsArguments, accounts
 	}
 	result.Available = true
 	result.StartDate, result.EndDate = period.StartDay.Format(time.DateOnly), period.EndDay.Format(time.DateOnly)
-	result.StartValue, result.EndValue = new(formatAmount(period.StartValue)), new(formatAmount(period.EndValue))
-	result.NetDeposits, result.TotalResult = new(formatAmount(period.NetDeposits)), new(formatAmount(period.TotalResult))
+	result.StartValue, result.EndValue = new(formatRoundedAmount(period.StartValue)), new(formatRoundedAmount(period.EndValue))
+	result.NetDeposits, result.TotalResult = new(formatRoundedAmount(period.NetDeposits)), new(formatRoundedAmount(period.TotalResult))
 	if period.ValuedAtCost != nil {
 		result.ValuedAtCost = period.ValuedAtCost
 	}

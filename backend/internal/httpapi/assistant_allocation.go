@@ -118,7 +118,7 @@ func (a *api) runAllocation(ctx context.Context, arguments json.RawMessage) (any
 		views = append(views, view)
 		row := allocationAccountResult{
 			AccountID: acc.ID, AccountName: acc.Name, Type: acc.Type, Currency: acc.Currency,
-			NetDeposits: formatAmount(view.state.NetDeposits),
+			NetDeposits: formatRoundedAmount(view.state.NetDeposits),
 		}
 		if acc.Type == importer.TypeIKZE {
 			if row.IKZE, err = a.ikzeYearOf(ctx, view, year); err != nil {
@@ -132,7 +132,7 @@ func (a *api) runAllocation(ctx context.Context, arguments json.RawMessage) (any
 	if args.AccountID != nil {
 		result.Currency = accounts[0].Currency
 		result.NetDeposits = &rows[0].NetDeposits
-		result.Allocation = a.allocation(views, result.Currency)
+		result.Allocation = roundedAllocation(a.allocation(views, result.Currency))
 		return result, nil
 	}
 	summary, err := a.allAccountsSummaryOf(ctx)
@@ -140,8 +140,8 @@ func (a *api) runAllocation(ctx context.Context, arguments json.RawMessage) (any
 		return nil, err
 	}
 	result.Currency = ledger.PLN
-	result.NetDeposits = summary.NetDeposits
-	result.Allocation = a.allocation(views, ledger.PLN)
+	result.NetDeposits = roundAmountPointer(summary.NetDeposits)
+	result.Allocation = roundedAllocation(a.allocation(views, ledger.PLN))
 	return result, nil
 }
 
@@ -157,6 +157,41 @@ func (a *api) ikzeYearOf(ctx context.Context, view accountView, year int) (*ikze
 	}
 	row := toIKZELimitRow(ikze.ForYear(l.CashOperations, ikze.BusinessLimit, year, exchange.StartOfDayInWarsaw(a.now()).Location()))
 	return &ikzeYearResult{
-		Year: row.Year, Contributions: &row.Contributions, Limit: row.Limit, Unused: row.Unused, OverLimit: row.OverLimit,
+		Year: row.Year, Contributions: new(roundAmountText(row.Contributions)), Limit: roundAmountPointer(row.Limit),
+		Unused: roundAmountPointer(row.Unused), OverLimit: roundAmountPointer(row.OverLimit),
 	}, nil
+}
+
+// roundedAllocation rounds the amounts of the Allocation to 2 decimal places. The shares are percentages and stay as they are.
+func roundedAllocation(resp allocationResponse) allocationResponse {
+	resp.Total = roundAmountPointer(resp.Total)
+	resp.ByInstrument.Holdings = roundedParts(resp.ByInstrument.Holdings)
+	if c := resp.ByInstrument.Cash; c != nil {
+		resp.ByInstrument.Cash = new(roundedPart(*c))
+	}
+	if o := resp.ByInstrument.Other; o != nil {
+		resp.ByInstrument.Other = &allocationOtherDTO{
+			Count: o.Count, Value: roundAmountText(o.Value), Share: o.Share, Holdings: roundedParts(o.Holdings),
+		}
+	}
+	currencies := make([]allocationCurrencyPartDTO, 0, len(resp.ByQuoteCurrency))
+	for _, c := range resp.ByQuoteCurrency {
+		c.Value = roundAmountText(c.Value)
+		currencies = append(currencies, c)
+	}
+	resp.ByQuoteCurrency = currencies
+	return resp
+}
+
+func roundedPart(p allocationPartDTO) allocationPartDTO {
+	p.Value = roundAmountText(p.Value)
+	return p
+}
+
+func roundedParts(parts []allocationPartDTO) []allocationPartDTO {
+	rounded := make([]allocationPartDTO, 0, len(parts))
+	for _, p := range parts {
+		rounded = append(rounded, roundedPart(p))
+	}
+	return rounded
 }

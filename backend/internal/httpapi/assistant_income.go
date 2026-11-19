@@ -150,9 +150,9 @@ func (a *api) runIncome(ctx context.Context, arguments json.RawMessage) (any, er
 
 // incomeSumsOf returns the sums as decimal text. If interestLeftOut is true, the net interest is nil.
 func incomeSumsOf(currency string, income ledger.Income, interestLeftOut bool) incomeSums {
-	sums := incomeSums{Currency: currency, NetDividends: formatAmount(income.NetDividends), Fees: formatAmount(income.Fees)}
+	sums := incomeSums{Currency: currency, NetDividends: formatRoundedAmount(income.NetDividends), Fees: formatRoundedAmount(income.Fees)}
 	if !interestLeftOut {
-		sums.NetInterest = new(formatAmount(income.NetInterest))
+		sums.NetInterest = new(formatRoundedAmount(income.NetInterest))
 	}
 	return sums
 }

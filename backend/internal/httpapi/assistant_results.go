@@ -132,9 +132,10 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 	s := a.summaryOf(view)
 	return resultsResult{
 		Scope: scope, AccountID: &acc.ID, AccountName: acc.Name, Currency: acc.Currency, Available: true, Warnings: []string{},
-		Value: &s.Value, Cash: &s.Cash, NetDeposits: &s.NetDeposits, TotalResult: &s.TotalResult,
-		RealizedProfit: &s.RealizedProfit, UnrealizedProfit: &s.UnrealizedProfit, NetDividends: &s.NetDividends,
-		NetInterest: &s.NetInterest, Fees: &s.Fees, PriceDate: s.PriceDate, UnpricedHoldings: s.UnpricedHoldings,
+		Value: new(roundAmountText(s.Value)), Cash: new(roundAmountText(s.Cash)), NetDeposits: new(roundAmountText(s.NetDeposits)),
+		TotalResult: new(roundAmountText(s.TotalResult)), RealizedProfit: new(roundAmountText(s.RealizedProfit)),
+		UnrealizedProfit: new(roundAmountText(s.UnrealizedProfit)), NetDividends: new(roundAmountText(s.NetDividends)),
+		NetInterest: new(roundAmountText(s.NetInterest)), Fees: new(roundAmountText(s.Fees)), PriceDate: s.PriceDate, UnpricedHoldings: s.UnpricedHoldings,
 		SimpleReturn:       returnResult{Percent: s.SimpleReturn, Reason: s.SimpleReturnNote},
 		AnnualReturn:       returnResult{Percent: s.AnnualReturn, Reason: s.AnnualReturnNote},
 		TimeWeightedReturn: timeWeightedOf(history.TimeWeightedReturn, ""),
@@ -158,10 +159,11 @@ func (a *api) allAccountsResults(ctx context.Context, scope string) (resultsResu
 	}
 	return resultsResult{
 		Scope: scope, Currency: "PLN", Available: summary.Available, Warnings: summary.Warnings,
-		Value: summary.Value, Cash: summary.Cash, NetDeposits: summary.NetDeposits, TotalResult: summary.TotalResult,
-		RealizedProfit: summary.RealizedProfit, UnrealizedProfit: summary.UnrealizedProfit,
-		NetDividends: summary.NetDividends, NetInterest: summary.NetInterest, Fees: summary.Fees,
-		CurrencyResult: summary.CurrencyResult, PriceDate: summary.PriceDate, UnpricedHoldings: summary.UnpricedHoldings,
+		Value: roundAmountPointer(summary.Value), Cash: roundAmountPointer(summary.Cash),
+		NetDeposits: roundAmountPointer(summary.NetDeposits), TotalResult: roundAmountPointer(summary.TotalResult),
+		RealizedProfit: roundAmountPointer(summary.RealizedProfit), UnrealizedProfit: roundAmountPointer(summary.UnrealizedProfit),
+		NetDividends: roundAmountPointer(summary.NetDividends), NetInterest: roundAmountPointer(summary.NetInterest),
+		Fees: roundAmountPointer(summary.Fees), CurrencyResult: roundAmountPointer(summary.CurrencyResult), PriceDate: summary.PriceDate, UnpricedHoldings: summary.UnpricedHoldings,
 		SimpleReturn:       returnResult{Percent: summary.SimpleReturn, Reason: summary.SimpleReturnNote},
 		AnnualReturn:       returnResult{Percent: summary.AnnualReturn, Reason: summary.AnnualReturnNote},
 		TimeWeightedReturn: timeWeightedOf(history.TimeWeightedReturn, unavailable),
