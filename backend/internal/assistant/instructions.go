@@ -51,9 +51,17 @@ Terms of the tool:
 - IKZE Limit: the highest sum of IKZE Contributions in one calendar year.
 `
 
-// Instructions returns the instructions for the model: the rules, the date of today and the Accounts.
-// today is the date of today in Polish time.
-func Instructions(today time.Time, accounts []Account) string {
+// Page is the page that the user has open when the user asks.
+type Page struct {
+	// Account is the Account of the page. It is nil if the page has no Account.
+	Account *Account
+	// Instrument is the broker ticker of the open Instrument Overview. It is empty if none is open.
+	Instrument string
+}
+
+// Instructions returns the instructions for the model: the rules, the date of today, the Accounts and the page.
+// today is the date of today in Polish time. page is nil if the request has no page context.
+func Instructions(today time.Time, accounts []Account, page *Page) string {
 	var b strings.Builder
 	b.WriteString(rules)
 	fmt.Fprintf(&b, "\nToday is %s.\n\nThe Accounts:\n", today.Format(time.DateOnly))
@@ -62,6 +70,16 @@ func Instructions(today time.Time, accounts []Account) string {
 	}
 	for _, acc := range accounts {
 		fmt.Fprintf(&b, "- ID %d: %q, type %s, currency %s\n", acc.ID, acc.Name, acc.Type, acc.Currency)
+	}
+	if page != nil && (page.Account != nil || page.Instrument != "") {
+		b.WriteString("\nThe page that is open:")
+		if page.Account != nil {
+			fmt.Fprintf(&b, " Account ID %d, %q.", page.Account.ID, page.Account.Name)
+		}
+		if page.Instrument != "" {
+			fmt.Fprintf(&b, " Instrument %q.", page.Instrument)
+		}
+		b.WriteString(` If the question says "this Account" or "this Instrument", it means these.` + "\n")
 	}
 	return b.String()
 }
