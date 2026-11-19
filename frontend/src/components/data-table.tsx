@@ -107,7 +107,7 @@ const interactiveSelector =
 
 // rowActionProps gives the props that make a table row run an action on a click and on Enter.
 // Events of a dialog that a control in the row opens also reach the row through React, so the handlers check the DOM.
-function rowActionProps(action: () => void) {
+export function rowActionProps(action: () => void) {
   return {
     tabIndex: 0,
     className:

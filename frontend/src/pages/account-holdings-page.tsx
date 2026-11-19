@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/card"
 import { useLoad } from "@/hooks/use-load"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useOverviewTicker } from "@/hooks/use-overview-ticker"
+import { useOverviewUrl } from "@/hooks/use-overview-url"
 import { useTableView } from "@/hooks/use-table-view"
 import { fetchAccountAllocation, fetchHoldings } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
@@ -47,7 +47,7 @@ export function AccountHoldingsPage() {
   const holdings = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchHoldings(account.id, signal)
   )
-  const overview = useOverviewTicker()
+  const overview = useOverviewUrl()
   const allocation = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchAccountAllocation(account.id, signal)
   )
@@ -123,10 +123,11 @@ export function AccountHoldingsPage() {
           </LoadedView>
         </CardContent>
       </Card>
-      {overview.ticker !== null && (
+      {overview.state !== null && (
         <InstrumentOverviewPanel
           accountId={account.id}
-          ticker={overview.ticker}
+          ticker={overview.state.ticker}
+          closed={overview.state.closed}
           currency={account.currency}
           onClose={overview.close}
         />

@@ -1,20 +1,40 @@
 // overviewParam is the search parameter that holds the ticker of the open Instrument Overview.
 const overviewParam = "overview"
 
-// readOverviewTicker gives the ticker of the open Instrument Overview, or null when the panel is closed.
-export function readOverviewTicker(params: URLSearchParams): string | null {
-  const ticker = params.get(overviewParam)
-  return ticker === null || ticker === "" ? null : ticker
+// closedParam is the search parameter that holds the XTB ID of the highlighted Closed Position.
+const closedParam = "closed"
+
+// OverviewState is the Instrument Overview that the URL describes.
+export type OverviewState = {
+  // ticker is the Instrument of the open panel.
+  ticker: string
+  // closed is the XTB ID of the highlighted Closed Position, or null for no highlight.
+  closed: string | null
 }
 
-// writeOverviewTicker gives a copy of the search parameters with the ticker written in, or removed for null.
-// It keeps each other parameter.
-export function writeOverviewTicker(
+// readOverviewState gives the open Instrument Overview, or null when the panel is closed.
+// A closed parameter without an overview parameter does nothing.
+export function readOverviewState(
+  params: URLSearchParams
+): OverviewState | null {
+  const ticker = params.get(overviewParam)
+  if (ticker === null || ticker === "") return null
+  const closed = params.get(closedParam)
+  return { ticker, closed: closed === "" ? null : closed }
+}
+
+// writeOverviewState gives a copy of the search parameters with the panel state written in.
+// A null state removes the overview and closed parameters together. It keeps each other parameter.
+export function writeOverviewState(
   params: URLSearchParams,
-  ticker: string | null
+  state: OverviewState | null
 ): URLSearchParams {
   const next = new URLSearchParams(params)
-  if (ticker === null) next.delete(overviewParam)
-  else next.set(overviewParam, ticker)
+  next.delete(overviewParam)
+  next.delete(closedParam)
+  if (state !== null) {
+    next.set(overviewParam, state.ticker)
+    if (state.closed !== null) next.set(closedParam, state.closed)
+  }
   return next
 }

@@ -1,4 +1,4 @@
-import type { ReactElement } from "react"
+import { useState, type ReactElement } from "react"
 import { CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts"
 
 import {
@@ -23,32 +23,86 @@ import {
 const chartConfig = {
   close: { label: "Close", color: "var(--chart-2)" },
   buy: { label: "Buy", color: "var(--chart-7)" },
+  sell: { label: "Sell", color: "var(--chart-8)" },
 } satisfies ChartConfig
 
 // MarkerShapeProps are the props that Recharts gives to the dot of a point.
-type MarkerShapeProps = { cx?: number; cy?: number }
+type MarkerShapeProps = {
+  cx?: number
+  cy?: number
+  payload?: ChartRow
+}
 
-// markerSeries holds, for each kind of marker, its label and its shape. A shape draws around the point (0, 0).
-// The kinds differ in colour and in shape, so the user can tell them apart without colour vision.
+// markerStyle gives the opacity and the outline of a marker. With a highlight, the markers that are not
+// highlighted are dimmed, and a highlighted marker gets a ring.
+function markerStyle(
+  kind: MarkerKind,
+  row: ChartRow | undefined,
+  highlightActive: boolean
+) {
+  const highlighted = row?.markers[kind]?.highlighted === true
+  return {
+    opacity: highlightActive && !highlighted ? 0.3 : 1,
+    highlighted,
+  }
+}
+
+// markerSeries holds, for each kind of marker, its label and its shape. A shape draws around the point.
+// The kinds differ in colour and in shape, so the user can tell them apart without colour vision:
+// a buy is a triangle that points up and a sell is a diamond.
 // A new kind needs one entry here and one entry in chartConfig.
 const markerSeries: Record<
   MarkerKind,
-  { label: string; shape: (props: MarkerShapeProps) => ReactElement }
+  {
+    label: string
+    shape: (props: MarkerShapeProps, highlightActive: boolean) => ReactElement
+  }
 > = {
   buy: {
     label: "Buy",
-    shape: ({ cx, cy }) =>
-      typeof cx === "number" && typeof cy === "number" ? (
+    shape: ({ cx, cy, payload }, highlightActive) => {
+      if (typeof cx !== "number" || typeof cy !== "number") return <g />
+      const { opacity, highlighted } = markerStyle(
+        "buy",
+        payload,
+        highlightActive
+      )
+      const k = highlighted ? 1.5 : 1
+      return (
         <polygon
-          points={`${cx},${cy - 7} ${cx + 6.5},${cy + 5} ${cx - 6.5},${cy + 5}`}
+          points={`${cx},${cy - 7 * k} ${cx + 6.5 * k},${cy + 5 * k} ${cx - 6.5 * k},${cy + 5 * k}`}
           fill="var(--color-buy)"
-          stroke="var(--background)"
-          strokeWidth={1.5}
+          fillOpacity={opacity}
+          stroke={highlighted ? "var(--foreground)" : "var(--background)"}
+          strokeOpacity={opacity}
+          strokeWidth={highlighted ? 2 : 1.5}
           strokeLinejoin="round"
         />
-      ) : (
-        <g />
-      ),
+      )
+    },
+  },
+  sell: {
+    label: "Sell",
+    shape: ({ cx, cy, payload }, highlightActive) => {
+      if (typeof cx !== "number" || typeof cy !== "number") return <g />
+      const { opacity, highlighted } = markerStyle(
+        "sell",
+        payload,
+        highlightActive
+      )
+      const r = highlighted ? 10 : 6.5
+      return (
+        <polygon
+          points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+          fill="var(--color-sell)"
+          fillOpacity={opacity}
+          stroke={highlighted ? "var(--foreground)" : "var(--background)"}
+          strokeOpacity={opacity}
+          strokeWidth={highlighted ? 2 : 1.5}
+          strokeLinejoin="round"
+        />
+      )
+    },
   },
 }
 
@@ -85,15 +139,18 @@ type InstrumentPriceChartProps = {
   kinds: MarkerKind[]
 }
 
-// InstrumentPriceChart draws the daily closes as a line and the markers of the Fills on it.
+// InstrumentPriceChart draws the daily closes as a line and the buy markers and sell markers on it.
 // It shows the full series. A day with a marker but no close still has its marker.
-// The tooltip of a day lists each operation of its marker. The list of Fills under the chart is the text alternative.
+// The tooltip of a day lists each operation of its marker. The lists under the chart are the text alternative.
 export function InstrumentPriceChart({
   model,
   currency,
   kinds,
 }: InstrumentPriceChartProps) {
   const isMobile = useIsMobile()
+  // hovered is the row of the marker under the pointer. The series is dense, so the tooltip of the nearest day
+  // can be a day next to the marker. The tooltip of a hovered marker always shows the day of that marker.
+  const [hovered, setHovered] = useState<ChartRow | null>(null)
   const { rows } = model
   const values = rows.flatMap((row) => [
     ...(row.close === undefined ? [] : [row.close]),
@@ -152,7 +209,7 @@ export function InstrumentPriceChart({
           content={({ active, payload }) => (
             <DayTooltip
               active={active}
-              row={payload?.[0]?.payload as ChartRow | undefined}
+              row={hovered ?? (payload?.[0]?.payload as ChartRow | undefined)}
               currency={currency}
             />
           )}
@@ -174,8 +231,15 @@ export function InstrumentPriceChart({
             dataKey={(row: ChartRow) => row.markerValues[kind]}
             name={markerSeries[kind].label}
             stroke="none"
-            dot={markerSeries[kind].shape}
-            activeDot={markerSeries[kind].shape}
+            dot={(props: MarkerShapeProps) => (
+              <g
+                onMouseEnter={() => setHovered(props.payload ?? null)}
+                onMouseLeave={() => setHovered(null)}
+              >
+                {markerSeries[kind].shape(props, model.highlighted)}
+              </g>
+            )}
+            activeDot={false}
             isAnimationActive={false}
           />
         ))}

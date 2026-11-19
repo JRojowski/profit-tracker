@@ -392,6 +392,8 @@ export type InstrumentOverview = NamedPriceSource & {
   holding: Holding | null
   // openLots is empty exactly when holding is null.
   openLots: OverviewLot[]
+  // closedPositions are in close time order, oldest first.
+  closedPositions: ClosedPosition[]
 }
 
 // fetchInstrumentOverview loads the Instrument Overview of one Instrument on one Account.

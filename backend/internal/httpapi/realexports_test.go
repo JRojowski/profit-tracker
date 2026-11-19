@@ -396,6 +396,8 @@ func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []h
 			assert.Empty(t, got.OpenLots, "%s: no open volume gives no open Lots", ticker)
 		}
 
+		assertSameJSON(t, srv.closedPositionRows(t, accountID, ticker), got.ClosedPositions)
+
 		lots := map[string]bool{}
 		volume := decimal.Zero
 		for _, f := range got.Fills {

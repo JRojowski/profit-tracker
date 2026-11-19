@@ -30,6 +30,8 @@ type overviewResponse struct {
 	// Holding and OpenLots are checked in their own tests. The tests of the other fields leave them out.
 	Holding  json.RawMessage   `json:"holding"`
 	OpenLots []overviewOpenLot `json:"openLots"`
+	// ClosedPositions are the items of the Closed Positions endpoint, as raw JSON.
+	ClosedPositions []json.RawMessage `json:"closedPositions"`
 }
 
 type overviewOpenLot struct {
@@ -43,7 +45,7 @@ type overviewOpenLot struct {
 
 // withoutLotData returns the overview with no Holding and no open Lots.
 func (o overviewResponse) withoutLotData() overviewResponse {
-	o.Holding, o.OpenLots = nil, nil
+	o.Holding, o.OpenLots, o.ClosedPositions = nil, nil, nil
 	return o
 }
 
@@ -348,4 +350,108 @@ func TestInstrumentOverview_FullySold_HasNullHoldingAndNoOpenLots(t *testing.T) 
 	require.Equal(t, http.StatusOK, status, "body %q", body)
 	assert.Contains(t, body, `"holding":null`)
 	assert.Contains(t, body, `"openLots":[]`, "the open Lots are an empty array, not null")
+}
+
+// closedPositionRows returns the items of GET /api/accounts/{id}/closed-positions of the Instrument as raw JSON.
+func (s *testServer) closedPositionRows(t *testing.T, accountID int64, ticker string) []json.RawMessage {
+	t.Helper()
+
+	var rows []json.RawMessage
+	status := s.getJSON(t, fmt.Sprintf("/api/accounts/%d/closed-positions", accountID), &rows)
+	require.Equal(t, http.StatusOK, status)
+	got := []json.RawMessage{}
+	for _, row := range rows {
+		var id struct {
+			Ticker string `json:"ticker"`
+		}
+		require.NoError(t, json.Unmarshal(row, &id))
+		if id.Ticker == ticker {
+			got = append(got, row)
+		}
+	}
+	return got
+}
+
+// assertSameJSON checks that the two lists hold the same JSON items in the same order.
+func assertSameJSON(t *testing.T, want, got []json.RawMessage) {
+	t.Helper()
+
+	require.Len(t, got, len(want))
+	for i := range want {
+		assert.JSONEq(t, string(want[i]), string(got[i]), "item %d", i)
+	}
+}
+
+func TestInstrumentOverview_LotClosedInParts_ClosedPositionsEqualTheEndpointItems(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// ADR 0001 example 1: one Lot closed in two parts on the same day.
+	accountID := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
+
+	got := srv.overview(t, accountID, "ABC.PL")
+
+	want := srv.closedPositionRows(t, accountID, "ABC.PL")
+	require.Len(t, want, 2)
+	assertSameJSON(t, want, got.ClosedPositions)
+	for _, item := range got.ClosedPositions {
+		var ids struct {
+			XTBID      string `json:"xtbId"`
+			PositionID string `json:"positionId"`
+		}
+		require.NoError(t, json.Unmarshal(item, &ids))
+		assert.Equal(t, "2636532207", ids.PositionID, "the item has the ID of its Lot")
+		assert.NotEmpty(t, ids.XTBID)
+	}
+}
+
+func TestInstrumentOverview_FullySold_HasClosedPositionsAndPricesAfterTheLastSell(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
+	srv.storeDailyCloses(t, "ABC.PL", "PLN", "2026-03-02=10.5", "2026-03-03=10.7", "2026-03-04=10.9")
+
+	got := srv.overview(t, accountID, "ABC.PL")
+
+	assert.Equal(t, "null", string(got.Holding))
+	assertSameJSON(t, srv.closedPositionRows(t, accountID, "ABC.PL"), got.ClosedPositions)
+	require.Len(t, got.ClosedPositions, 2)
+	require.Len(t, got.Prices.Series, 3)
+	assert.Equal(t, "2026-03-04", got.Prices.Series[2].Date, "the series continues after the last sell on 2026-03-02")
+}
+
+func TestInstrumentOverview_NoClosedPositions_GivesEmptyArray(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, overviewExport(), "XTB USD")
+
+	_, _, body := srv.get(t, overviewPath(accountID, "ABC.US"))
+
+	assert.Contains(t, body, `"closedPositions":[]`, "the Closed Positions are an empty array, not null")
+}
+
+func TestInstrumentOverview_SameInstrumentOnTwoAccounts_EachAccountGivesItsOwnClosedPositions(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	first := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
+	other := adrExample1("-6.12", "-0.66")
+	other.AccountNumber = "50000099"
+	for i := range other.CashOperations {
+		other.CashOperations[i].ID += "9"
+		other.CashOperations[i].PositionID = map[bool]string{true: "", false: "2636599999"}[other.CashOperations[i].PositionID == ""]
+	}
+	for i := range other.ClosedPositions {
+		other.ClosedPositions[i].PositionID = "2636599999"
+	}
+	// The second Account sells only one part of its Lot.
+	other.CashOperations = append(other.CashOperations[:0:0], other.CashOperations[1:]...)
+	other.ClosedPositions = other.ClosedPositions[1:]
+	second := srv.importAccount(t, other, "XTB PLN 2")
+
+	firstGot := srv.overview(t, first, "ABC.PL")
+	secondGot := srv.overview(t, second, "ABC.PL")
+
+	assertSameJSON(t, srv.closedPositionRows(t, first, "ABC.PL"), firstGot.ClosedPositions)
+	assertSameJSON(t, srv.closedPositionRows(t, second, "ABC.PL"), secondGot.ClosedPositions)
+	assert.Len(t, firstGot.ClosedPositions, 2)
+	assert.Len(t, secondGot.ClosedPositions, 1)
 }

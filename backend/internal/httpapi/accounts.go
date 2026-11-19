@@ -221,22 +221,27 @@ func (a *api) accountClosedPositions(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := make([]closedPositionResponse, 0, len(view.state.ClosedPositions))
 	for _, s := range view.state.ClosedPositions {
-		resp = append(resp, closedPositionResponse{
-			XTBID:          s.XTBID,
-			Time:           s.Time.UTC().Format(time.RFC3339),
-			Ticker:         s.Instrument.Ticker,
-			Name:           s.Instrument.Name,
-			PositionID:     s.PositionID,
-			Volume:         s.Volume.String(),
-			Amount:         formatAmount(s.Amount),
-			Cost:           formatAmount(s.Cost),
-			RealizedProfit: formatAmount(s.RealizedProfit),
-			OpenTime:       s.OpenTime.UTC().Format(time.RFC3339),
-			OpenPrice:      nullPrice(s.OpenPrice),
-			ClosePrice:     nullPrice(s.ClosePrice),
-		})
+		resp = append(resp, toClosedPositionResponse(s))
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// toClosedPositionResponse returns the response item of the Closed Position.
+func toClosedPositionResponse(s ledger.ClosedPosition) closedPositionResponse {
+	return closedPositionResponse{
+		XTBID:          s.XTBID,
+		Time:           s.Time.UTC().Format(time.RFC3339),
+		Ticker:         s.Instrument.Ticker,
+		Name:           s.Instrument.Name,
+		PositionID:     s.PositionID,
+		Volume:         s.Volume.String(),
+		Amount:         formatAmount(s.Amount),
+		Cost:           formatAmount(s.Cost),
+		RealizedProfit: formatAmount(s.RealizedProfit),
+		OpenTime:       s.OpenTime.UTC().Format(time.RFC3339),
+		OpenPrice:      nullPrice(s.OpenPrice),
+		ClosePrice:     nullPrice(s.ClosePrice),
+	}
 }
 
 // nullPrice returns the price as decimal text, or nil if the price is not valid.

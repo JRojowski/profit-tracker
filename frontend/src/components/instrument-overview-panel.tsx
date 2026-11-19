@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { PencilIcon } from "lucide-react"
 
 import { CurrencyBadge } from "@/components/account-badges"
@@ -20,6 +20,7 @@ import {
 import { useLoad } from "@/hooks/use-load"
 import {
   fetchInstrumentOverview,
+  type ClosedPosition,
   type Holding,
   type InstrumentOverview,
   type OverviewLot,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import {
+  amountSign,
   formatAmount,
   formatDate,
   formatPolishDate,
@@ -34,11 +36,13 @@ import {
   formatPrice,
   formatRate,
   formatVolume,
+  signColour,
 } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { buildChartModel, type MarkerKind } from "@/lib/overview-markers"
 
-// markerKinds are the kinds of markers that the chart draws. A later ticket adds "sell".
-const markerKinds: MarkerKind[] = ["buy"]
+// markerKinds are the kinds of markers that the chart draws.
+const markerKinds: MarkerKind[] = ["buy", "sell"]
 
 type InstrumentOverviewPanelProps = {
   accountId: number
@@ -46,6 +50,9 @@ type InstrumentOverviewPanelProps = {
   ticker: string
   // currency is the currency of the Account. The cost and the value are in it.
   currency: string
+  // closed is the XTB ID of the Closed Position to highlight, or null. An ID that no Closed Position of the
+  // Instrument has gives no highlight.
+  closed: string | null
   onClose: () => void
 }
 
@@ -56,6 +63,7 @@ export function InstrumentOverviewPanel({
   accountId,
   ticker,
   currency,
+  closed,
   onClose,
 }: InstrumentOverviewPanelProps) {
   const { valuesVersion, refreshAllPrices } = useAppState()
@@ -118,7 +126,11 @@ export function InstrumentOverviewPanel({
                 data === null ? (
                   <UnknownInstrument ticker={ticker} />
                 ) : (
-                  <OverviewBody overview={data} currency={currency} />
+                  <OverviewBody
+                    overview={data}
+                    currency={currency}
+                    closed={closed}
+                  />
                 )
               }
             </LoadedView>
@@ -177,18 +189,28 @@ function PriceSourceLine({
 }
 
 // OverviewBody shows the price chart, the Holding and the open Lots of the Instrument.
-// A sold Instrument has no open Lots, so the list of its Fills stands in for them.
+// A fully sold Instrument has no Holding and no open Lots, so it shows the chart and the Closed Positions.
 function OverviewBody({
   overview,
   currency: accountCurrency,
+  closed,
 }: {
   overview: InstrumentOverview
   currency: string
+  closed: string | null
 }) {
-  const { prices, quoteCurrency, fills } = overview
+  const { prices, quoteCurrency, fills, closedPositions } = overview
+  const highlight = useMemo(
+    () =>
+      closedPositions.find(
+        (closedPosition) => closedPosition.xtbId === closed
+      ) ?? null,
+    [closedPositions, closed]
+  )
   const model = useMemo(
-    () => buildChartModel(prices, quoteCurrency, fills),
-    [prices, quoteCurrency, fills]
+    () =>
+      buildChartModel(prices, quoteCurrency, fills, closedPositions, highlight),
+    [prices, quoteCurrency, fills, closedPositions, highlight]
   )
   const { currency, mismatch } = model
   return (
@@ -206,7 +228,11 @@ function OverviewBody({
             <span aria-hidden className="text-chart-7">
               ▲
             </span>{" "}
-            Buy
+            Buy{" "}
+            <span aria-hidden className="text-chart-8">
+              ◆
+            </span>{" "}
+            Sell
           </span>
         </div>
         {prices.series.length === 0 && (
@@ -241,51 +267,25 @@ function OverviewBody({
         {model.unplaced > 0 && (
           <p className="text-xs text-muted-foreground">
             {model.unplaced === 1
-              ? "1 Fill has no price and no marker."
-              : `${model.unplaced} Fills have no price and no marker.`}
+              ? "1 buy or sell operation has no price and no marker."
+              : `${model.unplaced} buy or sell operations have no price and no marker.`}
           </p>
         )}
       </section>
       {overview.holding && (
         <HoldingSection holding={overview.holding} currency={accountCurrency} />
       )}
-      {overview.openLots.length > 0 ? (
+      {overview.openLots.length > 0 && (
         <LotList lots={overview.openLots} currency={accountCurrency} />
-      ) : (
-        <FillList overview={overview} />
+      )}
+      {closedPositions.length > 0 && (
+        <ClosedPositionList
+          closedPositions={closedPositions}
+          currency={accountCurrency}
+          highlightedId={highlight?.xtbId ?? null}
+        />
       )}
     </>
-  )
-}
-
-// FillList lists each Fill with its date, time, volume and price. It is the text alternative of the Fill markers.
-function FillList({ overview }: { overview: InstrumentOverview }) {
-  const { fills } = overview
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="font-heading text-sm font-medium">
-        Fills <span className="num text-muted-foreground">{fills.length}</span>
-      </h3>
-      <ul className="flex flex-col divide-y rounded-lg border text-sm">
-        {fills.map((fill) => (
-          <li
-            key={fill.xtbId}
-            className="flex items-baseline justify-between gap-3 px-3 py-2"
-          >
-            <span className="num">
-              {formatPolishDate(fill.time)}{" "}
-              <span className="text-xs text-muted-foreground">
-                {formatPolishTime(fill.time)}
-              </span>
-            </span>
-            <span className="num">
-              {formatVolume(fill.volume)} ×{" "}
-              {fill.price === null ? "—" : formatPrice(fill.price)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }
 
@@ -434,4 +434,103 @@ function LotList({
       </ul>
     </section>
   )
+}
+
+// ClosedPositionList lists the Closed Positions of the Instrument, newest first, with all their figures.
+// The highlighted one has a ring and scrolls into view.
+function ClosedPositionList({
+  closedPositions,
+  currency,
+  highlightedId,
+}: {
+  closedPositions: ClosedPosition[]
+  currency: string
+  highlightedId: string | null
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="font-heading text-sm font-medium">
+        Closed Positions{" "}
+        <span className="num text-muted-foreground">
+          {closedPositions.length}
+        </span>
+      </h3>
+      <ul className="flex flex-col divide-y rounded-lg border text-sm">
+        {closedPositions.toReversed().map((closedPosition) => (
+          <ClosedPositionRow
+            key={closedPosition.xtbId}
+            closedPosition={closedPosition}
+            currency={currency}
+            highlighted={closedPosition.xtbId === highlightedId}
+          />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+// ClosedPositionRow shows one Closed Position as pairs of a label and a value.
+function ClosedPositionRow({
+  closedPosition,
+  currency,
+  highlighted,
+}: {
+  closedPosition: ClosedPosition
+  currency: string
+  highlighted: boolean
+}) {
+  const ref = useRef<HTMLLIElement>(null)
+  useEffect(() => {
+    if (highlighted) ref.current?.scrollIntoView({ block: "nearest" })
+  }, [highlighted])
+  const figures: [string, ReactNode][] = [
+    ["Close date", formatPolishDate(closedPosition.time)],
+    ["Open date", formatPolishDate(closedPosition.openTime)],
+    ["Volume", formatVolume(closedPosition.volume)],
+    ["Cost", formatAmount(closedPosition.cost, currency)],
+    ["Open price", <OptionalPrice price={closedPosition.openPrice} />],
+    ["Close price", <OptionalPrice price={closedPosition.closePrice} />],
+    ["Sale amount", formatAmount(closedPosition.amount, currency)],
+    [
+      "Realized Profit",
+      <span
+        className={cn(
+          "font-medium",
+          signColour(amountSign(closedPosition.realizedProfit))
+        )}
+      >
+        {formatAmount(closedPosition.realizedProfit, currency, {
+          signed: true,
+        })}
+      </span>,
+    ],
+  ]
+  return (
+    <li
+      ref={ref}
+      aria-current={highlighted ? "true" : undefined}
+      data-highlighted={highlighted ? "" : undefined}
+      className={cn(
+        "flex flex-col gap-2 px-3 py-2.5",
+        highlighted && "bg-primary/10 ring-2 ring-primary ring-inset"
+      )}
+    >
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
+        {figures.map(([label, value]) => (
+          <div
+            key={label}
+            className="flex items-baseline justify-between gap-2"
+          >
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="text-right num">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </li>
+  )
+}
+
+// OptionalPrice shows a price with no currency symbol, or a dash when the price is absent.
+function OptionalPrice({ price }: { price: string | null }) {
+  return price === null ? <NoValue /> : <>{formatPrice(price)}</>
 }

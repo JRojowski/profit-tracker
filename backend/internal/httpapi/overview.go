@@ -25,6 +25,9 @@ type overviewResponse struct {
 	Holding *holdingResponse `json:"holding"`
 	// OpenLots are the Lots of the Instrument with an open volume. It is an empty array when there is none.
 	OpenLots []overviewOpenLot `json:"openLots"`
+	// ClosedPositions are the items of the Closed Positions endpoint for the Instrument, in the same order.
+	// It is an empty array when there is none.
+	ClosedPositions []closedPositionResponse `json:"closedPositions"`
 }
 
 // overviewOpenLot is the open part of one Lot.
@@ -142,6 +145,12 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 			Fills:      toOverviewFills([]ledger.Lot{{PositionID: lot.PositionID, Fills: lot.Fills}}),
 		})
 	}
+	closedPositions := []closedPositionResponse{}
+	for _, c := range view.state.ClosedPositions {
+		if c.Instrument.Ticker == ticker {
+			closedPositions = append(closedPositions, toClosedPositionResponse(c))
+		}
+	}
 	writeJSON(w, http.StatusOK, overviewResponse{
 		Ticker:              ticker,
 		Name:                lots[0].Instrument.Name,
@@ -150,6 +159,7 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 		Fills:               toOverviewFills(lots),
 		Holding:             holding,
 		OpenLots:            openLots,
+		ClosedPositions:     closedPositions,
 	})
 }
 
