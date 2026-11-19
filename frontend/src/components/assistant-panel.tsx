@@ -19,8 +19,10 @@ import { useAssistant, type AssistantTurn } from "@/lib/assistant-state"
 const failedAnswerText =
   "The Assistant cannot answer now. Try the question again later."
 
-// AssistantPanel shows the conversation with the Assistant in a panel at the right side. It is modal and it
-// stands above the Instrument Overview panel, so Escape closes it first.
+// AssistantPanel shows the conversation with the Assistant in a panel at the right side. Like the Instrument
+// Overview panel, it does not block the page: it has no overlay, and a click on the page does not close it.
+// It stands above the Instrument Overview panel. Escape closes it first, because it is the layer that opened
+// last, or because the Instrument Overview panel passes the key on to it.
 export function AssistantPanel() {
   const { available, open, setOpen, turns, asking, ask } = useAssistant()
   const [draft, setDraft] = useState("")
@@ -47,10 +49,12 @@ export function AssistantPanel() {
   }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetContent
         data-assistant-panel=""
         className="z-60 data-[side=right]:w-full data-[side=right]:sm:max-w-xl"
+        // A click on the page behind the panel must not close it. The panel closes with its own control and with Escape.
+        onInteractOutside={(event) => event.preventDefault()}
       >
         <SheetHeader className="gap-1.5 border-b pr-12">
           <SheetTitle>Assistant</SheetTitle>
