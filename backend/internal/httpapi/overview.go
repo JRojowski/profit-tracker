@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -29,6 +31,9 @@ type overviewResponse struct {
 	// ClosedPositions are the items of the Closed Positions endpoint for the Instrument, in the same order.
 	// It is an empty array when there is none.
 	ClosedPositions []closedPositionResponse `json:"closedPositions"`
+	// RealizedProfitSum is the sum of the Realized Profit of the Closed Positions above, in the Account currency, as decimal text.
+	// It is nil when the Instrument has no Closed Position on the Account.
+	RealizedProfitSum *string `json:"realizedProfitSum"`
 }
 
 // overviewOpenLot is the open part of one Lot.
@@ -147,9 +152,13 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	closedPositions := []closedPositionResponse{}
+	var realizedProfitSum *string
+	sum := decimal.Zero
 	for _, c := range view.state.ClosedPositions {
 		if c.Instrument.Ticker == ticker {
 			closedPositions = append(closedPositions, toClosedPositionResponse(c))
+			sum = sum.Add(c.RealizedProfit)
+			realizedProfitSum = new(formatAmount(sum))
 		}
 	}
 	writeJSON(w, http.StatusOK, overviewResponse{
@@ -161,6 +170,7 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 		Holding:             holding,
 		OpenLots:            openLots,
 		ClosedPositions:     closedPositions,
+		RealizedProfitSum:   realizedProfitSum,
 	})
 }
 
