@@ -392,6 +392,9 @@ export type InstrumentOverview = NamedPriceSource & {
   holding: Holding | null
   // openLots is empty exactly when holding is null.
   openLots: OverviewLot[]
+  // realizedProfitSum is the sum of the Realized Profit of the closedPositions, in the Account currency.
+  // The backend adds the amounts. It is null exactly when closedPositions is empty.
+  realizedProfitSum: string | null
   // closedPositions are in close time order, oldest first.
   closedPositions: ClosedPosition[]
 }

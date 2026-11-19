@@ -284,6 +284,12 @@ function OverviewBody({
       {overview.openLots.length > 0 && (
         <LotList lots={overview.openLots} currency={accountCurrency} />
       )}
+      {overview.realizedProfitSum !== null && (
+        <RealizedProfitSection
+          sum={overview.realizedProfitSum}
+          currency={accountCurrency}
+        />
+      )}
       {closedPositions.length > 0 && (
         <ClosedPositionList
           closedPositions={closedPositions}
@@ -381,6 +387,31 @@ function HoldingSection({
       {holding.note && (
         <p className="text-sm text-muted-foreground">{holding.note}</p>
       )}
+    </section>
+  )
+}
+
+// RealizedProfitSection shows the sum of the Realized Profit of all Closed Positions of the Instrument on the Account.
+// The backend adds the amounts. The section shows the sum with its sign and the profit colour.
+function RealizedProfitSection({
+  sum,
+  currency,
+}: {
+  sum: string
+  currency: string
+}) {
+  return (
+    <section>
+      <dl className="flex flex-col rounded-lg border px-3 text-sm">
+        <DetailRow label="Realized Profit">
+          <span
+            className={cn("font-medium", signColour(amountSign(sum)))}
+            data-realized-profit-sum=""
+          >
+            {formatAmount(sum, currency, { signed: true })}
+          </span>
+        </DetailRow>
+      </dl>
     </section>
   )
 }
