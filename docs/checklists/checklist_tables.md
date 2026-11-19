@@ -40,3 +40,34 @@ Narrow layout (390 px wide):
 - [ ] The Holding with no known value is not in the sums, and its cost is not in the cost sum.
 - [ ] On the narrow layout, the cards end with a card "Total" with the cost, the value, the profit and the percentage.
 - [ ] Check the light theme and the dark theme, at 1440 px and at 390 px. The page does not scroll sideways at 390 px.
+
+## 3. Column order and the stored view
+
+Spec: #48, ticket #50. Use the wide layout. The key of the Holdings table in `localStorage` is `profit-tracker:table:holdings`.
+
+- [ ] Each column header except "Instrument" has a small grip handle. "Instrument" has none.
+- [ ] Drag "Value" in front of "Volume". Move the pointer by more than 8 px. The header, all body cells and the "Total" row show the new order.
+- [ ] While you drag, the header moves only to the left and to the right.
+- [ ] Try to drag a column in front of "Instrument". The order does not change.
+- [ ] Try to drag "Instrument". It does not move.
+- [ ] Click "Cost". The rows sort and no drag starts. Click "Value" with Shift. "Value" is sort 2.
+- [ ] Press down the pointer on a header, move it less than 8 px and release. The click sorts and the order does not change.
+- [ ] Click "Instrument". The rows sort by ticker.
+- [ ] Reload. The column order and the sort are the same.
+- [ ] Use the keyboard: Tab to the handle of "Cost" (its name is "Move column Cost"). Press Space, press the left arrow key, press Space. The column moves one place to the left. The screen reader announces the move.
+- [ ] Press Space on a handle and press Escape. The order does not change.
+- [ ] "Reset columns" is disabled while the order is the default and there is no sort.
+- [ ] Move a column. "Reset columns" turns on. Click it. The default order and the default row order come back, the key is gone from `localStorage` and the button is disabled.
+- [ ] Put the text `{broken` in the key and reload. The default view shows and the console has no error.
+- [ ] Put `{"version":1,"columnOrder":["instrument","unknown"],"sorting":[]}` in the key and reload. The default view shows and the console has no error.
+- [ ] Put a valid sort and an unknown column order in the key. The sort stays and the column order is the default.
+- [ ] Put `{"version":2,"columnOrder":[],"sorting":[]}` in the key. The default view shows.
+- [ ] Block `localStorage` in the browser settings. The table shows and sorts. Moving a column works until the reload.
+- [ ] Open the Holdings page of another Account. It shows the same column order, because the key is for the table.
+
+Narrow layout (390 px wide):
+
+- [ ] The cards, the "Sort by" control and the total card are unchanged. No handle and no "Reset columns" button show.
+- [ ] The sort that you set on the cards is in the wide table after you widen the window.
+
+Check the light theme and the dark theme with a moved column.

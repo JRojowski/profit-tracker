@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 import { AllocationChart } from "@/components/allocation-donut"
 import { HoldingsTable } from "@/components/holdings-table"
 import { LoadedView } from "@/components/loaded-view"
@@ -5,6 +7,7 @@ import { UnrealizedProfitChart } from "@/components/unrealized-profit-chart"
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -19,6 +22,8 @@ import { useAccount } from "@/pages/account-layout"
 // the Unrealized Profit of each Holding and the table of the Holdings.
 export function AccountHoldingsPage() {
   const account = useAccount()
+  // actionSlot holds the "Reset columns" button, which the Holdings table renders in the card header.
+  const [actionSlot, setActionSlot] = useState<HTMLElement | null>(null)
   const { valuesVersion, refreshAllPrices } = useAppState()
   const holdings = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchHoldings(account.id, signal)
@@ -70,6 +75,7 @@ export function AccountHoldingsPage() {
               </Badge>
             )}
           </CardTitle>
+          <CardAction ref={setActionSlot} />
         </CardHeader>
         <CardContent>
           <LoadedView loaded={holdings} errorTitle="Cannot load the Holdings">
@@ -78,6 +84,7 @@ export function AccountHoldingsPage() {
                 holdings={data}
                 currency={account.currency}
                 onPriceSourceChanged={refreshAllPrices}
+                actionSlot={actionSlot}
               />
             )}
           </LoadedView>
