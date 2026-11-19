@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -26,6 +27,24 @@ type overviewResponse struct {
 	PriceConfirmed      bool                 `json:"priceConfirmed"`
 	Prices              overviewPrices       `json:"prices"`
 	Fills               []overviewFillResult `json:"fills"`
+	// Holding and OpenLots are checked in their own tests. The tests of the other fields leave them out.
+	Holding  json.RawMessage   `json:"holding"`
+	OpenLots []overviewOpenLot `json:"openLots"`
+}
+
+type overviewOpenLot struct {
+	PositionID string               `json:"positionId"`
+	Volume     string               `json:"volume"`
+	Cost       string               `json:"cost"`
+	OpenTime   string               `json:"openTime"`
+	OpenPrice  *string              `json:"openPrice"`
+	Fills      []overviewFillResult `json:"fills"`
+}
+
+// withoutLotData returns the overview with no Holding and no open Lots.
+func (o overviewResponse) withoutLotData() overviewResponse {
+	o.Holding, o.OpenLots = nil, nil
+	return o
 }
 
 type overviewPrices struct {
@@ -116,7 +135,7 @@ func TestInstrumentOverview_OpenHoldingWithNoSells_GivesIdentityPricesAndFill(t 
 		Fills: []overviewFillResult{
 			{XTBID: "902", Time: "2026-02-03T10:00:00Z", Volume: "2", Price: ptr("100"), PositionID: "9000000001"},
 		},
-	}, got)
+	}, got.withoutLotData())
 }
 
 func TestInstrumentOverview_LotWithTwoFills_GivesTwoFillsInTimeOrder(t *testing.T) {
@@ -221,4 +240,112 @@ func TestInstrumentOverview_Request_StartsNoPriceRefresh(t *testing.T) {
 
 	assert.Empty(t, provider.requestedTickers())
 	assert.Empty(t, provider.historyRequests())
+}
+
+// holdingRows returns the rows of GET /api/accounts/{id}/holdings as raw JSON, by ticker.
+func (s *testServer) holdingRows(t *testing.T, accountID int64) map[string]json.RawMessage {
+	t.Helper()
+
+	var rows []json.RawMessage
+	status := s.getJSON(t, fmt.Sprintf("/api/accounts/%d/holdings", accountID), &rows)
+	require.Equal(t, http.StatusOK, status)
+	byTicker := map[string]json.RawMessage{}
+	for _, row := range rows {
+		var id struct {
+			Ticker string `json:"ticker"`
+		}
+		require.NoError(t, json.Unmarshal(row, &id))
+		byTicker[id.Ticker] = row
+	}
+	return byTicker
+}
+
+func TestInstrumentOverview_OpenHolding_HoldingEqualsTheHoldingsRow(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, overviewExport(), "XTB USD")
+	srv.storeDailyCloses(t, "ABC.US", "USD", "2026-02-03=101", "2026-02-04=110")
+
+	got := srv.overview(t, accountID, "ABC.US")
+
+	row, ok := srv.holdingRows(t, accountID)["ABC.US"]
+	require.True(t, ok)
+	require.Contains(t, string(row), `"value":"220.00"`, "the Holding has a value, so the test compares real values")
+	assert.JSONEq(t, string(row), string(got.Holding))
+}
+
+func TestInstrumentOverview_HoldingWithNoPrice_HoldingEqualsTheHoldingsRow(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, overviewExport(), "XTB USD")
+
+	got := srv.overview(t, accountID, "ABC.US")
+
+	row := srv.holdingRows(t, accountID)["ABC.US"]
+	require.Contains(t, string(row), `"note":"There is no price`)
+	assert.JSONEq(t, string(row), string(got.Holding))
+}
+
+func TestInstrumentOverview_OpenLot_GivesVolumeCostOpenTimePriceAndFills(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// ADR 0002 example A: one Lot 2860602916 with two Fills, volume 1.27, purchase amount 49.87.
+	accountID := srv.importAccount(t, adr0002ExampleA(), "XTB USD")
+
+	got := srv.overview(t, accountID, "FPS.US")
+
+	require.Len(t, got.OpenLots, 1)
+	lot := got.OpenLots[0]
+	assert.Equal(t, "2860602916", lot.PositionID)
+	assert.Equal(t, "1.27", lot.Volume)
+	assert.Equal(t, "49.87", lot.Cost)
+	assert.Equal(t, "2026-02-03T09:30:00Z", lot.OpenTime)
+	// (0.27 × 39.37 + 1 × 39.24) / 1.27
+	require.NotNil(t, lot.OpenPrice)
+	assert.Equal(t, "39.2676377952755906", *lot.OpenPrice)
+	assert.Equal(t, got.Fills, lot.Fills, "the Lot has the Fills of the Instrument")
+}
+
+func TestInstrumentOverview_LotClosedInPart_OpenLotHasRemainingVolumeAndCostOfThatPart(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// ADR 0001 example 2: open volume 0.1134, cost 185.31 × 0.1134 / 0.2638 ≈ 79.66.
+	accountID := srv.importAccount(t, adrExample2(), "XTB PLN")
+
+	got := srv.overview(t, accountID, "XYZ.US")
+
+	require.Len(t, got.OpenLots, 1)
+	assert.Equal(t, "2026-02-02T10:00:00Z", got.OpenLots[0].OpenTime)
+	assert.Equal(t, "1349972184", got.OpenLots[0].PositionID)
+	assert.Equal(t, "0.1134", got.OpenLots[0].Volume)
+	assert.Equal(t, "79.66", cents(t, got.OpenLots[0].Cost))
+	require.Len(t, got.OpenLots[0].Fills, 1, "the Lot keeps its Fills")
+	assert.Equal(t, "0.2638", got.OpenLots[0].Fills[0].Volume)
+	var holding struct {
+		Volume string `json:"volume"`
+		Cost   string `json:"cost"`
+	}
+	require.NoError(t, json.Unmarshal(got.Holding, &holding))
+	assert.Equal(t, "0.1134", holding.Volume)
+	assert.Equal(t, got.OpenLots[0].Cost, holding.Cost)
+}
+
+func TestInstrumentOverview_FullySold_HasNullHoldingAndNoOpenLots(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	export := overviewExport()
+	export.CashOperations = append([]xtbtest.CashOperation{
+		{Type: "Stock sell", Ticker: "ABC.US", Instrument: "ABC Inc", Time: closeTime(5), Amount: "220.00", ID: "903", Comment: "CLOSE BUY 2/2 @ 110.00", PositionID: "9000000001"},
+	}, export.CashOperations...)
+	export.OpenLots = nil
+	export.ClosedPositions = []xtbtest.ClosedPosition{
+		{Ticker: "ABC.US", Instrument: "ABC Inc", Volume: "2", OpenTime: opTime(3), CloseTime: closeTime(5), ProfitLoss: "20.00", PositionID: "9000000001"},
+	}
+	accountID := srv.importAccount(t, export, "XTB USD")
+
+	status, _, body := srv.get(t, overviewPath(accountID, "ABC.US"))
+
+	require.Equal(t, http.StatusOK, status, "body %q", body)
+	assert.Contains(t, body, `"holding":null`)
+	assert.Contains(t, body, `"openLots":[]`, "the open Lots are an empty array, not null")
 }

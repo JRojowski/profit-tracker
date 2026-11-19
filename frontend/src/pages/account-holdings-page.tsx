@@ -80,7 +80,12 @@ export function AccountHoldingsPage() {
           </CardHeader>
           <CardContent>
             <LoadedView loaded={holdings} errorTitle="Cannot load the Holdings">
-              {(data) => <UnrealizedProfitChart holdings={data} />}
+              {(data) => (
+                <UnrealizedProfitChart
+                  holdings={data}
+                  onOpenOverview={overview.open}
+                />
+              )}
             </LoadedView>
           </CardContent>
         </Card>
@@ -111,7 +116,6 @@ export function AccountHoldingsPage() {
                 holdings={data}
                 columns={columns}
                 currency={account.currency}
-                onPriceSourceChanged={refreshAllPrices}
                 view={view.props}
                 onOpenOverview={overview.open}
               />
@@ -123,13 +127,7 @@ export function AccountHoldingsPage() {
         <InstrumentOverviewPanel
           accountId={account.id}
           ticker={overview.ticker}
-          warnings={
-            holdings.status === "ok"
-              ? (holdings.data.find(
-                  (holding) => holding.ticker === overview.ticker
-                )?.priceWarnings ?? [])
-              : []
-          }
+          currency={account.currency}
           onClose={overview.close}
         />
       )}

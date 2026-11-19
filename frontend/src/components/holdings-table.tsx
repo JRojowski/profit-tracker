@@ -17,7 +17,6 @@ import {
   formatAmount,
   formatDate,
   formatPercent,
-  formatRate,
   formatVolume,
   signColour,
 } from "@/lib/format"
@@ -39,8 +38,6 @@ type HoldingsTableProps = {
   // columns come from holdingColumns. The owner builds them once, for the table and for the view rules.
   columns: DataTableColumn<Holding>[]
   currency: string
-  // onPriceSourceChanged runs after the user changed the price source of an Instrument.
-  onPriceSourceChanged: () => void
   // view is the column order and the sorting, which the owner keeps with useTableView.
   view: TableViewProps
   // onOpenOverview opens the Instrument Overview of a Holding. A row of the wide table runs it.
@@ -61,14 +58,13 @@ export function holdingsViewRules(
 }
 
 // HoldingsTable shows the Holdings of an Account: a table on a wide screen and a list of compact rows on a narrow screen.
-// A row of the wide table opens the Instrument Overview. A row of the list opens the price source dialog.
+// A row of the wide table opens the Instrument Overview. A row of the list opens it too.
 // A Holding with a Price Warning has a badge.
 // A note under the table lists the Holdings with no value.
 export function HoldingsTable({
   holdings,
   columns,
   currency,
-  onPriceSourceChanged,
   view,
   onOpenOverview,
 }: HoldingsTableProps) {
@@ -98,7 +94,7 @@ export function HoldingsTable({
           totals={totals}
           sortOptions={columns.filter((column) => column.sortValue)}
           currency={currency}
-          onPriceSourceChanged={onPriceSourceChanged}
+          onOpenOverview={onOpenOverview}
           sorting={sorting}
           onSortingChange={onSortingChange}
         />
@@ -162,13 +158,6 @@ export function holdingColumns(
       cell: ({ row }) => formatVolume(row.original.volume),
     },
     {
-      id: "averageCost",
-      header: "Average cost",
-      meta: { align: "right" },
-      sortValue: (holding) => decimalSortValue(holding.averageCost),
-      cell: ({ row }) => formatAmount(row.original.averageCost, currency),
-    },
-    {
       id: "cost",
       header: "Cost",
       meta: { align: "right" },
@@ -189,25 +178,6 @@ export function holdingColumns(
               holding.quoteCurrency ?? currency
             )}
             sub={formatDate(holding.priceDate)}
-          />
-        ) : (
-          <NoValue />
-        )
-      },
-    },
-    {
-      id: "exchangeRate",
-      header: "Exchange Rate",
-      meta: { align: "right" },
-      sortValue: (holding) => decimalSortValue(holding.exchangeRate),
-      cell: ({ row }) => {
-        const holding = row.original
-        return holding.exchangeRate !== null &&
-          holding.exchangeRateCurrency !== null &&
-          holding.exchangeRateDate !== null ? (
-          <Stacked
-            main={`1 ${holding.exchangeRateCurrency} = ${formatRate(holding.exchangeRate)} PLN`}
-            sub={formatDate(holding.exchangeRateDate)}
           />
         ) : (
           <NoValue />
@@ -272,7 +242,7 @@ export function holdingColumns(
 }
 
 // ProfitFigure shows an Unrealized Profit with its percentage under it, in the colour of its sign.
-function ProfitFigure({
+export function ProfitFigure({
   profit,
   percent,
   currency,
@@ -389,14 +359,13 @@ function WideTable({
 }
 
 // HoldingRows shows a select control for the sort, each Holding as one compact row, and the totals as the last row.
-// A tap on a row opens the price source dialog.
-// The badge of a Price Warning is inside the row button, so the tap on the row opens the dialog with the warnings.
+// A tap on a row opens the Instrument Overview, which has the price source control and the Price Warnings.
 function HoldingRows({
   holdings,
   totals,
   sortOptions,
   currency,
-  onPriceSourceChanged,
+  onOpenOverview,
   sorting,
   onSortingChange,
 }: SortingProps & {
@@ -404,7 +373,7 @@ function HoldingRows({
   totals: HoldingTotals
   sortOptions: DataTableColumn<Holding>[]
   currency: string
-  onPriceSourceChanged: () => void
+  onOpenOverview: (ticker: string) => void
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -416,64 +385,56 @@ function HoldingRows({
       <ul className="-mx-4 flex flex-col divide-y border-y">
         {holdings.map((holding) => (
           <li key={holding.ticker}>
-            <PriceSourceDialog
-              instrument={holding}
-              warnings={holding.priceWarnings}
-              onChanged={onPriceSourceChanged}
-              trigger={
-                <button
-                  type="button"
-                  className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
-                >
-                  <span className="flex min-w-0 flex-col gap-1">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-medium">
-                        {holding.ticker}
-                      </span>
-                      {holding.quoteCurrency && (
-                        <CurrencyBadge currency={holding.quoteCurrency} />
-                      )}
-                    </span>
-                    {holding.priceWarnings.length > 0 && <PriceWarningBadge />}
-                    <span className="num text-xs text-muted-foreground">
-                      {formatVolume(holding.volume)} ×{" "}
-                      {holding.price !== null
-                        ? formatAmount(
-                            holding.price,
-                            holding.quoteCurrency ?? currency
-                          )
-                        : "—"}
-                    </span>
-                    <span className="sr-only">Edit the price source.</span>
+            <button
+              type="button"
+              onClick={() => onOpenOverview(holding.ticker)}
+              className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+            >
+              <span className="flex min-w-0 flex-col gap-1">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate font-medium">{holding.ticker}</span>
+                  {holding.quoteCurrency && (
+                    <CurrencyBadge currency={holding.quoteCurrency} />
+                  )}
+                </span>
+                {holding.priceWarnings.length > 0 && <PriceWarningBadge />}
+                <span className="num text-xs text-muted-foreground">
+                  {formatVolume(holding.volume)} ×{" "}
+                  {holding.price !== null
+                    ? formatAmount(
+                        holding.price,
+                        holding.quoteCurrency ?? currency
+                      )
+                    : "—"}
+                </span>
+                <span className="sr-only">Open the Instrument Overview.</span>
+              </span>
+              <span className="flex shrink-0 flex-col items-end gap-1">
+                {holding.value !== null ? (
+                  <span className="num text-sm font-medium">
+                    {formatAmount(holding.value, currency)}
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    {holding.value !== null ? (
-                      <span className="num text-sm font-medium">
-                        {formatAmount(holding.value, currency)}
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">
-                        No value
-                      </span>
-                    )}
-                    {holding.unrealizedProfit !== null && (
-                      <span
-                        className={cn(
-                          "num text-xs",
-                          signColour(amountSign(holding.unrealizedProfit))
-                        )}
-                      >
-                        {formatAmount(holding.unrealizedProfit, currency, {
-                          signed: true,
-                        })}
-                        {holding.unrealizedProfitPercent !== null &&
-                          ` (${formatPercent(holding.unrealizedProfitPercent, { signed: true })})`}
-                      </span>
-                    )}
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    No value
                   </span>
-                </button>
-              }
-            />
+                )}
+                {holding.unrealizedProfit !== null && (
+                  <span
+                    className={cn(
+                      "num text-xs",
+                      signColour(amountSign(holding.unrealizedProfit))
+                    )}
+                  >
+                    {formatAmount(holding.unrealizedProfit, currency, {
+                      signed: true,
+                    })}
+                    {holding.unrealizedProfitPercent !== null &&
+                      ` (${formatPercent(holding.unrealizedProfitPercent, { signed: true })})`}
+                  </span>
+                )}
+              </span>
+            </button>
           </li>
         ))}
         <li className="flex items-start justify-between gap-3 bg-muted/50 px-4 py-3 font-medium">
@@ -536,7 +497,7 @@ function NoValueNote({ holdings }: { holdings: Holding[] }) {
 }
 
 // Stacked shows a value with a small muted line under it, for example a price and its date.
-function Stacked({ main, sub }: { main: string; sub: string }) {
+export function Stacked({ main, sub }: { main: string; sub: string }) {
   return (
     <div className="flex flex-col">
       <span>{main}</span>
@@ -547,6 +508,6 @@ function Stacked({ main, sub }: { main: string; sub: string }) {
 
 // NoValue marks an empty cell. The note under the table tells why a Holding has no value.
 // A Holding in the Account currency has no Exchange Rate.
-function NoValue() {
+export function NoValue() {
   return <span className="text-muted-foreground">—</span>
 }

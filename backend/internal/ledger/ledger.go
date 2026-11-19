@@ -162,6 +162,8 @@ type State struct {
 	Flows []returns.Flow
 	// Holdings has one Holding per Instrument with an open volume, in ticker order.
 	Holdings []Holding
+	// OpenLots are the Lots with an open volume, with the open part of each. The order is the order of Ledger.Lots.
+	OpenLots []OpenLot
 	// ClosedPositions are the Stock sell operations with their Realized Profit, in time order and then in XTB ID order.
 	ClosedPositions []ClosedPosition
 	// RealizedProfit is the sum of the Realized Profit of the Closed Positions.
@@ -208,6 +210,23 @@ type ClosedPosition struct {
 	OpenPrice decimal.NullDecimal
 	// ClosePrice is the stored price of the sell Cash Operation. It is not valid if the operation has no price.
 	ClosePrice decimal.NullDecimal
+}
+
+// OpenLot is the open part of one Lot. The Holding of its Instrument adds up the open Lots.
+type OpenLot struct {
+	// PositionID is the Lot ID.
+	PositionID string
+	Instrument Instrument
+	// Volume is the open volume: the Lot volume minus the volume of its Closed Positions.
+	Volume decimal.Decimal
+	// Cost is the open cost in the Account currency. ADR 0001, rule 5.
+	Cost decimal.Decimal
+	// OpenTime is the time of the first Fill of the Lot.
+	OpenTime time.Time
+	// OpenPrice is the average of the Fill prices of the Lot, weighted by volume. It is not valid if a Fill has no price.
+	OpenPrice decimal.NullDecimal
+	// Fills are all Fills of the Lot, also the Fills that a Closed Position closed.
+	Fills []Fill
 }
 
 // Holding is all open Lots of one Instrument, taken together.
@@ -281,6 +300,7 @@ func Calculate(l Ledger) (State, error) {
 	}
 	s.ClosedPositions = closedPositions
 	s.Holdings = holdings(l, lots)
+	s.OpenLots = openLots(l, lots)
 	for _, closedPosition := range closedPositions {
 		s.RealizedProfit = s.RealizedProfit.Add(closedPosition.RealizedProfit)
 	}
@@ -437,6 +457,22 @@ func closeLots(ops []CashOperation, lots map[string]*lotState) ([]ClosedPosition
 		return cmp.Or(a.Time.Compare(b.Time), cmp.Compare(a.XTBID, b.XTBID))
 	})
 	return closedPositions, nil
+}
+
+// openLots returns the Lots with an open volume, with their open volume and open cost.
+func openLots(l Ledger, states map[string]*lotState) []OpenLot {
+	result := []OpenLot{}
+	for _, lot := range l.Lots {
+		st := states[lot.PositionID]
+		if !st.openVolume().IsPositive() {
+			continue
+		}
+		result = append(result, OpenLot{
+			PositionID: lot.PositionID, Instrument: lot.Instrument, Volume: st.openVolume(), Cost: st.openCost(),
+			OpenTime: st.openTime, OpenPrice: st.openPrice, Fills: lot.Fills,
+		})
+	}
+	return result
 }
 
 // holdings adds the open part of the Lots per Instrument. A fully closed Lot adds nothing.

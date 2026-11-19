@@ -370,12 +370,28 @@ export type OverviewFill = {
   positionId: string
 }
 
+// OverviewLot is one open Lot of the Instrument. volume and cost are the open part of the Lot.
+export type OverviewLot = {
+  positionId: string
+  volume: string
+  cost: string
+  // openTime is an RFC 3339 time in UTC: the time of the first Fill.
+  openTime: string
+  // openPrice is the average Fill price of the whole Lot, or null when a Fill has no price.
+  openPrice: string | null
+  fills: OverviewFill[]
+}
+
 // InstrumentOverview is the Instrument Overview of one Instrument on one Account.
 // The series is in ascending date order and can have gaps. currency is null exactly when the series is empty.
 export type InstrumentOverview = NamedPriceSource & {
   prices: { currency: string | null; series: OverviewPrice[] }
   // fills are in ascending time order.
   fills: OverviewFill[]
+  // holding is null when the Account has no open volume of the Instrument.
+  holding: Holding | null
+  // openLots is empty exactly when holding is null.
+  openLots: OverviewLot[]
 }
 
 // fetchInstrumentOverview loads the Instrument Overview of one Instrument on one Account.

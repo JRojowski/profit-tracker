@@ -376,6 +376,7 @@ func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []h
 	for _, c := range closedPositions {
 		tickers[c.Ticker] = true
 	}
+	rows := srv.holdingRows(t, accountID)
 	for ticker := range tickers {
 		var got overviewResponse
 		status := srv.getJSON(t, overviewPath(accountID, url.PathEscape(ticker)), &got)
@@ -385,6 +386,14 @@ func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []h
 		assert.NotNil(t, got.Prices.Series, "%s: the series is never null", ticker)
 		for i := 1; i < len(got.Prices.Series); i++ {
 			assert.Less(t, got.Prices.Series[i-1].Date, got.Prices.Series[i].Date, "%s: the series is in date order", ticker)
+		}
+
+		// The Holding of the overview is the row of the Holdings endpoint, or null if there is no row.
+		if row, ok := rows[ticker]; ok {
+			assert.JSONEq(t, string(row), string(got.Holding), "%s: the Holding equals the Holdings row", ticker)
+		} else {
+			assert.Equal(t, "null", string(got.Holding), "%s: no open volume gives no Holding", ticker)
+			assert.Empty(t, got.OpenLots, "%s: no open volume gives no open Lots", ticker)
 		}
 
 		lots := map[string]bool{}

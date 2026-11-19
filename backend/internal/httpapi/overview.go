@@ -21,6 +21,24 @@ type overviewResponse struct {
 	Prices overviewPrices `json:"prices"`
 	// Fills are the Fills of the Instrument on the Account, in time order.
 	Fills []overviewFill `json:"fills"`
+	// Holding is the same row as the Holdings endpoint gives for the Instrument. It is nil when the Account has no open volume.
+	Holding *holdingResponse `json:"holding"`
+	// OpenLots are the Lots of the Instrument with an open volume. It is an empty array when there is none.
+	OpenLots []overviewOpenLot `json:"openLots"`
+}
+
+// overviewOpenLot is the open part of one Lot.
+type overviewOpenLot struct {
+	PositionID string `json:"positionId"`
+	// Volume is the open volume. Cost is the open cost in the Account currency. Both are decimal text.
+	Volume string `json:"volume"`
+	Cost   string `json:"cost"`
+	// OpenTime is the time of the first Fill, RFC 3339 text in UTC.
+	OpenTime string `json:"openTime"`
+	// OpenPrice is the average of the Fill prices weighted by volume. It is nil if a Fill has no price.
+	OpenPrice *string `json:"openPrice"`
+	// Fills are all Fills of the Lot, in time order.
+	Fills []overviewFill `json:"fills"`
 }
 
 // overviewPrices is the daily price series of an Instrument. The prices are raw (ADR 0005).
@@ -60,19 +78,20 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	if _, err := a.store.Account(ctx, id); err != nil {
+	acc, err := a.store.Account(ctx, id)
+	if err != nil {
 		a.writeAccountError(w, r, err)
 		return
 	}
 	ticker := r.PathValue("ticker")
-	l, err := a.store.Ledger(ctx, id)
+	in, err := a.readHeroInput(ctx, acc)
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
 	}
 	// The Ledger has a Lot for each Instrument that the Account ever held, also for a sold one.
 	var lots []ledger.Lot
-	for _, lot := range l.Lots {
+	for _, lot := range in.ledger.Lots {
 		if lot.Instrument.Ticker == ticker {
 			lots = append(lots, lot)
 		}
@@ -91,12 +110,46 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 		a.writeInternalError(w, r, err)
 		return
 	}
+	// The Holding and the open Lots come from the Ledger calculator, like the Holdings endpoint.
+	view, err := viewOf(acc, in)
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
+	warnings, err := a.readAllPriceWarnings(ctx)
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
+	var holding *holdingResponse
+	for _, h := range view.state.Holdings {
+		if h.Instrument.Ticker == ticker {
+			row := view.holdingRow(h, warnings)
+			holding = &row
+		}
+	}
+	openLots := []overviewOpenLot{}
+	for _, lot := range view.state.OpenLots {
+		if lot.Instrument.Ticker != ticker {
+			continue
+		}
+		openLots = append(openLots, overviewOpenLot{
+			PositionID: lot.PositionID,
+			Volume:     lot.Volume.String(),
+			Cost:       formatAmount(lot.Cost),
+			OpenTime:   lot.OpenTime.UTC().Format(time.RFC3339),
+			OpenPrice:  nullPrice(lot.OpenPrice),
+			Fills:      toOverviewFills([]ledger.Lot{{PositionID: lot.PositionID, Fills: lot.Fills}}),
+		})
+	}
 	writeJSON(w, http.StatusOK, overviewResponse{
 		Ticker:              ticker,
 		Name:                lots[0].Instrument.Name,
 		priceSourceResponse: toPriceSourceResponse(inst),
 		Prices:              toOverviewPrices(prices),
 		Fills:               toOverviewFills(lots),
+		Holding:             holding,
+		OpenLots:            openLots,
 	})
 }
 
