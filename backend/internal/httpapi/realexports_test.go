@@ -376,7 +376,7 @@ func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []h
 	for _, c := range closedPositions {
 		tickers[c.Ticker] = true
 	}
-	rows := srv.holdingRows(t, accountID)
+	holdingRows := srv.holdingRows(t, accountID)
 	for ticker := range tickers {
 		var got overviewResponse
 		status := srv.getJSON(t, overviewPath(accountID, url.PathEscape(ticker)), &got)
@@ -389,14 +389,16 @@ func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []h
 		}
 
 		// The Holding of the overview is the row of the Holdings endpoint, or null if there is no row.
-		if row, ok := rows[ticker]; ok {
+		if row, ok := holdingRows[ticker]; ok {
 			assert.JSONEq(t, string(row), string(got.Holding), "%s: the Holding equals the Holdings row", ticker)
 		} else {
 			assert.Equal(t, "null", string(got.Holding), "%s: no open volume gives no Holding", ticker)
 			assert.Empty(t, got.OpenLots, "%s: no open volume gives no open Lots", ticker)
 		}
 
-		assertSameJSON(t, srv.closedPositionRows(t, accountID, ticker), got.ClosedPositions)
+		rows := srv.closedPositionRows(t, accountID, ticker)
+		assertSameJSON(t, rows, got.ClosedPositions)
+		assertRealizedProfitSum(t, ticker, rows, got.RealizedProfitSum)
 
 		lots := map[string]bool{}
 		volume := decimal.Zero
@@ -416,4 +418,22 @@ func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []h
 			}
 		}
 	}
+}
+
+// assertRealizedProfitSum checks that the sum is the total of the Realized Profit of the Closed Positions, or nil when there is none.
+func assertRealizedProfitSum(t *testing.T, ticker string, closedPositions []json.RawMessage, got *string) {
+	t.Helper()
+
+	if len(closedPositions) == 0 {
+		assert.Nil(t, got, "%s: no Closed Position gives no sum", ticker)
+		return
+	}
+	want := decimal.Zero
+	for _, item := range closedPositions {
+		var c closedPositionResponse
+		require.NoError(t, json.Unmarshal(item, &c))
+		want = want.Add(decimal.RequireFromString(c.RealizedProfit))
+	}
+	require.NotNil(t, got, "%s: the Closed Positions give a sum", ticker)
+	assert.True(t, want.Equal(decimal.RequireFromString(*got)), "%s: want sum %s, got %s", ticker, want, *got)
 }

@@ -32,6 +32,8 @@ type overviewResponse struct {
 	OpenLots []overviewOpenLot `json:"openLots"`
 	// ClosedPositions are the items of the Closed Positions endpoint, as raw JSON.
 	ClosedPositions []json.RawMessage `json:"closedPositions"`
+	// RealizedProfitSum is decimal text, or nil when the Instrument has no Closed Position on the Account.
+	RealizedProfitSum *string `json:"realizedProfitSum"`
 }
 
 type overviewOpenLot struct {
@@ -45,7 +47,7 @@ type overviewOpenLot struct {
 
 // withoutLotData returns the overview with no Holding and no open Lots.
 func (o overviewResponse) withoutLotData() overviewResponse {
-	o.Holding, o.OpenLots, o.ClosedPositions = nil, nil, nil
+	o.Holding, o.OpenLots, o.ClosedPositions, o.RealizedProfitSum = nil, nil, nil, nil
 	return o
 }
 
@@ -469,4 +471,62 @@ func TestInstrumentOverview_ClosesInTwoCurrencies_SeriesHasOnlyTheCurrencyOfTheN
 		Currency: ptr("USD"),
 		Series:   []overviewPoint{{Date: "2026-02-05", Close: "101"}, {Date: "2026-02-06", Close: "102"}},
 	}, got.Prices)
+}
+
+func TestInstrumentOverview_LotClosedInParts_RealizedProfitSumAddsTheClosedPositions(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// ADR 0001 example 1: the Realized Profit is -6.12 and -0.66.
+	accountID := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
+
+	got := srv.overview(t, accountID, "ABC.PL")
+
+	assert.Equal(t, ptr("-6.78"), got.RealizedProfitSum)
+}
+
+func TestInstrumentOverview_LotClosedInPartWithOpenRest_RealizedProfitSumHasOnlyTheClosedPart(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	// ADR 0001 example 2: the Realized Profit is 57.08 and the Holding stays open.
+	accountID := srv.importAccount(t, adrExample2(), "XTB PLN")
+
+	got := srv.overview(t, accountID, "XYZ.US")
+
+	require.NotNil(t, got.RealizedProfitSum)
+	assert.Equal(t, "57.08", cents(t, *got.RealizedProfitSum), "ADR 0001: the sum is exact and the display rounds")
+	assert.NotEqual(t, "null", string(got.Holding))
+}
+
+func TestInstrumentOverview_NoClosedPositions_RealizedProfitSumIsNull(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, overviewExport(), "XTB USD")
+
+	_, _, body := srv.get(t, overviewPath(accountID, "ABC.US"))
+
+	assert.Contains(t, body, `"realizedProfitSum":null`)
+}
+
+func TestInstrumentOverview_SameInstrumentOnTwoAccounts_EachAccountGivesItsOwnRealizedProfitSum(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	first := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
+	other := adrExample1("-6.12", "-0.66")
+	other.AccountNumber = "50000099"
+	for i := range other.CashOperations {
+		other.CashOperations[i].ID += "9"
+		if other.CashOperations[i].PositionID != "" {
+			other.CashOperations[i].PositionID = "2636599999"
+		}
+	}
+	for i := range other.ClosedPositions {
+		other.ClosedPositions[i].PositionID = "2636599999"
+	}
+	// The second Account sells only the 9/10 part of its Lot.
+	other.CashOperations = append(other.CashOperations[:0:0], other.CashOperations[1:]...)
+	other.ClosedPositions = other.ClosedPositions[1:]
+	second := srv.importAccount(t, other, "XTB PLN 2")
+
+	assert.Equal(t, ptr("-6.78"), srv.overview(t, first, "ABC.PL").RealizedProfitSum)
+	assert.Equal(t, ptr("-6.12"), srv.overview(t, second, "ABC.PL").RealizedProfitSum)
 }
