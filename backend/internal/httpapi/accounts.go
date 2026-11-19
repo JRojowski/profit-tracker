@@ -170,8 +170,13 @@ func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	writeJSON(w, http.StatusOK, a.summaryOf(view))
+}
+
+// summaryOf returns the summary of the Account of the view.
+func (a *api) summaryOf(view accountView) summaryResponse {
 	state := view.state
-	writeJSON(w, http.StatusOK, summaryResponse{
+	return summaryResponse{
 		AccountID:        view.account.ID,
 		Currency:         view.account.Currency,
 		Cash:             formatAmount(state.Cash),
@@ -192,7 +197,7 @@ func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 		SimpleReturnNote: returnNote(state.SimpleReturn),
 		AnnualReturn:     percent(state.AnnualReturn),
 		AnnualReturnNote: returnNote(state.AnnualReturn),
-	})
+	}
 }
 
 // accountHoldings returns the Holdings of the Account with their value, ordered by ticker.

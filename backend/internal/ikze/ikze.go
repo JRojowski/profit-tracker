@@ -72,15 +72,33 @@ func Years(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bo
 	// If each contribution is after the current year, there is no row.
 	years := make([]Year, 0, max(current-first+1, 0))
 	for year := current; year >= first; year-- {
-		y := Year{Year: year, Contributions: byYear[year]}
-		y.Limit, y.HasLimit = limit(year)
-		if y.HasLimit {
-			y.Unused = decimal.Max(y.Limit.Sub(y.Contributions), decimal.Zero)
-			y.OverLimit = decimal.Max(y.Contributions.Sub(y.Limit), decimal.Zero)
-		}
+		y := yearOf(year, byYear[year], limit)
 		years = append(years, y)
 	}
 	return years
+}
+
+// ForYear returns the Year of one calendar year in the location. Unlike Years, it returns a Year
+// for each year, also for a year with no IKZE Contribution and for a year after the current one.
+func ForYear(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bool), year int, loc *time.Location) Year {
+	contributions := decimal.Zero
+	for _, op := range ops {
+		if isContribution(op) && op.Time.In(loc).Year() == year {
+			contributions = contributions.Add(op.Amount)
+		}
+	}
+	return yearOf(year, contributions, limit)
+}
+
+// yearOf returns the Year with the limit of the year, if the limit is known.
+func yearOf(year int, contributions decimal.Decimal, limit func(year int) (decimal.Decimal, bool)) Year {
+	y := Year{Year: year, Contributions: contributions}
+	y.Limit, y.HasLimit = limit(year)
+	if y.HasLimit {
+		y.Unused = decimal.Max(y.Limit.Sub(y.Contributions), decimal.Zero)
+		y.OverLimit = decimal.Max(y.Contributions.Sub(y.Limit), decimal.Zero)
+	}
+	return y
 }
 
 // isContribution tells if op is an IKZE Contribution: a Deposit or a Transfer In.

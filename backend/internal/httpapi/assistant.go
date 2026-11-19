@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
+	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
 // availabilityResponse is the body of GET /api/assistant.
@@ -41,6 +44,25 @@ type pageContext struct {
 	Instrument *string `json:"instrument"`
 }
 
+// DefaultAssistantTimeout is the time limit of one question to the Assistant. A free model can need some tens
+// of seconds for one model call, and a question can need some calls.
+const DefaultAssistantTimeout = 2 * time.Minute
+
+// The codes of the errors of the Assistant. The frontend shows one message for each code.
+const (
+	codeNotConfigured  = "not_configured"
+	codeInvalidRequest = "invalid_request"
+	codeProviderFailed = "provider_failure"
+	codeRateLimited    = "rate_limited"
+)
+
+// maxMessages is the largest number of messages in a question request. The backend keeps no conversation,
+// so the limit protects the model and the cost.
+const maxMessages = 40
+
+// maxMessageLength is the largest length of one message, in characters.
+const maxMessageLength = 4000
+
 // maxQuestionBody is the largest body of a question request. A long conversation is some kilobytes.
 const maxQuestionBody = 1 << 20
 
@@ -64,19 +86,28 @@ func (a *api) assistantAvailability(w http.ResponseWriter, _ *http.Request) {
 // askAssistant answers one question of the user.
 func (a *api) askAssistant(w http.ResponseWriter, r *http.Request) {
 	if a.model == nil {
-		writeError(w, http.StatusServiceUnavailable, "the Assistant is not configured")
+		writeCodedError(w, http.StatusServiceUnavailable, codeNotConfigured, "the Assistant is not configured")
 		return
 	}
 	var req questionRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxQuestionBody)).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "the body is not valid JSON: "+err.Error())
+		writeCodedError(w, http.StatusBadRequest, codeInvalidRequest, "the body is not valid JSON: "+err.Error())
 		return
 	}
 	if err := req.validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeCodedError(w, http.StatusBadRequest, codeInvalidRequest, err.Error())
 		return
 	}
-	instructions, err := a.assistantInstructions(r.Context())
+	page, problem, err := a.assistantPage(r.Context(), req.Context)
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
+	if problem != "" {
+		writeCodedError(w, http.StatusBadRequest, codeInvalidRequest, problem)
+		return
+	}
+	instructions, err := a.assistantInstructions(r.Context(), page)
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
@@ -87,10 +118,10 @@ func (a *api) askAssistant(w http.ResponseWriter, r *http.Request) {
 		messages = append(messages, assistant.Message{Role: assistant.Role(m.Role), Content: m.Content})
 	}
 
-	answer, err := assistant.Ask(r.Context(), a.model, messages, a.assistantFunctions())
-	if errors.Is(err, assistant.ErrModel) {
-		a.logger.ErrorContext(r.Context(), "the provider of the Assistant does not answer", "error", err)
-		writeError(w, http.StatusBadGateway, "the provider of the Assistant does not answer")
+	ctx, cancel := context.WithTimeout(r.Context(), a.questionTimeout)
+	defer cancel()
+	answer, err := assistant.Ask(ctx, a.model, messages, a.assistantFunctions())
+	if err != nil && a.writeModelError(ctx, w, err) {
 		return
 	}
 	if err != nil {
@@ -104,10 +135,31 @@ func (a *api) askAssistant(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, answerResponse{Answer: answer.Text, Steps: steps})
 }
 
+// writeModelError writes the error response if err comes from the provider of the model or from the time limit.
+// It returns false for another error, and writes nothing then.
+func (a *api) writeModelError(ctx context.Context, w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, assistant.ErrRateLimited):
+		a.logger.WarnContext(ctx, "the provider of the Assistant refuses the question", "error", err)
+		writeCodedError(w, http.StatusTooManyRequests, codeRateLimited,
+			"the provider of the Assistant refuses the question because of a rate limit. "+
+				"The daily limit of the free model can be the cause. Try again later.")
+	case errors.Is(err, assistant.ErrModel), errors.Is(ctx.Err(), context.DeadlineExceeded):
+		a.logger.ErrorContext(ctx, "the provider of the Assistant does not answer", "error", err)
+		writeCodedError(w, http.StatusBadGateway, codeProviderFailed, "the provider of the Assistant does not answer")
+	default:
+		return false
+	}
+	return true
+}
+
 // validate returns an error if the request is not valid.
 func (q questionRequest) validate() error {
 	if len(q.Messages) == 0 {
 		return errors.New("the request has no messages")
+	}
+	if len(q.Messages) > maxMessages {
+		return fmt.Errorf("the request has %d messages: the limit is %d", len(q.Messages), maxMessages)
 	}
 	for i, m := range q.Messages {
 		if m.Role != string(assistant.RoleUser) && m.Role != string(assistant.RoleAssistant) {
@@ -115,6 +167,9 @@ func (q questionRequest) validate() error {
 		}
 		if strings.TrimSpace(m.Content) == "" {
 			return fmt.Errorf("message %d has no content", i+1)
+		}
+		if n := utf8.RuneCountInString(m.Content); n > maxMessageLength {
+			return fmt.Errorf("message %d has %d characters: the limit is %d", i+1, n, maxMessageLength)
 		}
 	}
 	if q.Messages[len(q.Messages)-1].Role != string(assistant.RoleUser) {
@@ -125,7 +180,7 @@ func (q questionRequest) validate() error {
 
 // assistantInstructions returns the instructions for the model, with the date of today in Polish time and
 // the Accounts. The Accounts have no broker account number.
-func (a *api) assistantInstructions(ctx context.Context) (string, error) {
+func (a *api) assistantInstructions(ctx context.Context, page *assistant.Page) (string, error) {
 	accounts, err := a.store.Accounts(ctx)
 	if err != nil {
 		return "", err
@@ -134,7 +189,37 @@ func (a *api) assistantInstructions(ctx context.Context) (string, error) {
 	for _, acc := range accounts {
 		list = append(list, assistant.Account{ID: acc.ID, Name: acc.Name, Type: acc.Type, Currency: acc.Currency})
 	}
-	return assistant.Instructions(exchange.StartOfDayInWarsaw(a.now()), list), nil
+	return assistant.Instructions(exchange.StartOfDayInWarsaw(a.now()), list, page), nil
+}
+
+// assistantPage resolves the page context of the request. It returns nil if the request has no page context.
+// An unknown Account gives a problem text for the 400 error. An unknown Instrument is left out. The ticker has the case of the
+// Instrument in the tool, so that the instructions never hold text that the user typed.
+func (a *api) assistantPage(ctx context.Context, c *pageContext) (*assistant.Page, string, error) {
+	if c == nil {
+		return nil, "", nil
+	}
+	var page assistant.Page
+	if c.AccountID != nil {
+		acc, err := a.store.Account(ctx, *c.AccountID)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Sprintf("the context has an unknown Account %d", *c.AccountID), nil
+		}
+		if err != nil {
+			return nil, "", err
+		}
+		page.Account = &assistant.Account{ID: acc.ID, Name: acc.Name, Type: acc.Type, Currency: acc.Currency}
+	}
+	if c.Instrument != nil && *c.Instrument != "" {
+		ticker, err := a.assistantInstrument(ctx, *c.Instrument)
+		var argErr *assistant.ArgumentError
+		// An old link can hold a ticker that the tool does not know. The page then has no Instrument.
+		if err != nil && !errors.As(err, &argErr) {
+			return nil, "", err
+		}
+		page.Instrument = ticker
+	}
+	return &page, "", nil
 }
 
 // stepArguments returns the arguments of a step for the response. Arguments that are not a JSON object

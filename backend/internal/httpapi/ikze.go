@@ -8,6 +8,7 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/ikze"
 	"github.com/jrojowski/profit-tracker/backend/internal/importer"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
+	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
 // ikzeLimitResponse is the body of GET /api/accounts/{id}/ikze-limit.
@@ -47,8 +48,7 @@ func (a *api) accountIKZELimit(w http.ResponseWriter, r *http.Request) {
 	}
 	// The IKZE Limits are in PLN. The import accepts an IKZE Account in each currency.
 	if acc.Currency != ledger.PLN {
-		writeError(w, http.StatusBadRequest,
-			fmt.Sprintf("account %d has the currency %s. The IKZE Limit needs an Account in PLN.", acc.ID, acc.Currency))
+		writeError(w, http.StatusBadRequest, ikzeCurrencyMessage(acc))
 		return
 	}
 	l, err := a.store.Ledger(r.Context(), acc.ID)
@@ -62,13 +62,23 @@ func (a *api) accountIKZELimit(w http.ResponseWriter, r *http.Request) {
 	years := ikze.Years(l.CashOperations, ikze.BusinessLimit, today)
 	resp := ikzeLimitResponse{CurrentYear: today.Year(), Rows: make([]ikzeLimitRow, 0, len(years))}
 	for _, y := range years {
-		row := ikzeLimitRow{Year: y.Year, Contributions: formatAmount(y.Contributions)}
-		if y.HasLimit {
-			row.Limit = new(formatAmount(y.Limit))
-			row.Unused = new(formatAmount(y.Unused))
-			row.OverLimit = new(formatAmount(y.OverLimit))
-		}
-		resp.Rows = append(resp.Rows, row)
+		resp.Rows = append(resp.Rows, toIKZELimitRow(y))
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ikzeCurrencyMessage tells that the IKZE Limit needs an Account in PLN.
+func ikzeCurrencyMessage(acc store.Account) string {
+	return fmt.Sprintf("account %d has the currency %s. The IKZE Limit needs an Account in PLN.", acc.ID, acc.Currency)
+}
+
+// toIKZELimitRow returns the row of the year as decimal text. The limit fields are nil for a year with no IKZE Limit.
+func toIKZELimitRow(y ikze.Year) ikzeLimitRow {
+	row := ikzeLimitRow{Year: y.Year, Contributions: formatAmount(y.Contributions)}
+	if y.HasLimit {
+		row.Limit = new(formatAmount(y.Limit))
+		row.Unused = new(formatAmount(y.Unused))
+		row.OverLimit = new(formatAmount(y.OverLimit))
+	}
+	return row
 }

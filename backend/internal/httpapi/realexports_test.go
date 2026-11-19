@@ -460,3 +460,151 @@ func TestRealExports_AssistantHoldings_MatchTheHoldingsEndpoint(t *testing.T) {
 	require.Len(t, got.Accounts, len(exports), "all Accounts")
 	checkHoldingsMatchEndpoint(t, srv, got, "")
 }
+
+// TestRealExports_AssistantResults_MatchThePageEndpoints checks that the function get_results gives the same
+// numbers as the summary and Value History endpoints, for each Account and for all Accounts.
+// The fake model calls the function. No test calls a real model.
+func TestRealExports_AssistantResults_MatchThePageEndpoints(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i := range exports {
+		got := askResults(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		checkAccountResultsMatchPages(t, srv, got, accountIDs[i])
+	}
+	checkAllResultsMatchPages(t, srv, askResults(t, srv, model, `{}`))
+}
+
+// TestRealExports_AssistantAllocation_MatchesThePageEndpoints checks that the function
+// get_allocation_and_net_deposits gives the same numbers as the Allocation, summary and IKZE Limit endpoints,
+// for each Account and for all Accounts. The fake model calls the function. No test calls a real model.
+func TestRealExports_AssistantAllocation_MatchesThePageEndpoints(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	for i := range exports {
+		got := askAllocation(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		var allocation allocationResponse
+		srv.getRealJSON(t, fmt.Sprintf("/api/accounts/%d/allocation", accountIDs[i]), &allocation)
+		assert.Equal(t, allocation, got.Allocation, "Account %d: Allocation", accountIDs[i])
+		checkAllocationAccountsMatchPages(t, srv, got)
+	}
+	got := askAllocation(t, srv, model, `{}`)
+	var allocation allocationResponse
+	srv.getRealJSON(t, "/api/all-accounts/allocation", &allocation)
+	assert.Equal(t, allocation, got.Allocation, "all Accounts: Allocation")
+	assert.Equal(t, srv.allAccounts(t).NetDeposits, got.NetDeposits, "all Accounts: Net Deposits")
+	require.Len(t, got.Accounts, len(exports))
+	checkAllocationAccountsMatchPages(t, srv, got)
+}
+
+// TestRealExports_AssistantClosedPositions_MatchTheClosedPositionsEndpoint checks that the function
+// get_closed_positions gives the same rows and the same Realized Profit sum as the Closed Positions endpoint,
+// for each Account, for one Instrument and for all Accounts. The fake model calls the function.
+// No test calls a real model.
+func TestRealExports_AssistantClosedPositions_MatchTheClosedPositionsEndpoint(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// checkAgainst compares the result with the endpoint rows of the Accounts. It uses the limit of the result.
+	checkAgainst := func(got closedPositionsResult, label string, ids []int64, ticker string) {
+		t.Helper()
+		var want []closedPositionResponse
+		sums := map[string]decimal.Decimal{}
+		counts := map[string]int{}
+		for _, id := range ids {
+			var accounts []accountResponse
+			require.Equal(t, http.StatusOK, srv.getJSON(t, "/api/accounts", &accounts))
+			var acc accountResponse
+			for _, a := range accounts {
+				if a.ID == id {
+					acc = a
+				}
+			}
+			require.NotEmpty(t, acc.Currency, "the Account %d has a currency", id)
+			for _, c := range srv.closedPositions(t, id) {
+				if ticker != "" && c.Ticker != ticker {
+					continue
+				}
+				want = append(want, c)
+				sums[acc.Currency] = sums[acc.Currency].Add(decimal.RequireFromString(c.RealizedProfit))
+				counts[acc.Currency]++
+			}
+		}
+		assert.Equal(t, len(want), got.TotalRows, "%s: number of rows", label)
+		assert.Equal(t, len(want)-len(got.Rows), got.RowsLeftOut, "%s: rows left out", label)
+		assert.Len(t, got.RealizedProfitSums, len(sums), "%s: number of currencies", label)
+		for _, s := range got.RealizedProfitSums {
+			assert.True(t, sums[s.Currency].Equal(decimal.RequireFromString(s.Sum)),
+				"%s: %s: want sum %s, got %s", label, s.Currency, sums[s.Currency], s.Sum)
+			assert.Equal(t, counts[s.Currency], s.Rows, "%s: %s: rows of the sum", label, s.Currency)
+		}
+		// Each row of the result is a row of the endpoint, with the same numbers.
+		byXTBID := map[string]closedPositionResponse{}
+		for _, c := range want {
+			byXTBID[c.XTBID+"/"+c.PositionID] = c
+		}
+		for _, r := range got.Rows {
+			assert.Equal(t, byXTBID[r.XTBID+"/"+r.PositionID], r.closedPositionResponse, "%s: row %s", label, r.XTBID)
+		}
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i, export := range exports {
+		_, got := askClosedPositions(t, srv, model, fmt.Sprintf(`{"accountId": %d, "limit": 100}`, accountIDs[i]))
+		checkAgainst(got, "export "+export.label, accountIDs[i:i+1], "")
+
+		endpoint := srv.closedPositions(t, accountIDs[i])
+		if len(endpoint) == 0 {
+			continue
+		}
+		ticker := endpoint[0].Ticker
+		_, got = askClosedPositions(t, srv, model, fmt.Sprintf(`{"accountId": %d, "instrument": %q, "limit": 100}`, accountIDs[i], ticker))
+		checkAgainst(got, "export "+export.label+" Instrument "+ticker, accountIDs[i:i+1], ticker)
+	}
+	_, got := askClosedPositions(t, srv, model, `{"limit": 100}`)
+	checkAgainst(got, "all Accounts", accountIDs, "")
+}
+
+// TestRealExports_AssistantIncomeAndFees_MatchTheSummaryEndpoints checks that the function get_income_and_fees
+// with no filter gives the same net dividends, net interest and fees as the summary endpoint, for each Account and
+// for all Accounts. It also checks that a period that covers each day gives the same sums as no filter.
+// The fake model calls the function. No test calls a real model.
+func TestRealExports_AssistantIncomeAndFees_MatchTheSummaryEndpoints(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i, export := range exports {
+		_, got := askIncome(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountIDs[i]))
+		require.Len(t, got.Accounts, 1, "export %s", export.label)
+		checkIncomeMatchesSummaries(t, srv, got)
+
+		_, whole := askIncome(t, srv, model, accountPeriod(accountIDs[i], "1900-01-01", "2999-12-31"))
+		assert.Equal(t, got.Totals, whole.Totals, "export %s: a period that covers each day", export.label)
+	}
+	_, got := askIncome(t, srv, model, `{}`)
+	require.Len(t, got.Accounts, len(exports), "all Accounts")
+	checkIncomeMatchesSummaries(t, srv, got)
+}
