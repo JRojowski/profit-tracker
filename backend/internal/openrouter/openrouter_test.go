@@ -144,6 +144,28 @@ func TestReply_ToolCalls_ReturnsTheSteps(t *testing.T) {
 	}}, got)
 }
 
+func TestReply_StepsWithNoID_GetIDsThatNoEarlierStepHas(t *testing.T) {
+	t.Parallel()
+	client, _ := startOpenRouter(t, http.StatusOK, `{"choices":[{"message":{"role":"assistant","content":"",
+		"tool_calls":[{"type":"function","function":{"name":"get_holdings","arguments":"{}"}}]}}]}`)
+	// Round 1 had two steps with no ID. They got step-1 and step-2.
+	messages := []assistant.Message{
+		{Role: assistant.RoleUser, Content: "Hi"},
+		{Role: assistant.RoleAssistant, Steps: []assistant.Step{
+			{ID: "step-1", Function: "get_holdings", Arguments: json.RawMessage(`{}`)},
+			{ID: "step-2", Function: "get_holdings", Arguments: json.RawMessage(`{}`)},
+		}},
+		{Role: assistant.RoleFunction, StepID: "step-1", Content: "{}"},
+		{Role: assistant.RoleFunction, StepID: "step-2", Content: "{}"},
+	}
+
+	got, err := client.Reply(t.Context(), messages, nil)
+
+	require.NoError(t, err)
+	require.Len(t, got.Steps, 1)
+	assert.Equal(t, "step-3", got.Steps[0].ID, "some providers refuse two tool calls with the same ID")
+}
+
 func TestReply_BadResponses_ReturnError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

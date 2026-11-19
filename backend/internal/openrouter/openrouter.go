@@ -171,14 +171,26 @@ func (c *Client) reply(ctx context.Context, messages []assistant.Message, functi
 	}
 	message := chat.Choices[0].Message
 	reply := assistant.Reply{Text: message.Content}
+	earlier := earlierSteps(messages)
 	for i, call := range message.ToolCalls {
 		id := call.ID
 		if id == "" {
-			id = "step-" + strconv.Itoa(i+1)
+			// The number counts the earlier steps of the conversation, so that no two steps share an ID.
+			// Some providers refuse a conversation with two tool calls with the same ID.
+			id = "step-" + strconv.Itoa(earlier+i+1)
 		}
 		reply.Steps = append(reply.Steps, assistant.Step{ID: id, Function: call.Function.Name, Arguments: arguments(call.Function.Arguments)})
 	}
 	return reply, nil
+}
+
+// earlierSteps returns the number of steps in the messages.
+func earlierSteps(messages []assistant.Message) int {
+	n := 0
+	for _, m := range messages {
+		n += len(m.Steps)
+	}
+	return n
 }
 
 // request returns the body of the chat completions request.
