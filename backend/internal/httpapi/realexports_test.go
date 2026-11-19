@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
@@ -354,6 +356,53 @@ func TestRealExports_EachExport_MatchesBrokerSheets(t *testing.T) {
 				t.Parallel()
 				checkHoldings(t, holdings, sheets.OpenLots)
 			})
+			t.Run("each Holding and each Closed Position has an Instrument Overview", func(t *testing.T) {
+				t.Parallel()
+				checkOverviews(t, srv, accountID, holdings, closedPositions)
+			})
 		})
+	}
+}
+
+// checkOverviews calls the Instrument Overview of each Holding and each Closed Position.
+// Its Fills must include the Lot of each Closed Position, and their volume must cover the Holding.
+func checkOverviews(t *testing.T, srv *testServer, accountID int64, holdings []holdingResponse, closedPositions []closedPositionResponse) {
+	t.Helper()
+
+	tickers := map[string]bool{}
+	for _, h := range holdings {
+		tickers[h.Ticker] = true
+	}
+	for _, c := range closedPositions {
+		tickers[c.Ticker] = true
+	}
+	for ticker := range tickers {
+		var got overviewResponse
+		status := srv.getJSON(t, overviewPath(accountID, url.PathEscape(ticker)), &got)
+		require.Equal(t, http.StatusOK, status, "overview of %s", ticker)
+		assert.Equal(t, ticker, got.Ticker)
+		assert.NotEmpty(t, got.Fills, "%s: the Account held it, so it has a Fill", ticker)
+		assert.NotNil(t, got.Prices.Series, "%s: the series is never null", ticker)
+		for i := 1; i < len(got.Prices.Series); i++ {
+			assert.Less(t, got.Prices.Series[i-1].Date, got.Prices.Series[i].Date, "%s: the series is in date order", ticker)
+		}
+
+		lots := map[string]bool{}
+		volume := decimal.Zero
+		for _, f := range got.Fills {
+			lots[f.PositionID] = true
+			volume = volume.Add(decimal.RequireFromString(f.Volume))
+		}
+		for _, c := range closedPositions {
+			if c.Ticker == ticker {
+				assert.True(t, lots[c.PositionID], "%s: the Fills include the Lot %s of a Closed Position", ticker, c.PositionID)
+			}
+		}
+		for _, h := range holdings {
+			if h.Ticker == ticker {
+				assert.False(t, volume.LessThan(decimal.RequireFromString(h.Volume)),
+					"%s: the Fill volume %s covers the Holding volume %s", ticker, volume, h.Volume)
+			}
+		}
 	}
 }

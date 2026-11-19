@@ -30,7 +30,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react"
-import type { ReactNode } from "react"
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react"
 
 import {
   Table,
@@ -77,6 +77,9 @@ type DataTableProps<TRow extends RowData> = TableViewProps & {
   rows: TRow[]
   getRowId: (row: TRow) => string
   footer?: DataTableFooter
+  // onRowAction makes each row reachable with Tab. A click on the row, or Enter on the focused row, runs it.
+  // A click on a control inside the row, and a key press inside a control, do not run it.
+  onRowAction?: (row: TRow) => void
 }
 
 // DRAG_DISTANCE is the pointer movement in pixels before a drag starts. A click moves less.
@@ -96,6 +99,31 @@ function alignClass(align: "right" | undefined) {
 // cellAlignClass is alignClass for a cell. A right-aligned column holds numbers, so its cells get the num class.
 function cellAlignClass(align: "right" | undefined) {
   return align === "right" ? "text-right num" : undefined
+}
+
+// interactiveSelector matches a control inside a row. A click on it belongs to the control, not to the row action.
+const interactiveSelector =
+  "button, a, input, select, textarea, label, [role='button'], [role='checkbox']"
+
+// rowActionProps gives the props that make a table row run an action on a click and on Enter.
+// Events of a dialog that a control in the row opens also reach the row through React, so the handlers check the DOM.
+function rowActionProps(action: () => void) {
+  return {
+    tabIndex: 0,
+    className:
+      "cursor-pointer outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
+    onClick: (event: MouseEvent<HTMLTableRowElement>) => {
+      const target = event.target as Element
+      if (!event.currentTarget.contains(target)) return
+      if (target.closest(interactiveSelector)) return
+      action()
+    },
+    onKeyDown: (event: KeyboardEvent<HTMLTableRowElement>) => {
+      if (event.key !== "Enter" || event.target !== event.currentTarget) return
+      event.preventDefault()
+      action()
+    },
+  }
 }
 
 // ariaSort gives the aria-sort value of a header for the direction of its column.
@@ -124,6 +152,7 @@ export function DataTable<TRow extends RowData>({
   sorting,
   onSortingChange,
   footer,
+  onRowAction,
   columnOrder,
   onColumnOrderChange,
   fixedColumnIds,
@@ -235,7 +264,12 @@ export function DataTable<TRow extends RowData>({
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow
+              key={row.id}
+              {...(onRowAction
+                ? rowActionProps(() => onRowAction(row.original))
+                : {})}
+            >
               {row.getAllCells().map((cell) => (
                 <TableCell
                   key={cell.id}

@@ -356,6 +356,43 @@ export async function fetchHoldings(
   return readJSON<Holding[]>(response)
 }
 
+// OverviewPrice is one daily close of the price series of an Instrument Overview. date is YYYY-MM-DD.
+export type OverviewPrice = { date: string; close: string }
+
+// OverviewFill is one Fill of the Instrument. price is null when the Fill has no price.
+// It is in the currency of the broker price, which can differ from the currency of the price series.
+export type OverviewFill = {
+  xtbId: string
+  // time is an RFC 3339 time in UTC.
+  time: string
+  volume: string
+  price: string | null
+  positionId: string
+}
+
+// InstrumentOverview is the Instrument Overview of one Instrument on one Account.
+// The series is in ascending date order and can have gaps. currency is null exactly when the series is empty.
+export type InstrumentOverview = NamedPriceSource & {
+  prices: { currency: string | null; series: OverviewPrice[] }
+  // fills are in ascending time order.
+  fills: OverviewFill[]
+}
+
+// fetchInstrumentOverview loads the Instrument Overview of one Instrument on one Account.
+// It gives null when the Account never held the Instrument.
+export async function fetchInstrumentOverview(
+  id: number,
+  ticker: string,
+  signal?: AbortSignal
+): Promise<InstrumentOverview | null> {
+  const response = await fetch(
+    `/api/accounts/${id}/instruments/${encodeURIComponent(ticker)}/overview`,
+    { signal }
+  )
+  if (response.status === 404) return null
+  return readJSON<InstrumentOverview>(response)
+}
+
 export async function fetchClosedPositions(
   id: number,
   signal?: AbortSignal

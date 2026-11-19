@@ -187,6 +187,25 @@ func (s *Store) PriceHistory(ctx context.Context) (map[string][]Price, error) {
 	return history, nil
 }
 
+// DailyPrices returns the closes of the daily history of one Instrument in date order.
+// A current price is not in the result. The result is empty if the Instrument has no daily history.
+// A close keeps the currency that the price source gave, so the currencies can differ.
+func (s *Store) DailyPrices(ctx context.Context, ticker string) ([]Price, error) {
+	rows, err := queries.New(s.db).InstrumentDailyPrices(ctx, ticker)
+	if err != nil {
+		return nil, fmt.Errorf("read daily prices of %s: %w", ticker, err)
+	}
+	prices := make([]Price, 0, len(rows))
+	for _, row := range rows {
+		date, err := time.Parse(dateLayout, row.Date)
+		if err != nil {
+			return nil, fmt.Errorf("daily price of %s: parse date %q: %w", ticker, row.Date, err)
+		}
+		prices = append(prices, Price{Ticker: ticker, Date: date, Close: row.Close, Currency: row.Currency})
+	}
+	return prices, nil
+}
+
 // FirstFillTimes returns the time of the first Fill of each Instrument on any Account, by broker ticker.
 // The map has each Instrument that an Account ever held, also an Instrument that the Account sold.
 func (s *Store) FirstFillTimes(ctx context.Context) (map[string]time.Time, error) {

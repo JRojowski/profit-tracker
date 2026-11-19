@@ -43,6 +43,8 @@ type HoldingsTableProps = {
   onPriceSourceChanged: () => void
   // view is the column order and the sorting, which the owner keeps with useTableView.
   view: TableViewProps
+  // onOpenOverview opens the Instrument Overview of a Holding. A row of the wide table runs it.
+  onOpenOverview: (ticker: string) => void
 }
 
 // HOLDINGS_VIEW_STORAGE_KEY is the localStorage key of the column order and the sorting of this table.
@@ -59,7 +61,8 @@ export function holdingsViewRules(
 }
 
 // HoldingsTable shows the Holdings of an Account: a table on a wide screen and a list of compact rows on a narrow screen.
-// Each row opens the price source dialog. A Holding with a Price Warning has a badge.
+// A row of the wide table opens the Instrument Overview. A row of the list opens the price source dialog.
+// A Holding with a Price Warning has a badge.
 // A note under the table lists the Holdings with no value.
 export function HoldingsTable({
   holdings,
@@ -67,6 +70,7 @@ export function HoldingsTable({
   currency,
   onPriceSourceChanged,
   view,
+  onOpenOverview,
 }: HoldingsTableProps) {
   const isMobile = useIsMobile()
   // The wide table and the cards share one view. The default sorting is the order of the response.
@@ -105,6 +109,7 @@ export function HoldingsTable({
           columns={columns}
           currency={currency}
           view={view}
+          onOpenOverview={onOpenOverview}
         />
       )}
       <NoValueNote holdings={holdings} />
@@ -341,7 +346,9 @@ function WideTable({
   columns,
   currency,
   view,
+  onOpenOverview,
 }: {
+  onOpenOverview: (ticker: string) => void
   view: TableViewProps
   holdings: Holding[]
   totals: HoldingTotals
@@ -355,6 +362,7 @@ function WideTable({
       columns={columns}
       rows={holdings}
       getRowId={(holding) => holding.ticker}
+      onRowAction={(holding) => onOpenOverview(holding.ticker)}
       footer={{
         label: (
           <div className="flex flex-col gap-0.5">
