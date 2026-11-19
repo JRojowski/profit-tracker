@@ -153,3 +153,11 @@ export function polishDate(time: string): string {
     parts.find((item) => item.type === type)?.value ?? ""
   return `${part("year")}-${part("month")}-${part("day")}`
 }
+
+// formatPolishTime shows the time of day of an RFC 3339 time in Polish time, for example "10:32:05".
+// It agrees with polishDate, so a time always shows under its own calendar day.
+export function formatPolishTime(time: string): string {
+  return new Date(time).toLocaleTimeString(undefined, {
+    timeZone: polishTimeZone,
+  })
+}

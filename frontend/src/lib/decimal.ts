@@ -63,3 +63,35 @@ export function compareDecimals(a: string, b: string): -1 | 0 | 1 {
   if (unitsX === unitsY) return 0
   return unitsX < unitsY ? -1 : 1
 }
+
+// weightedAverage gives the average of the values, weighted by the weights, as decimal text with 6 decimal places.
+// It uses exact integer maths, and rounds the last place half away from zero. A total weight of zero gives null.
+export function weightedAverage(
+  items: { value: string; weight: string }[]
+): string | null {
+  const parsed = items.map((item) => ({
+    value: parseDecimal(item.value),
+    weight: parseDecimal(item.weight),
+  }))
+  const valueScale = Math.max(0, ...parsed.map((item) => item.value.scale))
+  const weightScale = Math.max(0, ...parsed.map((item) => item.weight.scale))
+  let numerator = 0n
+  let denominator = 0n
+  for (const { value, weight } of parsed) {
+    const valueUnits = value.units * 10n ** BigInt(valueScale - value.scale)
+    const weightUnits = weight.units * 10n ** BigInt(weightScale - weight.scale)
+    numerator += valueUnits * weightUnits
+    denominator += weightUnits
+  }
+  if (denominator === 0n) return null
+  const places = 6n
+  const scaled = numerator * 10n ** places
+  const divisor = denominator * 10n ** BigInt(valueScale)
+  const negative = scaled < 0n !== divisor < 0n
+  const absScaled = scaled < 0n ? -scaled : scaled
+  const absDivisor = divisor < 0n ? -divisor : divisor
+  const rounded = (2n * absScaled + absDivisor) / (2n * absDivisor)
+  const digits = rounded.toString().padStart(Number(places) + 1, "0")
+  const text = `${digits.slice(0, -6)}.${digits.slice(-6)}`
+  return negative && rounded !== 0n ? `-${text}` : text
+}

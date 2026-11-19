@@ -8,6 +8,7 @@ import {
   holdingsViewRules,
 } from "@/components/holdings-table"
 import { ResetColumnsButton } from "@/components/reset-columns-button"
+import { InstrumentOverviewPanel } from "@/components/instrument-overview-panel"
 import { LoadedView } from "@/components/loaded-view"
 import { UnrealizedProfitChart } from "@/components/unrealized-profit-chart"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/card"
 import { useLoad } from "@/hooks/use-load"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useOverviewUrl } from "@/hooks/use-overview-url"
 import { useTableView } from "@/hooks/use-table-view"
 import { fetchAccountAllocation, fetchHoldings } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
@@ -28,6 +30,7 @@ import { useAccount } from "@/pages/account-layout"
 
 // AccountHoldingsPage shows the Holdings of one Account: the Allocation by Quote Currency,
 // the Unrealized Profit of each Holding and the table of the Holdings.
+// A row of the table opens the Instrument Overview. The ticker of the open panel is in the URL.
 export function AccountHoldingsPage() {
   const account = useAccount()
   const isMobile = useIsMobile()
@@ -44,6 +47,7 @@ export function AccountHoldingsPage() {
   const holdings = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchHoldings(account.id, signal)
   )
+  const overview = useOverviewUrl()
   const allocation = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchAccountAllocation(account.id, signal)
   )
@@ -76,7 +80,12 @@ export function AccountHoldingsPage() {
           </CardHeader>
           <CardContent>
             <LoadedView loaded={holdings} errorTitle="Cannot load the Holdings">
-              {(data) => <UnrealizedProfitChart holdings={data} />}
+              {(data) => (
+                <UnrealizedProfitChart
+                  holdings={data}
+                  onOpenOverview={overview.open}
+                />
+              )}
             </LoadedView>
           </CardContent>
         </Card>
@@ -107,13 +116,23 @@ export function AccountHoldingsPage() {
                 holdings={data}
                 columns={columns}
                 currency={account.currency}
-                onPriceSourceChanged={refreshAllPrices}
                 view={view.props}
+                onOpenOverview={overview.open}
               />
             )}
           </LoadedView>
         </CardContent>
       </Card>
+      {overview.state !== null && (
+        <InstrumentOverviewPanel
+          accountId={account.id}
+          ticker={overview.state.ticker}
+          closed={overview.state.closed}
+          currency={account.currency}
+          onSelectClosed={overview.select}
+          onClose={overview.close}
+        />
+      )}
     </div>
   )
 }

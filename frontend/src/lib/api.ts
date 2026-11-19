@@ -356,6 +356,61 @@ export async function fetchHoldings(
   return readJSON<Holding[]>(response)
 }
 
+// OverviewPrice is one daily close of the price series of an Instrument Overview. date is YYYY-MM-DD.
+export type OverviewPrice = { date: string; close: string }
+
+// OverviewFill is one Fill of the Instrument. price is null when the Fill has no price.
+// It is in the currency of the broker price, which can differ from the currency of the price series.
+export type OverviewFill = {
+  xtbId: string
+  // time is an RFC 3339 time in UTC.
+  time: string
+  volume: string
+  price: string | null
+  positionId: string
+}
+
+// OverviewLot is one open Lot of the Instrument. volume and cost are the open part of the Lot.
+export type OverviewLot = {
+  positionId: string
+  volume: string
+  cost: string
+  // openTime is an RFC 3339 time in UTC: the time of the first Fill.
+  openTime: string
+  // openPrice is the average Fill price of the whole Lot, or null when a Fill has no price.
+  openPrice: string | null
+  fills: OverviewFill[]
+}
+
+// InstrumentOverview is the Instrument Overview of one Instrument on one Account.
+// The series is in ascending date order and can have gaps. currency is null exactly when the series is empty.
+export type InstrumentOverview = NamedPriceSource & {
+  prices: { currency: string | null; series: OverviewPrice[] }
+  // fills are in ascending time order.
+  fills: OverviewFill[]
+  // holding is null when the Account has no open volume of the Instrument.
+  holding: Holding | null
+  // openLots is empty exactly when holding is null.
+  openLots: OverviewLot[]
+  // closedPositions are in close time order, oldest first.
+  closedPositions: ClosedPosition[]
+}
+
+// fetchInstrumentOverview loads the Instrument Overview of one Instrument on one Account.
+// It gives null when the Account never held the Instrument.
+export async function fetchInstrumentOverview(
+  id: number,
+  ticker: string,
+  signal?: AbortSignal
+): Promise<InstrumentOverview | null> {
+  const response = await fetch(
+    `/api/accounts/${id}/instruments/${encodeURIComponent(ticker)}/overview`,
+    { signal }
+  )
+  if (response.status === 404) return null
+  return readJSON<InstrumentOverview>(response)
+}
+
 export async function fetchClosedPositions(
   id: number,
   signal?: AbortSignal

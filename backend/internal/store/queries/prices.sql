@@ -94,3 +94,11 @@ JOIN lots l ON l.account_id = c.account_id AND l.position_id = c.position_id
 JOIN instruments i ON i.id = l.instrument_id
 WHERE c.type = 'Stock sell' AND c.price IS NOT NULL
 ORDER BY 1, 2;
+
+-- name: InstrumentDailyPrices :many
+-- The closes of the daily history of one Instrument, in date order. A current price is not in the history.
+SELECT p.date, p.close, p.currency
+FROM prices p
+JOIN instruments i ON i.id = p.instrument_id
+WHERE i.ticker = ? AND p.daily = 1
+ORDER BY p.date;

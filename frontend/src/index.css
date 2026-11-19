@@ -160,6 +160,11 @@
   }
 }
 
+/* The Instrument Overview panel does not block the page, so the table behind it stays usable. It needs no dimming overlay. */
+[data-slot="sheet-overlay"]:has(+ [data-overview-panel]) {
+  display: none;
+}
+
 /* num shows a number: Geist Mono with tabular figures, and never a line break between the digits and the currency. */
 @utility num {
   font-family: var(--font-mono);

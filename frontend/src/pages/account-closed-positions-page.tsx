@@ -1,6 +1,7 @@
 import { useMemo } from "react"
 import { useSearchParams } from "react-router"
 
+import { InstrumentOverviewPanel } from "@/components/instrument-overview-panel"
 import { FigureLabel } from "@/components/figure-label"
 import { LoadedView } from "@/components/loaded-view"
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/card"
 import { useLoad } from "@/hooks/use-load"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useOverviewUrl } from "@/hooks/use-overview-url"
 import { useTableView } from "@/hooks/use-table-view"
 import { fetchClosedPositions, type ClosedPosition } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
@@ -43,22 +45,36 @@ import { useAccount } from "@/pages/account-layout"
 export function AccountClosedPositionsPage() {
   const account = useAccount()
   const { valuesVersion } = useAppState()
+  const overview = useOverviewUrl()
   const closedPositions = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchClosedPositions(account.id, signal)
   )
 
   return (
-    <LoadedView
-      loaded={closedPositions}
-      errorTitle="Cannot load the Closed Positions"
-    >
-      {(data) => (
-        <ClosedPositionsView
-          closedPositions={data}
+    <>
+      <LoadedView
+        loaded={closedPositions}
+        errorTitle="Cannot load the Closed Positions"
+      >
+        {(data) => (
+          <ClosedPositionsView
+            closedPositions={data}
+            currency={account.currency}
+            onOpenOverview={overview.open}
+          />
+        )}
+      </LoadedView>
+      {overview.state !== null && (
+        <InstrumentOverviewPanel
+          accountId={account.id}
+          ticker={overview.state.ticker}
+          closed={overview.state.closed}
           currency={account.currency}
+          onSelectClosed={overview.select}
+          onClose={overview.close}
         />
       )}
-    </LoadedView>
+    </>
   )
 }
 
@@ -66,12 +82,15 @@ type ClosedPositionsViewProps = {
   // closedPositions are in the order of the backend, oldest first.
   closedPositions: ClosedPosition[]
   currency: string
+  // onOpenOverview opens the Instrument Overview with the Closed Position highlighted.
+  onOpenOverview: (ticker: string, xtbId: string) => void
 }
 
 // ClosedPositionsView shows the figures and the table of the Closed Positions that the filters select.
 function ClosedPositionsView({
   closedPositions,
   currency,
+  onOpenOverview,
 }: ClosedPositionsViewProps) {
   // The hook is here, and not in the table, so that the card header can hold the "Reset columns" button.
   const isMobile = useIsMobile()
@@ -182,6 +201,7 @@ function ClosedPositionsView({
               currency={currency}
               totalRealizedProfit={total}
               view={view.props}
+              onOpenOverview={onOpenOverview}
             />
           )}
         </CardContent>

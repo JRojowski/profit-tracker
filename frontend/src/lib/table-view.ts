@@ -48,7 +48,8 @@ export function tableViewRules(
 }
 
 // STORED_VIEW_VERSION is the version of the stored value. A stored value with another version is not used.
-const STORED_VIEW_VERSION = 1
+// Version 2 drops the views from before the Instrument Overview removed columns from the tables.
+const STORED_VIEW_VERSION = 2
 
 // defaultTableView gives the view with the default column order and no sort.
 export function defaultTableView(rules: TableViewRules): TableView {

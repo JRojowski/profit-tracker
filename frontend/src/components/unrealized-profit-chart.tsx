@@ -39,13 +39,17 @@ const charWidth = 7.4
 
 type UnrealizedProfitChartProps = {
   holdings: Holding[]
+  // onOpenOverview opens the Instrument Overview of a Holding. A click on a bar, or Enter on a ticker, runs it.
+  onOpenOverview: (ticker: string) => void
 }
 
 // UnrealizedProfitChart shows the Unrealized Profit of each Holding as a horizontal bar around a zero line.
 // The bars go from the largest profit to the largest loss. A Holding with no Unrealized Profit is not in the chart.
 // The exact amount at the right of each bar is the text alternative of the chart.
+// A click on a bar opens the Instrument Overview. The ticker at the left of a bar is a button for the keyboard.
 export function UnrealizedProfitChart({
   holdings,
+  onOpenOverview,
 }: UnrealizedProfitChartProps) {
   const isMobile = useIsMobile()
   const bars = profitBars(holdings)
@@ -90,7 +94,9 @@ export function UnrealizedProfitChart({
             tickLine={false}
             axisLine={false}
             width={tickerWidth}
-            tick={(props: TickProps) => <TickerTick {...props} bars={bars} />}
+            tick={(props: TickProps) => (
+              <TickerTick {...props} bars={bars} onOpen={onOpenOverview} />
+            )}
           />
           <YAxis
             yAxisId="amount"
@@ -127,6 +133,8 @@ export function UnrealizedProfitChart({
             maxBarSize={isMobile ? 14 : 18}
             minPointSize={2}
             isAnimationActive={false}
+            className="cursor-pointer"
+            onClick={(_, index) => onOpenOverview(bars[index].ticker)}
           >
             {bars.map((bar) => (
               <Cell key={bar.ticker} fill={`var(--color-${bar.sign})`} />
@@ -148,15 +156,30 @@ type TickProps = {
 }
 
 // TickerTick draws the ticker of a Holding at the left of its bar.
-function TickerTick({ x, y, index, bars }: TickProps & { bars: ProfitBar[] }) {
+function TickerTick({
+  x,
+  y,
+  index,
+  bars,
+  onOpen,
+}: TickProps & { bars: ProfitBar[]; onOpen: (ticker: string) => void }) {
   const bar = bars[index ?? 0]
   return (
     <text
+      role="button"
+      tabIndex={0}
+      aria-label={`Open the Instrument Overview of ${bar.ticker}`}
+      onClick={() => onOpen(bar.ticker)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        onOpen(bar.ticker)
+      }}
       x={Number(x ?? 0)}
       y={Number(y ?? 0)}
       dy={4}
       textAnchor="end"
-      className="fill-foreground num text-xs font-medium"
+      className="cursor-pointer fill-foreground num text-xs font-medium outline-none focus-visible:underline"
     >
       {bar.ticker}
     </text>

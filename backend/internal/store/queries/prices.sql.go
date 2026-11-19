@@ -106,6 +106,44 @@ func (q *Queries) InsertDailyPrice(ctx context.Context, arg InsertDailyPricePara
 	return err
 }
 
+const instrumentDailyPrices = `-- name: InstrumentDailyPrices :many
+SELECT p.date, p.close, p.currency
+FROM prices p
+JOIN instruments i ON i.id = p.instrument_id
+WHERE i.ticker = ? AND p.daily = 1
+ORDER BY p.date
+`
+
+type InstrumentDailyPricesRow struct {
+	Date     string
+	Close    decimal.Decimal
+	Currency string
+}
+
+// The closes of the daily history of one Instrument, in date order. A current price is not in the history.
+func (q *Queries) InstrumentDailyPrices(ctx context.Context, ticker string) ([]InstrumentDailyPricesRow, error) {
+	rows, err := q.db.QueryContext(ctx, instrumentDailyPrices, ticker)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstrumentDailyPricesRow
+	for rows.Next() {
+		var i InstrumentDailyPricesRow
+		if err := rows.Scan(&i.Date, &i.Close, &i.Currency); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lastPrices = `-- name: LastPrices :many
 SELECT i.ticker, p.date, p.close, p.currency, p.source, p.fetched_at
 FROM prices p
