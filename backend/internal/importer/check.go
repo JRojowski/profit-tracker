@@ -85,6 +85,7 @@ func withNewOperations(l ledger.Ledger, ops []store.CashOperation, newOps map[st
 			Type:       op.Type,
 			Time:       op.Time,
 			Amount:     op.Amount,
+			Ticker:     op.Ticker,
 			PositionID: op.PositionID,
 			Volume:     op.Volume.Decimal,
 			Price:      op.Price,

@@ -18,6 +18,7 @@ func (a *api) assistantFunctions() []assistant.Function {
 	return []assistant.Function{
 		a.holdingsFunction(),
 		a.closedPositionsFunction(),
+		a.incomeFunction(),
 	}
 }
 

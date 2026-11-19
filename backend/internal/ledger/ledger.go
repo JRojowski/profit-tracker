@@ -116,6 +116,9 @@ type CashOperation struct {
 	// XTBID is the XTB ID of the operation.
 	XTBID string
 	Time  time.Time
+	// Ticker is the broker ticker of the Instrument that the broker ties to the operation.
+	// It is empty for an operation with no Instrument, for example a Deposit or the free funds interest.
+	Ticker string
 	// PositionID is the Lot ID. It is empty for an operation with no Lot.
 	PositionID string
 	// Volume is the parsed volume. For a Stock sell, it is the closed volume of the Lot.
@@ -289,6 +292,9 @@ func Calculate(l Ledger) (State, error) {
 	for _, op := range l.CashOperations {
 		s.add(op)
 	}
+	// One rule for the income and the fees: the totals of the Account and the filtered sums use SumIncome.
+	income := SumIncome(l.CashOperations, IncomeFilter{})
+	s.NetDividends, s.NetInterest, s.Fees = income.NetDividends, income.NetInterest, income.Fees
 
 	lots := make(map[string]*lotState, len(l.Lots))
 	for _, lot := range l.Lots {
@@ -338,14 +344,61 @@ func flows(ops []CashOperation) []returns.Flow {
 func (s *State) add(op CashOperation) {
 	s.Cash = s.Cash.Add(op.Amount)
 	s.NetDeposits = s.NetDeposits.Add(NetDeposit(op))
-	switch op.Type {
-	case TypeDividend, TypeWithholdingTax:
-		s.NetDividends = s.NetDividends.Add(op.Amount)
-	case TypeInterest, TypeInterestTax:
-		s.NetInterest = s.NetInterest.Add(op.Amount)
-	case TypeSECFee, TypeCorrection:
-		s.Fees = s.Fees.Add(op.Amount)
+}
+
+// IncomeFilter limits the Cash Operations that SumIncome counts. The zero filter counts each Cash Operation.
+type IncomeFilter struct {
+	// Ticker is the broker ticker of an Instrument. If it is not empty, SumIncome counts only the Cash Operations
+	// that the broker ties to that Instrument. A Cash Operation with no Instrument never matches.
+	Ticker string
+	// From is the first instant that SumIncome counts. The zero time means no lower limit.
+	From time.Time
+	// To is the first instant after the period, so SumIncome does not count it. The zero time means no upper limit.
+	To time.Time
+}
+
+// matches tells if the filter counts op.
+func (f IncomeFilter) matches(op CashOperation) bool {
+	switch {
+	case f.Ticker != "" && op.Ticker != f.Ticker:
+		return false
+	case !f.From.IsZero() && op.Time.Before(f.From):
+		return false
+	case !f.To.IsZero() && !op.Time.Before(f.To):
+		return false
 	}
+	return true
+}
+
+// Income is the sum of the Cash Operations of the income and the fees.
+type Income struct {
+	// NetDividends is the sum of the dividends and the withholding tax. The tax is negative.
+	NetDividends decimal.Decimal
+	// NetInterest is the sum of the free funds interest and its tax. The tax is negative.
+	NetInterest decimal.Decimal
+	// Fees is the sum of the SEC fees and the corrections, with the sign of the export. It is usually negative.
+	Fees decimal.Decimal
+}
+
+// SumIncome returns the net dividends, the net interest and the fees of the Cash Operations that the filter counts.
+// It is the one rule for which Cash Operation type is a dividend, a withholding tax, interest or a fee.
+// The amounts keep the sign of the export. Calculate uses it with the zero filter for the totals of an Account.
+func SumIncome(ops []CashOperation, f IncomeFilter) Income {
+	sum := Income{NetDividends: decimal.Zero, NetInterest: decimal.Zero, Fees: decimal.Zero}
+	for _, op := range ops {
+		if !f.matches(op) {
+			continue
+		}
+		switch op.Type {
+		case TypeDividend, TypeWithholdingTax:
+			sum.NetDividends = sum.NetDividends.Add(op.Amount)
+		case TypeInterest, TypeInterestTax:
+			sum.NetInterest = sum.NetInterest.Add(op.Amount)
+		case TypeSECFee, TypeCorrection:
+			sum.Fees = sum.Fees.Add(op.Amount)
+		}
+	}
+	return sum
 }
 
 // netDepositsTypes are the Cash Operation types of the Net Deposits flows:

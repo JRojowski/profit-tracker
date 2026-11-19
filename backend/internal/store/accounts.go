@@ -82,6 +82,7 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 			Type:       row.Type,
 			Time:       at.UTC(),
 			Amount:     row.Amount,
+			Ticker:     row.Ticker,
 			PositionID: row.PositionID.String,
 			// A missing volume gives zero. The Ledger calculator uses the volume only for a Closed Position.
 			Volume: row.Volume.Decimal,
