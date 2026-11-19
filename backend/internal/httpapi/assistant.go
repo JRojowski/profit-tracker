@@ -61,8 +61,13 @@ const (
 // so the limit protects the model and the cost.
 const maxMessages = 40
 
-// maxMessageLength is the largest length of one message, in characters.
-const maxMessageLength = 4000
+// maxQuestionLength is the largest length of a message of the user, in characters.
+const maxQuestionLength = 4000
+
+// maxAnswerLength is the largest length of an earlier answer of the Assistant, in characters. The frontend sends
+// the answers back with the next question, and an answer can be a long list. Thus the limit is larger than
+// maxQuestionLength.
+const maxAnswerLength = 20000
 
 // maxQuestionBody is the largest body of a question request. A long conversation is some kilobytes.
 const maxQuestionBody = 1 << 20
@@ -186,8 +191,12 @@ func (q questionRequest) validate() error {
 		if strings.TrimSpace(m.Content) == "" {
 			return fmt.Errorf("message %d has no content", i+1)
 		}
-		if n := utf8.RuneCountInString(m.Content); n > maxMessageLength {
-			return fmt.Errorf("message %d has %d characters: the limit is %d", i+1, n, maxMessageLength)
+		limit := maxQuestionLength
+		if m.Role == string(assistant.RoleAssistant) {
+			limit = maxAnswerLength
+		}
+		if n := utf8.RuneCountInString(m.Content); n > limit {
+			return fmt.Errorf("message %d has %d characters: the limit is %d", i+1, n, limit)
 		}
 	}
 	if q.Messages[len(q.Messages)-1].Role != string(assistant.RoleUser) {
