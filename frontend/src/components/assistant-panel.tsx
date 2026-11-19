@@ -81,7 +81,7 @@ export function AssistantPanel() {
         <SheetHeader className="gap-1.5 border-b pr-12">
           <SheetTitle>Assistant</SheetTitle>
           <SheetDescription>
-            Ask a question about your Holdings.
+            Ask a question about your Accounts, results and Holdings.
           </SheetDescription>
           {turns.length > 0 && (
             <Button
@@ -111,7 +111,7 @@ export function AssistantPanel() {
           <ContextLine accountName={account?.name} instrument={instrument} />
           <Textarea
             aria-label="Question for the Assistant"
-            placeholder="Ask about your Holdings"
+            placeholder="Ask about your results, Holdings or Allocation"
             value={draft}
             rows={2}
             maxLength={maxQuestionLength}
