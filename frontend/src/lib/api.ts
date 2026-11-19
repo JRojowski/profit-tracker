@@ -109,14 +109,17 @@ export type ImportSummary = {
   skippedCashOperations: number
 }
 
-// ApiError holds the error message that the backend returns.
+// ApiError holds the error message that the backend returns. The code is the machine-readable code of the
+// error, when the backend gives one, for example "rate_limited".
 export class ApiError extends Error {
   readonly status: number
+  readonly code: string | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.code = code
   }
 }
 
@@ -128,13 +131,15 @@ export function errorMessage(err: unknown): string {
 async function readJSON<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `HTTP ${response.status}`
+    let code: string | null = null
     try {
-      const body = (await response.json()) as { error?: string }
+      const body = (await response.json()) as { error?: string; code?: string }
       if (body.error) message = body.error
+      if (body.code) code = body.code
     } catch {
       // The body is not JSON. Keep the status message.
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, code)
   }
   return (await response.json()) as T
 }
@@ -752,6 +757,14 @@ export type AssistantStep = {
   arguments: Record<string, unknown>
 }
 
+// AssistantContext is the page that the user has open when the user asks. Each field is optional.
+export type AssistantContext = {
+  // accountId is the Account of the page.
+  accountId?: number
+  // instrument is the broker ticker of the open Instrument Overview.
+  instrument?: string
+}
+
 // AssistantAnswer is the answer of the Assistant and the steps that the model used.
 export type AssistantAnswer = {
   answer: string
@@ -767,14 +780,20 @@ export async function fetchAssistantAvailable(
   return body.available
 }
 
-// askAssistant sends the conversation to the Assistant. The last message is the new question.
+// askAssistant sends the conversation and the page context to the Assistant. The last message is the new question.
+// A context without a field is left out of the request.
 export async function askAssistant(
-  messages: AssistantMessage[]
+  messages: AssistantMessage[],
+  context: AssistantContext,
+  signal?: AbortSignal
 ): Promise<AssistantAnswer> {
+  const hasContext =
+    context.accountId !== undefined || context.instrument !== undefined
   const response = await fetch("/api/assistant/questions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify(hasContext ? { messages, context } : { messages }),
+    signal,
   })
   return readJSON<AssistantAnswer>(response)
 }

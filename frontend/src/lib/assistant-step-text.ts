@@ -1,13 +1,17 @@
 import type { Account, AssistantStep } from "@/lib/api"
 
-// assistantStepText gives the compact text of a step, for example "Holdings · XTB USD · NVDA.US".
-// Each function of the Assistant has one case. A function that this module does not know shows its name and
-// its shared arguments, so that the user still sees what the model did.
+// assistantStepText gives the compact text of a step, for example "Closed Positions · All Accounts · NVDA.US ·
+// 2025-01-01 to 2025-12-31 · worst 5". Each function of the Assistant has one case. A function that this module
+// does not know shows its name and its shared arguments, so that the user still sees what the model did.
 export function assistantStepText(
   step: AssistantStep,
   accounts: Account[] | null
 ): string {
-  const parts = [stepLabel(step.function), ...argumentParts(step, accounts)]
+  const parts = [
+    stepLabel(step.function),
+    ...argumentParts(step, accounts),
+    ...extraParts(step),
+  ]
   return parts.join(" · ")
 }
 
@@ -16,6 +20,14 @@ function stepLabel(name: string): string {
   switch (name) {
     case "get_holdings":
       return "Holdings"
+    case "get_results":
+      return "Results"
+    case "get_closed_positions":
+      return "Closed Positions"
+    case "get_income_and_fees":
+      return "Income and fees"
+    case "get_allocation_and_net_deposits":
+      return "Allocation and Net Deposits"
     default:
       return name
   }
@@ -45,4 +57,31 @@ function argumentParts(
   else if (from !== "") parts.push(`from ${from}`)
   else if (to !== "") parts.push(`to ${to}`)
   return parts
+}
+
+// extraParts gives the parts of the arguments that only one function has: the order and the row limit of the
+// Closed Positions, and the year of the Allocation and Net Deposits.
+function extraParts(step: AssistantStep): string[] {
+  const args = step.arguments
+  switch (step.function) {
+    case "get_closed_positions": {
+      // Without an order, the backend gives the newest Closed Positions first.
+      const limit =
+        typeof args.limit === "number" && args.limit > 0 ? args.limit : null
+      const order =
+        args.order === "profit_asc"
+          ? "worst"
+          : args.order === "profit_desc"
+            ? "best"
+            : limit !== null
+              ? "newest"
+              : null
+      if (order === null) return []
+      return [limit === null ? order : `${order} ${limit}`]
+    }
+    case "get_allocation_and_net_deposits":
+      return typeof args.year === "number" ? [String(args.year)] : []
+    default:
+      return []
+  }
 }
