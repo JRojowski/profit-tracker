@@ -3,6 +3,8 @@
 package ikze
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -53,21 +55,11 @@ type Year struct {
 // A contribution after the current year gets no row.
 // limit returns the IKZE Limit of a year, or false if the limit of the year is not known. See BusinessLimit.
 func Years(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bool), today time.Time) []Year {
-	byYear := map[int]decimal.Decimal{}
-	first, current := 0, today.Year()
-	for _, op := range ops {
-		if !isContribution(op) {
-			continue
-		}
-		year := op.Time.In(today.Location()).Year()
-		byYear[year] = byYear[year].Add(op.Amount)
-		if first == 0 || year < first {
-			first = year
-		}
-	}
-	if first == 0 {
+	byYear := contributionsByYear(ops, today.Location())
+	if len(byYear) == 0 {
 		return []Year{}
 	}
+	first, current := slices.Min(slices.Collect(maps.Keys(byYear))), today.Year()
 
 	// If each contribution is after the current year, there is no row.
 	years := make([]Year, 0, max(current-first+1, 0))
@@ -81,13 +73,21 @@ func Years(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bo
 // ForYear returns the Year of one calendar year in the location. Unlike Years, it returns a Year
 // for each year, also for a year with no IKZE Contribution and for a year after the current one.
 func ForYear(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bool), year int, loc *time.Location) Year {
-	contributions := decimal.Zero
+	return yearOf(year, contributionsByYear(ops, loc)[year], limit)
+}
+
+// contributionsByYear returns the sum of the IKZE Contributions of each calendar year in the location.
+// A year with no IKZE Contribution is not in the map. Years and ForYear share it, so that they group the
+// contributions in one way. ADR 0007: one calculation for one number.
+func contributionsByYear(ops []ledger.CashOperation, loc *time.Location) map[int]decimal.Decimal {
+	byYear := map[int]decimal.Decimal{}
 	for _, op := range ops {
-		if isContribution(op) && op.Time.In(loc).Year() == year {
-			contributions = contributions.Add(op.Amount)
+		if isContribution(op) {
+			year := op.Time.In(loc).Year()
+			byYear[year] = byYear[year].Add(op.Amount)
 		}
 	}
-	return yearOf(year, contributions, limit)
+	return byYear
 }
 
 // yearOf returns the Year with the limit of the year, if the limit is known.

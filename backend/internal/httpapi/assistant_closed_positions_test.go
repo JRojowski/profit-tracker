@@ -40,7 +40,26 @@ type assistantClosedPositionRow struct {
 	AccountID   int64  `json:"accountId"`
 	AccountName string `json:"accountName"`
 	Currency    string `json:"currency"`
-	closedPositionResponse
+	// The row has no broker IDs: no xtbId and no positionId.
+	Time           string  `json:"time"`
+	Ticker         string  `json:"ticker"`
+	Name           string  `json:"name"`
+	Volume         string  `json:"volume"`
+	Amount         string  `json:"amount"`
+	Cost           string  `json:"cost"`
+	RealizedProfit string  `json:"realizedProfit"`
+	OpenTime       string  `json:"openTime"`
+	OpenPrice      *string `json:"openPrice"`
+	ClosePrice     *string `json:"closePrice"`
+}
+
+// rowOf returns the row of the Assistant for a row of the endpoint. It has the Account fields empty and
+// no broker IDs.
+func rowOf(c closedPositionResponse) assistantClosedPositionRow {
+	return assistantClosedPositionRow{
+		Time: c.Time, Ticker: c.Ticker, Name: c.Name, Volume: c.Volume, Amount: c.Amount, Cost: c.Cost,
+		RealizedProfit: c.RealizedProfit, OpenTime: c.OpenTime, OpenPrice: c.OpenPrice, ClosePrice: c.ClosePrice,
+	}
 }
 
 // tradeAt is a Position that the test buys and sells in full, with one unit of volume.
@@ -129,10 +148,9 @@ func TestAskAssistant_ClosedPositions_NoFilter_RowsAgreeWithTheEndpointNewestFir
 	slices.Reverse(endpoint)
 	require.Len(t, got.Rows, len(endpoint))
 	for i, want := range endpoint {
-		assert.Equal(t, want, got.Rows[i].closedPositionResponse, "row %d", i)
-		assert.Equal(t, usdID, got.Rows[i].AccountID)
-		assert.Equal(t, "XTB USD", got.Rows[i].AccountName)
-		assert.Equal(t, "USD", got.Rows[i].Currency)
+		wantRow := rowOf(want)
+		wantRow.AccountID, wantRow.AccountName, wantRow.Currency = usdID, "XTB USD", "USD"
+		assert.Equal(t, wantRow, got.Rows[i], "row %d", i)
 	}
 }
 
@@ -348,7 +366,11 @@ func TestAskAssistant_ClosedPositions_NoBrokerCommentAndNoAccountNumberGoToTheMo
 	require.NotEmpty(t, got.Rows)
 	for _, call := range model.recordedCalls() {
 		for _, m := range call {
-			for _, private := range []string{"57000001", "57000002", "CLOSE BUY", "OPEN BUY", "Blik deposit"} {
+			// The fixture gives the Position IDs 4000000100 and up, and the XTB IDs of the sell operations 2100 and up.
+			// The row has no field for a broker ID.
+			for _, private := range []string{
+				"57000001", "57000002", "CLOSE BUY", "OPEN BUY", "Blik deposit", "xtbId", "positionId", "4000000",
+			} {
 				assert.NotContains(t, m.Content, private, "a %s message", m.Role)
 			}
 		}

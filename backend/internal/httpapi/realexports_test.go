@@ -603,13 +603,17 @@ func TestRealExports_AssistantClosedPositions_MatchTheClosedPositionsEndpoint(t 
 				"%s: %s: want sum %s, got %s", label, s.Currency, sums[s.Currency], s.Sum)
 			assert.Equal(t, counts[s.Currency], s.Rows, "%s: %s: rows of the sum", label, s.Currency)
 		}
-		// Each row of the result is a row of the endpoint, with the same numbers.
-		byXTBID := map[string]closedPositionResponse{}
+		// Each row of the result is a row of the endpoint, with the same numbers. The rows have no broker IDs,
+		// so the test counts equal rows.
+		unmatched := map[string]int{}
 		for _, c := range want {
-			byXTBID[c.XTBID+"/"+c.PositionID] = c
+			unmatched[rowKey(t, rowOf(c))]++
 		}
 		for _, r := range got.Rows {
-			assert.Equal(t, byXTBID[r.XTBID+"/"+r.PositionID], r.closedPositionResponse, "%s: row %s", label, r.XTBID)
+			r.AccountID, r.AccountName, r.Currency = 0, "", ""
+			key := rowKey(t, r)
+			assert.Positive(t, unmatched[key], "%s: the result has a row that the endpoint has not: %s", label, key)
+			unmatched[key]--
 		}
 	}
 
@@ -655,4 +659,12 @@ func TestRealExports_AssistantIncomeAndFees_MatchTheSummaryEndpoints(t *testing.
 	_, got := askIncome(t, srv, model, `{}`)
 	require.Len(t, got.Accounts, len(exports), "all Accounts")
 	checkIncomeMatchesSummaries(t, srv, got)
+}
+
+// rowKey returns the JSON text of the row. Equal rows have equal keys, also when they hold prices as pointers.
+func rowKey(t *testing.T, r assistantClosedPositionRow) string {
+	t.Helper()
+	data, err := json.Marshal(r)
+	require.NoError(t, err)
+	return string(data)
 }

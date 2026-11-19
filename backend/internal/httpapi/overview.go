@@ -6,8 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -152,14 +150,17 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	closedPositions := []closedPositionResponse{}
-	var realizedProfitSum *string
-	sum := decimal.Zero
+	var instrumentClosed []ledger.ClosedPosition
 	for _, c := range view.state.ClosedPositions {
 		if c.Instrument.Ticker == ticker {
 			closedPositions = append(closedPositions, toClosedPositionResponse(c))
-			sum = sum.Add(c.RealizedProfit)
-			realizedProfitSum = new(formatAmount(sum))
+			instrumentClosed = append(instrumentClosed, c)
 		}
+	}
+	// The sum is null when the Instrument has no Closed Position.
+	var realizedProfitSum *string
+	if len(instrumentClosed) > 0 {
+		realizedProfitSum = new(formatAmount(ledger.SumRealizedProfit(instrumentClosed)))
 	}
 	writeJSON(w, http.StatusOK, overviewResponse{
 		Ticker:              ticker,

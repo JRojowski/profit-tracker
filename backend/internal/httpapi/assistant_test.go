@@ -249,6 +249,10 @@ func TestAskAssistant_RequestThatIsNotValid_Returns400(t *testing.T) {
 		{name: "empty question", body: `{"messages": [{"role": "user", "content": "  "}]}`},
 		{name: "too many messages", body: tooManyMessagesBody()},
 		{name: "message that is too long", body: fmt.Sprintf(`{"messages": [{"role": "user", "content": %q}]}`, strings.Repeat("a", 4001))},
+		{
+			name: "answer that is too long",
+			body: fmt.Sprintf(`{"messages": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": %q}, {"role": "user", "content": "And?"}]}`, strings.Repeat("a", 20001)),
+		},
 		{name: "context with an unknown Account", body: `{"messages": [{"role": "user", "content": "Hi"}], "context": {"accountId": 999}}`},
 		{name: "context with a text Account ID", body: `{"messages": [{"role": "user", "content": "Hi"}], "context": {"accountId": "one"}}`},
 	}
@@ -334,6 +338,22 @@ func TestAskAssistant_MessagesAtTheLimit_AreAccepted(t *testing.T) {
 	req.Messages = append(req.Messages, questionMessage{Role: "user", Content: strings.Repeat("a", 4000)})
 
 	srv.ask(t, req)
+}
+
+func TestAskAssistant_LongEarlierAnswer_IsAccepted(t *testing.T) {
+	t.Parallel()
+	model := newFakeModel(assistant.Reply{Text: "An answer."})
+	srv := startServerWithOptions(t, serverOptions{model: model})
+	// A list of Closed Positions can be longer than a question of a user can be.
+	req := questionRequest{Messages: []questionMessage{
+		{Role: "user", Content: "List my Closed Positions."},
+		{Role: "assistant", Content: strings.Repeat("a", 20000)},
+		{Role: "user", Content: "Which one is the best?"},
+	}}
+
+	srv.ask(t, req)
+
+	assert.Len(t, model.recordedCalls(), 1)
 }
 
 func TestAskAssistant_PageContext_ReachesTheModelInTheInstructions(t *testing.T) {
