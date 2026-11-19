@@ -481,6 +481,54 @@ func TestRealExports_AssistantResults_MatchThePageEndpoints(t *testing.T) {
 	checkAllResultsMatchPages(t, srv, askResults(t, srv, model, `{}`))
 }
 
+// TestRealExports_AssistantResultsWithPeriod_FromTheFirstCashOperationToToday_MatchTheTotalResult checks that the
+// Total Result of the period from the first Cash Operation to today is the Total Result of the summary endpoint,
+// for each Account and for all Accounts. The two numbers come from different calculations (the Value History and
+// the Ledger), so the check allows a difference of less than 0.01. The fake model calls the function.
+// No test calls a real model.
+func TestRealExports_AssistantResultsWithPeriod_FromTheFirstCashOperationToToday_MatchTheTotalResult(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv, model := startAssistantServer(t, newFakeProvider())
+	accountIDs := make([]int64, len(exports))
+	for i, export := range exports {
+		accountIDs[i] = srv.importRealExport(t, export)
+	}
+
+	// check asks for the period from the first point to the last point of the Value History, which is today.
+	check := func(label string, points []valuePoint, arguments func(from, to string) string, want *string) {
+		t.Helper()
+		require.NotEmpty(t, points, label)
+		first, last := points[0].Date, points[len(points)-1].Date
+		got := askPeriod(t, srv, model, arguments(first, last))
+		require.True(t, got.Available, label)
+		assert.Equal(t, "0.00", *got.StartValue, "%s: the start is before the first Cash Operation", label)
+		assert.Equal(t, last, got.EndDate, label)
+		require.NotNil(t, want, label)
+		wantTotal, gotTotal := decimal.RequireFromString(*want), requireAmount(t, label, got.TotalResult)
+		assert.True(t, wantTotal.Sub(gotTotal).Abs().LessThan(decimal.RequireFromString("0.01")),
+			"%s: the summary has the Total Result %s, the period has %s", label, wantTotal, gotTotal)
+	}
+
+	// The fake model has one script at a time. Thus the checks run one after the other, with no subtests.
+	for i, export := range exports {
+		id := accountIDs[i]
+		check("export "+export.label, srv.valueHistory(t, id).Points, func(from, to string) string {
+			return accountPeriodArguments(id, from, to)
+		}, new(srv.fullSummary(t, id).TotalResult))
+	}
+	history := srv.allValueHistory(t)
+	if !history.Available {
+		got := askPeriod(t, srv, model, `{"from": "2000-01-01", "to": "2100-01-01"}`)
+		assert.False(t, got.Available, "all Accounts")
+		assert.Nil(t, got.TotalResult, "all Accounts: no number without a Value History")
+		return
+	}
+	check("all Accounts", history.Points, func(from, to string) string {
+		return fmt.Sprintf(`{"from": %q, "to": %q}`, from, to)
+	}, srv.allAccounts(t).TotalResult)
+}
+
 // TestRealExports_AssistantAllocation_MatchesThePageEndpoints checks that the function
 // get_allocation_and_net_deposits gives the same numbers as the Allocation, summary and IKZE Limit endpoints,
 // for each Account and for all Accounts. The fake model calls the function. No test calls a real model.
