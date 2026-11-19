@@ -1,9 +1,12 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,6 +83,55 @@ func TestAskAssistant_ErrorCases_HaveOwnStatusMessageAndCode(t *testing.T) {
 			assert.Equal(t, tc.wantCode, got.Code)
 		})
 	}
+}
+
+// signalingModel is an assistant.Model that tells when it has got a call, and then does not answer until its
+// context ends.
+type signalingModel struct{ started chan struct{} }
+
+// Reply sends on started, blocks until the context ends, and returns the error of the context.
+func (m signalingModel) Reply(ctx context.Context, _ []assistant.Message, _ []assistant.FunctionDefinition) (assistant.Reply, error) {
+	m.started <- struct{}{}
+	<-ctx.Done()
+	return assistant.Reply{}, fmt.Errorf("wait for the provider: %w", ctx.Err())
+}
+
+func TestAskAssistant_ClientCancels_LogsNoErrorAndNoWarning(t *testing.T) {
+	t.Parallel()
+	model := signalingModel{started: make(chan struct{}, 1)}
+	logs := &syncBuffer{}
+	srv := startServerWithOptions(t, serverOptions{model: model, logs: logs})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		body, err := json.Marshal(question("What are my Holdings?"))
+		if err != nil {
+			done <- err
+			return
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/api/assistant/questions", bytes.NewReader(body))
+		if err != nil {
+			done <- err
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := srv.client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+		done <- err
+	}()
+	<-model.started
+
+	cancel() // The user closes the panel while the model works.
+
+	require.ErrorIs(t, <-done, context.Canceled)
+	// The handler logs the cancel at the level INFO. Wait for that line: the handler has logged all it logs.
+	require.Eventually(t, func() bool { return strings.Contains(logs.String(), "the client cancelled the question") },
+		5*time.Second, 5*time.Millisecond, "logs: %s", logs.String())
+	assert.NotContains(t, logs.String(), "level=ERROR")
+	assert.NotContains(t, logs.String(), "level=WARN")
 }
 
 // failingModel returns a model that fails each call with err.

@@ -144,6 +144,12 @@ func (a *api) askAssistant(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), a.questionTimeout)
 	defer cancel()
 	answer, err := assistant.Ask(ctx, a.model, messages, a.assistantFunctions())
+	if err != nil && r.Context().Err() != nil {
+		// The user closed the panel or reloaded the page. This is no failure of the provider or of the tool,
+		// and nobody reads the response.
+		a.logger.InfoContext(r.Context(), "the client cancelled the question", "reason", context.Cause(r.Context()))
+		return
+	}
 	if err != nil && a.writeModelError(ctx, w, err) {
 		return
 	}
