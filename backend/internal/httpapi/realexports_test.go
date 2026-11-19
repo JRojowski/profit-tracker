@@ -481,8 +481,15 @@ func TestRealExports_AssistantClosedPositions_MatchTheClosedPositionsEndpoint(t 
 		sums := map[string]decimal.Decimal{}
 		counts := map[string]int{}
 		for _, id := range ids {
+			var accounts []accountResponse
+			require.Equal(t, http.StatusOK, srv.getJSON(t, "/api/accounts", &accounts))
 			var acc accountResponse
-			require.Equal(t, http.StatusOK, srv.getJSON(t, fmt.Sprintf("/api/accounts/%d", id), &acc))
+			for _, a := range accounts {
+				if a.ID == id {
+					acc = a
+				}
+			}
+			require.NotEmpty(t, acc.Currency, "the Account %d has a currency", id)
 			for _, c := range srv.closedPositions(t, id) {
 				if ticker != "" && c.Ticker != ticker {
 					continue
