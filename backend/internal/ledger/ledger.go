@@ -307,9 +307,7 @@ func Calculate(l Ledger) (State, error) {
 	s.ClosedPositions = closedPositions
 	s.Holdings = holdings(l, lots)
 	s.OpenLots = openLots(l, lots)
-	for _, closedPosition := range closedPositions {
-		s.RealizedProfit = s.RealizedProfit.Add(closedPosition.RealizedProfit)
-	}
+	s.RealizedProfit = SumRealizedProfit(closedPositions)
 	s.UnrealizedProfit, s.Value = decimal.Zero, s.Cash
 	for _, h := range s.Holdings {
 		s.UnrealizedProfit = s.UnrealizedProfit.Add(h.UnrealizedProfit)
@@ -378,6 +376,17 @@ type Income struct {
 	NetInterest decimal.Decimal
 	// Fees is the sum of the SEC fees and the corrections, with the sign of the export. It is usually negative.
 	Fees decimal.Decimal
+}
+
+// SumRealizedProfit returns the sum of the Realized Profit of the Closed Positions. It is zero for no Closed Position.
+// It is the one rule for this sum: the Account totals, the Instrument Overview and the Assistant use it.
+// It does not join two currencies, so the caller gives it the Closed Positions of one currency.
+func SumRealizedProfit(closedPositions []ClosedPosition) decimal.Decimal {
+	sum := decimal.Zero
+	for _, cp := range closedPositions {
+		sum = sum.Add(cp.RealizedProfit)
+	}
+	return sum
 }
 
 // SumIncome returns the net dividends, the net interest and the fees of the Cash Operations that the filter counts.

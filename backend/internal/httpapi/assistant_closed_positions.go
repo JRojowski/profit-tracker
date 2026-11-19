@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
@@ -103,11 +101,10 @@ type assistantClosedPositionRow struct {
 
 // closedPositionEntry is a Closed Position of the Ledger with the Account it belongs to.
 type closedPositionEntry struct {
-	row    assistantClosedPositionRow
-	profit decimal.Decimal
-	time   time.Time
-	// xtbID breaks a tie in the order of the rows. It is not part of the row.
-	xtbID string
+	row assistantClosedPositionRow
+	// position is the Closed Position of the row. Its time and its XTB ID order the rows, and its Realized
+	// Profit goes into the sums. The row has no XTB ID.
+	position ledger.ClosedPosition
 }
 
 // toAssistantClosedPositionRow returns the row of the Closed Position of the Account.
@@ -175,10 +172,7 @@ func (a *api) runClosedPositions(ctx context.Context, arguments json.RawMessage)
 		for _, cp := range view.state.ClosedPositions {
 			if closedPositionAgrees(cp, ticker, first, last) {
 				entries = append(entries, closedPositionEntry{
-					row:    toAssistantClosedPositionRow(acc, cp),
-					profit: cp.RealizedProfit,
-					time:   cp.Time,
-					xtbID:  cp.XTBID,
+					row: toAssistantClosedPositionRow(acc, cp), position: cp,
 				})
 			}
 		}
@@ -257,20 +251,15 @@ func closedPositionAgrees(cp ledger.ClosedPosition, ticker string, first, last t
 
 // sumRealizedProfit adds the Realized Profit per currency. It never joins two currencies.
 func sumRealizedProfit(entries []closedPositionEntry) []realizedProfitSum {
-	byCurrency := map[string]*realizedProfitSum{}
-	totals := map[string]decimal.Decimal{}
+	byCurrency := map[string][]ledger.ClosedPosition{}
 	for _, e := range entries {
-		cur := e.row.Currency
-		if byCurrency[cur] == nil {
-			byCurrency[cur] = &realizedProfitSum{Currency: cur}
-		}
-		byCurrency[cur].Rows++
-		totals[cur] = totals[cur].Add(e.profit)
+		byCurrency[e.row.Currency] = append(byCurrency[e.row.Currency], e.position)
 	}
 	sums := make([]realizedProfitSum, 0, len(byCurrency))
-	for cur, s := range byCurrency {
-		s.Sum = formatAmount(totals[cur])
-		sums = append(sums, *s)
+	for cur, positions := range byCurrency {
+		sums = append(sums, realizedProfitSum{
+			Currency: cur, Sum: formatAmount(ledger.SumRealizedProfit(positions)), Rows: len(positions),
+		})
 	}
 	slices.SortFunc(sums, func(x, y realizedProfitSum) int { return strings.Compare(x.Currency, y.Currency) })
 	return sums
@@ -280,16 +269,20 @@ func sumRealizedProfit(entries []closedPositionEntry) []realizedProfitSum {
 func closedPositionOrder(order string) func(a, b closedPositionEntry) int {
 	newest := func(a, b closedPositionEntry) int {
 		return cmp.Or(
-			b.time.Compare(a.time),
-			strings.Compare(b.xtbID, a.xtbID),
+			b.position.Time.Compare(a.position.Time),
+			strings.Compare(b.position.XTBID, a.position.XTBID),
 			cmp.Compare(a.row.AccountID, b.row.AccountID),
 		)
 	}
 	switch order {
 	case orderProfitAsc:
-		return func(a, b closedPositionEntry) int { return cmp.Or(a.profit.Cmp(b.profit), newest(a, b)) }
+		return func(a, b closedPositionEntry) int {
+			return cmp.Or(a.position.RealizedProfit.Cmp(b.position.RealizedProfit), newest(a, b))
+		}
 	case orderProfitDesc:
-		return func(a, b closedPositionEntry) int { return cmp.Or(b.profit.Cmp(a.profit), newest(a, b)) }
+		return func(a, b closedPositionEntry) int {
+			return cmp.Or(b.position.RealizedProfit.Cmp(a.position.RealizedProfit), newest(a, b))
+		}
 	}
 	return newest
 }
