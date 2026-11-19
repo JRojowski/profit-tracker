@@ -1,6 +1,6 @@
-import type { SortingState } from "@tanstack/react-table"
-import { ArrowDown, ArrowUp } from "lucide-react"
-import { useMemo, useState } from "react"
+import { ArrowDown, ArrowUp, RotateCcw } from "lucide-react"
+import { useMemo } from "react"
+import { createPortal } from "react-dom"
 
 import { CurrencyBadge } from "@/components/account-badges"
 import { DataTable, type DataTableColumn } from "@/components/data-table"
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useTableView } from "@/hooks/use-table-view"
 import type { Holding } from "@/lib/api"
 import { percentOf, sumDecimals } from "@/lib/decimal"
 import {
@@ -36,6 +37,7 @@ import {
   textSortValue,
   type SortingProps,
 } from "@/lib/table-sort"
+import type { TableViewProps } from "@/lib/table-view"
 import { cn } from "@/lib/utils"
 
 type HoldingsTableProps = {
@@ -43,7 +45,15 @@ type HoldingsTableProps = {
   currency: string
   // onPriceSourceChanged runs after the user changed the price source of an Instrument.
   onPriceSourceChanged: () => void
+  // actionSlot is the element in the card header that holds the "Reset columns" button. It is null until the header is ready.
+  actionSlot: HTMLElement | null
 }
+
+// VIEW_STORAGE_KEY is the localStorage key of the column order and the sorting of this table.
+const VIEW_STORAGE_KEY = "profit-tracker:table:holdings"
+
+// FIXED_COLUMN_IDS are the leading columns that the user cannot move.
+const FIXED_COLUMN_IDS = ["instrument"]
 
 // HoldingsTable shows the Holdings of an Account: a table on a wide screen and a list of compact rows on a narrow screen.
 // Each row opens the price source dialog. A Holding with a Price Warning has a badge.
@@ -52,14 +62,23 @@ export function HoldingsTable({
   holdings,
   currency,
   onPriceSourceChanged,
+  actionSlot,
 }: HoldingsTableProps) {
   const isMobile = useIsMobile()
-  // The wide table and the cards share one sorting. The default is the order of the response.
-  const [sorting, setSorting] = useState<SortingState>([])
   const columns = useMemo(
     () => holdingColumns(currency, onPriceSourceChanged),
     [currency, onPriceSourceChanged]
   )
+  // The wide table and the cards share one view. The default sorting is the order of the response.
+  // The default column order comes from the column definitions, so a new column needs one edit.
+  const view = useTableView(VIEW_STORAGE_KEY, {
+    defaultColumnOrder: columns.map((column) => column.id),
+    sortableColumnIds: columns
+      .filter((column) => column.sortValue)
+      .map((column) => column.id),
+    fixedColumnIds: FIXED_COLUMN_IDS,
+  })
+  const { sorting, onSortingChange } = view.props
   // The rows are sorted once, here. The cards use only the first sort column.
   const sorted = useMemo(
     () => sortRows(holdings, isMobile ? sorting.slice(0, 1) : sorting, columns),
@@ -85,17 +104,32 @@ export function HoldingsTable({
           currency={currency}
           onPriceSourceChanged={onPriceSourceChanged}
           sorting={sorting}
-          onSortingChange={setSorting}
+          onSortingChange={onSortingChange}
         />
       ) : (
-        <WideTable
-          holdings={sorted}
-          totals={totals}
-          columns={columns}
-          currency={currency}
-          sorting={sorting}
-          onSortingChange={setSorting}
-        />
+        <>
+          {actionSlot &&
+            createPortal(
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={view.isDefault}
+                onClick={view.reset}
+              >
+                <RotateCcw data-icon="inline-start" />
+                Reset columns
+              </Button>,
+              actionSlot
+            )}
+          <WideTable
+            holdings={sorted}
+            totals={totals}
+            columns={columns}
+            currency={currency}
+            view={view.props}
+          />
+        </>
       )}
       <NoValueNote holdings={holdings} />
     </div>
@@ -330,9 +364,9 @@ function WideTable({
   totals,
   columns,
   currency,
-  sorting,
-  onSortingChange,
-}: SortingProps & {
+  view,
+}: {
+  view: TableViewProps
   holdings: Holding[]
   totals: HoldingTotals
   columns: DataTableColumn<Holding>[]
@@ -341,11 +375,10 @@ function WideTable({
   const hasKnown = totals.included > 0
   return (
     <DataTable
+      {...view}
       columns={columns}
       rows={holdings}
       getRowId={(holding) => holding.ticker}
-      sorting={sorting}
-      onSortingChange={onSortingChange}
       footer={{
         label: (
           <div className="flex flex-col gap-0.5">

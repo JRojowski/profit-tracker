@@ -31,7 +31,7 @@ export type SortableColumn<TRow> = {
 }
 
 // MAX_SORT_COLUMNS is the largest number of columns that one sort can use.
-const MAX_SORT_COLUMNS = 2
+export const MAX_SORT_COLUMNS = 2
 
 // nextSorting gives the sorting after a click on the header of one column.
 // A click on one column goes through ascending, descending and no sort.
