@@ -102,3 +102,30 @@ Narrow layout (390 px wide):
 - [ ] The sort that you set here is in the wide table after you widen the window.
 
 Check the light theme and the dark theme, at 1440 px and at 390 px.
+
+## 5. Closed Positions filters
+
+Spec: #48, ticket #52. Open the Closed Positions page of the Account "XTB USD" of `make demo`. The filters are the query parameters `instrument` (repeated), `from` and `to` (both `YYYY-MM-DD`, both inclusive).
+
+- [ ] The toolbar above the table shows, in this order: the year buttons, "From", "To", "Instrument" and "Reset filters". "Reset filters" is disabled. "All years" is active.
+- [ ] Click a year button. The URL gets `from=YYYY-01-01` and `to=YYYY-12-31`. The rows, the total row and the two summary cards follow. The caption of each card shows the year. The button is active.
+- [ ] Click "All years". `from` and `to` leave the URL.
+- [ ] Open "From", pick a day. The button shows the day in the local format and the URL gets `from`. Open "To", pick a day. The URL gets `to`. No year button is active for a range that is not a year.
+- [ ] Set only "From". Then clear it and set only "To". Each open range works. "Clear From date" and "Clear To date" remove the date.
+- [ ] A day in the range with no Closed Position shows "No Closed Positions match the filters." with a "Reset filters" button. The summary cards show zero. The button brings the rows back.
+- [ ] Open "Instrument". Type part of a ticker or of a name. The list shrinks. Select one Instrument. The trigger shows the ticker and the URL has one `instrument`. Select a second one. The trigger shows "2 Instruments". "Clear selection" removes both.
+- [ ] The list holds only Instruments that have a Closed Position on the Account, also when a date range hides some rows.
+- [ ] Reload the page with filters set. The filters, the rows and the cards are the same. Open the same URL in a new tab. The view is the same.
+- [ ] Open each of these URLs. The page shows all rows, no error, and "Reset filters" is disabled: `?from=abc`, `?from=2025-02-30`, `?from=2026-01-01&to=2025-01-01`, `?instrument=NOPE`. The URL stays as typed.
+- [ ] Add another parameter, for example `?x=1`, and change a filter. The parameter `x` stays.
+- [ ] Change some filters, then click the browser Back button. The browser leaves the page. It does not step through the filter changes.
+- [ ] Sort a column and drag a column. The URL filters do not change. Change a filter. The key `profit-tracker:table:closed-positions` does not change. "Reset columns" does not touch the filters.
+- [ ] Near midnight on 31 December in Polish time: use a Closed Position that closed at 2025-12-31T23:30:00Z. In Polish time it is on 2026-01-01. With `to=2025-12-31` the row is not in the result. With `from=2026-01-01&to=2026-12-31` it is in the result. The date column shows 01/01/2026. Check this also with the time zone of the browser set to a zone far from Poland, for example Los Angeles.
+- [ ] A Closed Position at 2025-12-31T22:30:00Z is on 2025-12-31 in Polish time. The year 2025 includes it.
+
+Narrow layout (390 px wide):
+
+- [ ] The toolbar wraps to more rows. The popovers fit the screen. The page does not scroll sideways.
+- [ ] The filters select the stacked rows, and the cards and the total row follow.
+
+Check the light theme and the dark theme, at 1440 px and at 390 px, also with a popover open.

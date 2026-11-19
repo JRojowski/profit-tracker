@@ -127,3 +127,17 @@ export function formatDate(date: string): string {
   const [year, month, day] = date.split("-").map(Number)
   return new Date(year, month - 1, day).toLocaleDateString()
 }
+
+// polishDate gives the calendar date of an RFC 3339 time in Polish time, as YYYY-MM-DD.
+// Date text in this form compares in the right order with a plain string comparison.
+export function polishDate(time: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: polishTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(time))
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? ""
+  return `${part("year")}-${part("month")}-${part("day")}`
+}

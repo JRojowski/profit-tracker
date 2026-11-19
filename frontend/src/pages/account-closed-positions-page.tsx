@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
+import { useSearchParams } from "react-router"
 
 import { FigureLabel } from "@/components/figure-label"
 import { LoadedView } from "@/components/loaded-view"
@@ -8,6 +9,10 @@ import {
   ClosedPositionsTable,
   closedPositionsViewRules,
 } from "@/components/closed-positions-table"
+import {
+  ClosedPositionsFilters,
+  ResetFiltersButton,
+} from "@/components/closed-positions-filters"
 import { ResetColumnsButton } from "@/components/reset-columns-button"
 import {
   Card,
@@ -16,30 +21,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useLoad } from "@/hooks/use-load"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTableView } from "@/hooks/use-table-view"
 import { fetchClosedPositions, type ClosedPosition } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
+import {
+  applyClosedPositionFilters,
+  describeFilters,
+  parseClosedPositionFilters,
+  writeClosedPositionFilters,
+  type ClosedPositionFilters,
+} from "@/lib/closed-position-filters"
 import { sumDecimals } from "@/lib/decimal"
 import { amountSign, formatAmount, polishYear, signColour } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useAccount } from "@/pages/account-layout"
 
-// allYears is the value of the year filter that shows the Closed Positions of all years.
-const allYears = "all"
-
-// selectedItem marks the selected year with the accent, as in the mockup. The default muted background is too faint.
-const selectedItem =
-  "data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-
 // AccountClosedPositionsPage shows the total Realized Profit and the number of Closed Positions of one Account,
-// and the table of the Closed Positions, newest first. A filter selects one calendar year in Polish time.
+// and the table of the Closed Positions, newest first. The filters are in the URL.
 export function AccountClosedPositionsPage() {
   const account = useAccount()
   const { valuesVersion } = useAppState()
-  const [year, setYear] = useState(allYears)
   const closedPositions = useLoad(String(account.id), valuesVersion, (signal) =>
     fetchClosedPositions(account.id, signal)
   )
@@ -53,8 +56,6 @@ export function AccountClosedPositionsPage() {
         <ClosedPositionsView
           closedPositions={data}
           currency={account.currency}
-          year={year}
-          onYearChange={setYear}
         />
       )}
     </LoadedView>
@@ -65,17 +66,12 @@ type ClosedPositionsViewProps = {
   // closedPositions are in the order of the backend, oldest first.
   closedPositions: ClosedPosition[]
   currency: string
-  // year is the selected year as text, or allYears.
-  year: string
-  onYearChange: (year: string) => void
 }
 
-// ClosedPositionsView shows the figures and the table of the Closed Positions of the selected year.
+// ClosedPositionsView shows the figures and the table of the Closed Positions that the filters select.
 function ClosedPositionsView({
   closedPositions,
   currency,
-  year,
-  onYearChange,
 }: ClosedPositionsViewProps) {
   // The hook is here, and not in the table, so that the card header can hold the "Reset columns" button.
   const isMobile = useIsMobile()
@@ -92,19 +88,33 @@ function ClosedPositionsView({
       )
     ),
   ]
-  // The selected year can be missing, for example after an Import. Then the page shows all years.
-  const selected = years.includes(year) ? year : allYears
-  const shown =
-    selected === allYears
-      ? newestFirst
-      : newestFirst.filter(
-          (closedPosition) =>
-            String(polishYear(closedPosition.time)) === selected
-        )
+  // The options are the Instruments of all rows, sorted by ticker, not of the filtered rows.
+  const instruments = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const item of closedPositions) names.set(item.ticker, item.name)
+    return [...names]
+      .map(([ticker, name]) => ({ ticker, name }))
+      .sort((a, b) => (a.ticker < b.ticker ? -1 : 1))
+  }, [closedPositions])
+  // The filters live only in the URL. An invalid value is ignored and the URL stays as it is.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filters = useMemo(
+    () =>
+      parseClosedPositionFilters(
+        searchParams,
+        instruments.map((item) => item.ticker)
+      ),
+    [searchParams, instruments]
+  )
+  const changeFilters = (next: ClosedPositionFilters) =>
+    setSearchParams((params) => writeClosedPositionFilters(params, next), {
+      replace: true,
+    })
+  const shown = applyClosedPositionFilters(newestFirst, filters)
   const total = sumDecimals(
     shown.map((closedPosition) => closedPosition.realizedProfit)
   )
-  const period = selected === allYears ? "All years" : selected
+  const period = describeFilters(filters)
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -146,40 +156,25 @@ function ClosedPositionsView({
           )}
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
-          {years.length > 0 && (
-            // On a narrow screen, the filter scrolls by itself when it has many years.
-            <div className="max-w-full overflow-x-auto">
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                spacing={0}
-                aria-label="Year"
-                value={selected}
-                onValueChange={(value) => {
-                  // An empty value means that the user clicked the selected item again.
-                  if (value) onYearChange(value)
-                }}
-              >
-                <ToggleGroupItem value={allYears} className={selectedItem}>
-                  All years
-                </ToggleGroupItem>
-                {years.map((item) => (
-                  <ToggleGroupItem
-                    key={item}
-                    value={item}
-                    className={cn("num", selectedItem)}
-                  >
-                    {item}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </div>
+          {closedPositions.length > 0 && (
+            <ClosedPositionsFilters
+              filters={filters}
+              onChange={changeFilters}
+              years={years}
+              instruments={instruments}
+            />
           )}
           {closedPositions.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               The Account has no Closed Positions.
             </p>
+          ) : shown.length === 0 ? (
+            <div className="flex flex-col items-start gap-3">
+              <p className="text-sm text-muted-foreground">
+                No Closed Positions match the filters.
+              </p>
+              <ResetFiltersButton filters={filters} onReset={changeFilters} />
+            </div>
           ) : (
             <ClosedPositionsTable
               columns={columns}
