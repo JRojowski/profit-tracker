@@ -46,6 +46,8 @@ type Step struct {
 	Function string
 	// Arguments are the arguments as the model gave them. They can be JSON that is not valid.
 	Arguments json.RawMessage
+	// Result is the JSON that the function gave to the model. Only the loop sets it, in Answer.Steps.
+	Result json.RawMessage
 }
 
 // FunctionDefinition is the description of one function for the model.

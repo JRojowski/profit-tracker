@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -129,6 +130,8 @@ func question(text string) questionRequest {
 type answerStep struct {
 	Function  string         `json:"function"`
 	Arguments map[string]any `json:"arguments"`
+	// Result is the JSON that the function gave to the model.
+	Result json.RawMessage `json:"result"`
 }
 
 // answerResponse is the body of POST /api/assistant/questions.
@@ -223,6 +226,18 @@ func TestAskAssistant_Instructions_HoldTheRulesTheDateAndTheAccounts(t *testing.
 		"Describe and analyse the investments. Do not recommend a purchase or a sale.",
 		// Language
 		"Answer in the language of the question.",
+		// Format
+		"Use simple Markdown: short paragraphs, bullet lists, bold for a key number, and a table for three or more rows of numbers.",
+		"Do not use headings, HTML or code blocks.",
+		// Glossary terms
+		"Never translate the terms of the tool. Write each term in English, with its exact spelling and capitals, in each language.",
+		`Do not use "portfolio", "portfel", "position", "pozycja" or "konto".`,
+		// Absent values
+		`If a value is absent or null in a function result, it is "not available". Say so.`,
+		"Never state, imply or derive a number that the function result does not hold.",
+		"Copy each amount exactly as the function result gives it, with its currency.",
+		// Short answers
+		"Keep the answer short. Answer the question, then add at most one short note",
 		// Glossary
 		"Total Result:", "Holding:", "Unrealized Profit:",
 		// Today in Polish time
@@ -419,4 +434,14 @@ func TestAskAssistant_PageContext_ReachesTheModelInTheInstructions(t *testing.T)
 			}
 		})
 	}
+}
+
+// withoutResults returns the steps with no Result, so that a test can compare the function and the arguments.
+func withoutResults(steps []answerStep) []answerStep {
+	out := make([]answerStep, 0, len(steps))
+	for _, s := range steps {
+		s.Result = nil
+		out = append(out, s)
+	}
+	return out
 }

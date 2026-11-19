@@ -141,7 +141,7 @@ func TestAskAssistant_ClosedPositions_NoFilter_RowsAgreeWithTheEndpointNewestFir
 
 	answer, got := askClosedPositions(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, usdID))
 
-	assert.Equal(t, []answerStep{{Function: "get_closed_positions", Arguments: map[string]any{"accountId": float64(usdID)}}}, answer.Steps)
+	assert.Equal(t, []answerStep{{Function: "get_closed_positions", Arguments: map[string]any{"accountId": float64(usdID)}}}, withoutResults(answer.Steps))
 	assert.Equal(t, `Account "XTB USD"`, got.Scope)
 	assert.Equal(t, "newest_first", got.Order)
 	assert.Equal(t, 4, got.TotalRows)

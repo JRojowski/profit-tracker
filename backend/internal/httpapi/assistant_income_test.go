@@ -132,7 +132,7 @@ func TestAskAssistant_IncomeAndFees_NoFilter_MatchesTheSummaryEndpoint(t *testin
 
 	answer, got := askIncome(t, srv, model, fmt.Sprintf(`{"accountId": %d}`, accountID))
 
-	assert.Equal(t, []answerStep{{Function: "get_income_and_fees", Arguments: map[string]any{"accountId": float64(accountID)}}}, answer.Steps)
+	assert.Equal(t, []answerStep{{Function: "get_income_and_fees", Arguments: map[string]any{"accountId": float64(accountID)}}}, withoutResults(answer.Steps))
 	assert.Equal(t, `Account "XTB USD"`, got.Scope)
 	assert.Empty(t, got.LeftOut)
 	assert.Equal(t, usdSums("10.62", "2.75", "-0.13"), requireOneTotal(t, got))

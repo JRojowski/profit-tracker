@@ -115,7 +115,7 @@ func TestAskAssistant_Holdings_GivesTheModelTheHoldingsOfTheAccount(t *testing.T
 	assert.Equal(t, answerResponse{
 		Answer: "Here is the answer.",
 		Steps:  []answerStep{{Function: "get_holdings", Arguments: map[string]any{"accountId": float64(accountID)}}},
-	}, answer)
+	}, answerResponse{Answer: answer.Answer, Steps: withoutResults(answer.Steps)})
 	assert.Equal(t, holdingsResult{
 		Scope: `Account "XTB USD"`,
 		Accounts: []holdingsAccountResult{{

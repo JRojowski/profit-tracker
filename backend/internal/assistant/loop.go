@@ -117,6 +117,9 @@ func Ask(ctx context.Context, model Model, messages []Message, functions []Funct
 				if err != nil {
 					return Answer{}, err
 				}
+				// The answer lists the step with its error result, so that the user sees each step of the model.
+				s.Result = result
+				steps = append(steps, s)
 				conversation = append(conversation, Message{Role: RoleFunction, StepID: s.ID, Content: string(result)})
 				continue
 			}
@@ -124,6 +127,7 @@ func Ask(ctx context.Context, model Model, messages []Message, functions []Funct
 			if err != nil {
 				return Answer{}, err
 			}
+			s.Result = result
 			steps = append(steps, s)
 			conversation = append(conversation, Message{Role: RoleFunction, StepID: s.ID, Content: string(result)})
 		}

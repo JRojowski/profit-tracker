@@ -31,8 +31,8 @@ Check these rules for each answer:
 - [ ] Each number agrees with the screen, to the last digit that the screen shows.
 - [ ] Each amount has its currency. No sum joins two currencies.
 - [ ] The names are the names of the screens: "Total Result", "Holding", "Closed Position". No "P/L", "position" or "portfolio".
-- [ ] The answer holds no HTML tag and no markdown table.
-- [ ] The steps under the answer show the Account, the Instrument and the period that you asked for.
+- [ ] The answer shows no raw Markdown mark such as `**` or `|---|`. A table, a list and bold text show as formatted text. An HTML tag in the answer shows as text.
+- [ ] The block "Steps" under the answer shows the Account, the Instrument and the period that you asked for. A click on a step shows its "Arguments" and its "Result". An answer with no step shows "No function used".
 
 | # | Question | Step | Screen with the expected numbers |
 |---|---|---|---|

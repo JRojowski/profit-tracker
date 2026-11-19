@@ -23,7 +23,7 @@ func TestAskAssistant_TooManyStepsInOneTurn_RunsTheFirstEightAndTellsTheModelToA
 	answer := srv.ask(t, question("What are my Holdings?"))
 
 	assert.Equal(t, "Here is the answer.", answer.Answer)
-	assert.Len(t, answer.Steps, 8, "the steps over the cap do not run, so the answer does not list them")
+	assert.Len(t, answer.Steps, 10, "the answer lists each step, also the steps over the cap that did not run")
 	results := model.functionResults(t)
 	require.Len(t, results, 10, "each step has a result, because the provider needs one for each tool call")
 	for i, r := range results {
@@ -53,4 +53,25 @@ func TestAskAssistant_EightStepsInOneTurn_AllRun(t *testing.T) {
 	answer := srv.ask(t, question("What are my Holdings?"))
 
 	assert.Len(t, answer.Steps, 8)
+}
+
+func TestAskAssistant_Steps_HoldTheResultThatTheModelGot(t *testing.T) {
+	t.Parallel()
+	srv, model := startAssistantServer(t, newFakeProvider())
+	model.setScript(
+		assistant.Reply{Steps: []assistant.Step{
+			{ID: "ok", Function: "get_holdings", Arguments: json.RawMessage(`{}`)},
+			{ID: "bad", Function: "no_such_function", Arguments: json.RawMessage(`{}`)},
+		}},
+		assistant.Reply{Text: "Done."})
+
+	answer := srv.ask(t, question("What are my Holdings?"))
+
+	results := model.functionResults(t)
+	require.Len(t, results, 2)
+	require.Len(t, answer.Steps, 2)
+	for i, r := range results {
+		assert.JSONEq(t, r.Content, string(answer.Steps[i].Result), "step %d", i+1)
+	}
+	assert.Contains(t, string(answer.Steps[1].Result), `"error"`, "an error result is a result too")
 }

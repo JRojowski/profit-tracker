@@ -72,10 +72,12 @@ const maxAnswerLength = 20000
 // maxQuestionBody is the largest body of a question request. A long conversation is some kilobytes.
 const maxQuestionBody = 1 << 20
 
-// stepResponse is one step of an answer: the function and its arguments.
+// stepResponse is one step of an answer: the function, its arguments and its result.
 type stepResponse struct {
 	Function  string          `json:"function"`
 	Arguments json.RawMessage `json:"arguments"`
+	// Result is the JSON that the function gave to the model, also an error result.
+	Result json.RawMessage `json:"result"`
 }
 
 // answerResponse is the body of the response of POST /api/assistant/questions.
@@ -159,7 +161,7 @@ func (a *api) askAssistant(w http.ResponseWriter, r *http.Request) {
 	}
 	steps := make([]stepResponse, 0, len(answer.Steps))
 	for _, s := range answer.Steps {
-		steps = append(steps, stepResponse{Function: s.Function, Arguments: stepArguments(s.Arguments)})
+		steps = append(steps, stepResponse{Function: s.Function, Arguments: stepArguments(s.Arguments), Result: s.Result})
 	}
 	writeJSON(w, http.StatusOK, answerResponse{Answer: answer.Text, Steps: steps})
 }

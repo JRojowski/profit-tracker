@@ -6,6 +6,8 @@ import {
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
+import { AssistantMarkdown } from "@/components/assistant-markdown"
+import { AssistantSteps } from "@/components/assistant-steps"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,7 +22,6 @@ import { useOverviewUrl } from "@/hooks/use-overview-url"
 import { useRouteAccount } from "@/hooks/use-route-account"
 import type { AssistantContext } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
-import { assistantStepText } from "@/lib/assistant-step-text"
 import {
   maxQuestionLength,
   useAssistant,
@@ -314,24 +315,12 @@ function FailureView({
   )
 }
 
-// AnswerView shows the answer as plain text with its line breaks, and under it the steps of the model.
+// AnswerView shows the answer as Markdown, and under it the steps of the model.
 function AnswerView({ turn }: { turn: AssistantTurn }) {
-  const { accounts } = useAppState()
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm break-words whitespace-pre-wrap">{turn.answer}</p>
-      {turn.steps.length > 0 && (
-        <ul
-          aria-label="Steps"
-          className="flex flex-col gap-0.5 border-l-2 pl-3 font-mono text-xs text-muted-foreground"
-        >
-          {turn.steps.map((step, index) => (
-            <li key={index} className="break-words">
-              {assistantStepText(step, accounts)}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="flex min-w-0 flex-col gap-3">
+      <AssistantMarkdown>{turn.answer}</AssistantMarkdown>
+      <AssistantSteps steps={turn.steps} />
     </div>
   )
 }

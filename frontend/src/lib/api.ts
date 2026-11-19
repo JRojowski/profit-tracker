@@ -751,10 +751,12 @@ export type AssistantMessage = {
   content: string
 }
 
-// AssistantStep is one call of a function by the model, with its arguments.
+// AssistantStep is one call of a function by the model, with its arguments and the result that the model got.
 export type AssistantStep = {
   function: string
   arguments: Record<string, unknown>
+  // result is the JSON value that the function gave to the model. An older backend does not send it.
+  result?: unknown
 }
 
 // AssistantContext is the page that the user has open when the user asks. Each field is optional.
