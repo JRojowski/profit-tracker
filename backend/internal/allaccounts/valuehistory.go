@@ -1,6 +1,7 @@
 package allaccounts
 
 import (
+	"slices"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -71,6 +72,8 @@ func ValueHistory(accounts []HistoryAccount, rates Rates, exchangeRates map[stri
 	days := daysBetween(first, last) + 1
 	values := make([]decimal.Decimal, days)
 	flows := make([]decimal.Decimal, days)
+	// atCost are the tickers that an Account valued at cost, by day.
+	atCost := make([][]string, days)
 	var missing []MissingRate
 	for _, acc := range accounts {
 		if len(acc.Points) == 0 {
@@ -85,6 +88,7 @@ func ValueHistory(accounts []HistoryAccount, rates Rates, exchangeRates map[stri
 		for i := range accValues {
 			values[offset+i] = values[offset+i].Add(accValues[i])
 			flows[offset+i] = flows[offset+i].Add(accFlows[i])
+			atCost[offset+i] = append(atCost[offset+i], acc.Points[i].ValuedAtCost...)
 		}
 	}
 	if len(missing) > 0 {
@@ -97,10 +101,16 @@ func ValueHistory(accounts []HistoryAccount, rates Rates, exchangeRates map[stri
 		netDeposits = netDeposits.Add(flows[i])
 		points[i] = valuehistory.Point{
 			DayValue:    returns.DayValue{Date: first.AddDate(0, 0, i), Value: values[i], Flow: flows[i]},
-			NetDeposits: netDeposits,
+			NetDeposits: netDeposits, ValuedAtCost: uniqueTickers(atCost[i]),
 		}
 	}
 	return History{Available: true, Points: points}
+}
+
+// uniqueTickers returns each ticker once, in ticker order. It returns nil for no ticker.
+func uniqueTickers(tickers []string) []string {
+	slices.Sort(tickers)
+	return slices.Compact(tickers)
 }
 
 // inPLN returns the value and the flow of each point of the Account in PLN.
