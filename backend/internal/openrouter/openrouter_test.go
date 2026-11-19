@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -252,6 +253,36 @@ func TestReply_ErrorThatRepeatsTheKey_HidesTheKey(t *testing.T) {
 
 	require.ErrorIs(t, err, assistant.ErrRateLimited)
 	assert.NotContains(t, err.Error(), testKey)
+}
+
+func TestReply_ProviderErrorFields_AreShortAndHideTheKey(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("x", 5000)
+	cases := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{name: "error status, long message", status: http.StatusBadGateway, body: `{"error":{"code":502,"message":"` + long + `"}}`},
+		{name: "error status, long raw body", status: http.StatusBadGateway, body: long},
+		{name: "200 with an error, long message", status: http.StatusOK, body: `{"error":{"code":502,"message":"` + long + `"}}`},
+		{name: "200 with an error, long code", status: http.StatusOK, body: `{"error":{"code":"` + long + `","message":"m"}}`},
+		{name: "200 with an error, the key in the code", status: http.StatusOK, body: `{"error":{"code":"` + testKey + `","message":"m"}}`},
+		{name: "key at the end of the limit", status: http.StatusBadGateway, body: `{"error":{"code":502,"message":"` + strings.Repeat("x", 290) + testKey + `"}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client, _ := startOpenRouter(t, tc.status, tc.body)
+
+			_, err := client.Reply(t.Context(), []assistant.Message{{Role: assistant.RoleUser, Content: "Hi"}}, nil)
+
+			require.ErrorIs(t, err, assistant.ErrProviderFailure)
+			assert.NotContains(t, err.Error(), testKey)
+			assert.NotContains(t, err.Error(), "sk-or", "no part of the key")
+			assert.NotContains(t, err.Error(), strings.Repeat("x", 501), "the text of the provider is cut")
+		})
+	}
 }
 
 func TestReply_ConnectionFails_IsAProviderFailure(t *testing.T) {

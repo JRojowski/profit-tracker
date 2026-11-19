@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 )
@@ -26,7 +27,8 @@ const DefaultModel = "nvidia/nemotron-3-ultra-550b-a55b:free"
 // maxBody is the largest response body that the client reads.
 const maxBody = 4 << 20
 
-// maxErrorText is the largest part of an error body that goes into an error.
+// maxErrorText is the largest number of characters of one field of a provider error that goes into an error
+// and the log.
 const maxErrorText = 300
 
 // Client sends the conversation of the Assistant to a model of OpenRouter.
@@ -244,13 +246,18 @@ func arguments(raw json.RawMessage) json.RawMessage {
 	return raw
 }
 
-// redact returns the text with each copy of the API key replaced. A provider can repeat the key in an error,
-// and an error goes into the log.
-func (c *Client) redact(text []byte) []byte {
-	if c.Key == "" {
+// clean returns the text of a field of the provider for an error and for the log: each copy of the API key
+// replaced, and the text cut to maxErrorText characters. A provider can repeat the key in an error. The
+// cut comes after the replacement, so that no part of the key stays.
+func (c *Client) clean(text string) string {
+	if c.Key != "" {
+		text = strings.ReplaceAll(text, c.Key, "[API key]")
+	}
+	text = strings.TrimSpace(text)
+	if utf8.RuneCountInString(text) <= maxErrorText {
 		return text
 	}
-	return bytes.ReplaceAll(text, []byte(c.Key), []byte("[API key]"))
+	return string([]rune(text)[:maxErrorText]) + "..."
 }
 
 // bodyError returns the error for an error object of the provider in a response with the status 200.
@@ -259,7 +266,7 @@ func (c *Client) bodyError(e providerError) error {
 	if e.rateLimited() {
 		kind = assistant.ErrRateLimited
 	}
-	return fmt.Errorf("provider error %s: %s: %w", e.Code, c.redact([]byte(e.Message)), kind)
+	return fmt.Errorf("provider error %s: %s: %w", c.clean(string(e.Code)), c.clean(e.Message), kind)
 }
 
 // statusError returns the error for a response with a status that is not 200. The status 429 is a rate limit.
@@ -270,14 +277,9 @@ func (c *Client) statusError(status int, body []byte) error {
 	if status == http.StatusTooManyRequests {
 		kind = assistant.ErrRateLimited
 	}
-	body = c.redact(body)
 	var parsed chatResponse
 	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Error != nil && parsed.Error.Message != "" {
-		return fmt.Errorf("status %d: %s: %w", status, parsed.Error.Message, kind)
+		return fmt.Errorf("status %d: %s: %w", status, c.clean(parsed.Error.Message), kind)
 	}
-	text := strings.TrimSpace(string(body))
-	if len(text) > maxErrorText {
-		text = text[:maxErrorText]
-	}
-	return fmt.Errorf("status %d: %s: %w", status, text, kind)
+	return fmt.Errorf("status %d: %s: %w", status, c.clean(string(body)), kind)
 }
