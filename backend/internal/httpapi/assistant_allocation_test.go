@@ -294,7 +294,7 @@ func checkAllocationAccountsMatchPages(t *testing.T, srv *testServer, got alloca
 	t.Helper()
 
 	for _, acc := range got.Accounts {
-		assert.Equal(t, srv.fullSummary(t, acc.AccountID).NetDeposits, acc.NetDeposits, "Account %d: Net Deposits", acc.AccountID)
+		assert.Equal(t, cents(t, srv.fullSummary(t, acc.AccountID).NetDeposits), acc.NetDeposits, "Account %d: Net Deposits", acc.AccountID)
 		if acc.Type != "IKZE" {
 			assert.Nil(t, acc.IKZE, "Account %d is not IKZE", acc.AccountID)
 			continue

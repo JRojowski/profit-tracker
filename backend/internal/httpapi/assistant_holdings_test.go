@@ -162,8 +162,8 @@ func checkHoldingsMatchEndpoint(t *testing.T, srv *testServer, got holdingsResul
 			}
 			want = append(want, holdingResult{
 				Ticker: row.Ticker, Name: basics[i].Name, Volume: basics[i].Volume, Currency: acc.Currency,
-				Cost: basics[i].Cost, HasValue: row.Value != nil, Price: row.Price, QuoteCurrency: row.QuoteCurrency,
-				PriceDate: row.PriceDate, Value: row.Value, UnrealizedProfit: row.UnrealizedProfit,
+				Cost: cents(t, basics[i].Cost), HasValue: row.Value != nil, Price: row.Price, QuoteCurrency: row.QuoteCurrency,
+				PriceDate: row.PriceDate, Value: centsPointer(t, row.Value), UnrealizedProfit: centsPointer(t, row.UnrealizedProfit),
 				UnrealizedProfitPercent: row.UnrealizedProfitPercent, NoValueReason: row.Note,
 			})
 		}

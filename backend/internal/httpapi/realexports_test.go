@@ -552,7 +552,7 @@ func TestRealExports_AssistantAllocation_MatchesThePageEndpoints(t *testing.T) {
 	var allocation allocationResponse
 	srv.getRealJSON(t, "/api/all-accounts/allocation", &allocation)
 	assert.Equal(t, allocation, got.Allocation, "all Accounts: Allocation")
-	assert.Equal(t, srv.allAccounts(t).NetDeposits, got.NetDeposits, "all Accounts: Net Deposits")
+	assert.Equal(t, centsPointer(t, srv.allAccounts(t).NetDeposits), got.NetDeposits, "all Accounts: Net Deposits")
 	require.Len(t, got.Accounts, len(exports))
 	checkAllocationAccountsMatchPages(t, srv, got)
 }
@@ -599,15 +599,15 @@ func TestRealExports_AssistantClosedPositions_MatchTheClosedPositionsEndpoint(t 
 		assert.Equal(t, len(want)-len(got.Rows), got.RowsLeftOut, "%s: rows left out", label)
 		assert.Len(t, got.RealizedProfitSums, len(sums), "%s: number of currencies", label)
 		for _, s := range got.RealizedProfitSums {
-			assert.True(t, sums[s.Currency].Equal(decimal.RequireFromString(s.Sum)),
-				"%s: %s: want sum %s, got %s", label, s.Currency, sums[s.Currency], s.Sum)
+			// The Assistant gets the sum with 2 decimal places. The backend rounds the exact sum.
+			assert.Equal(t, sums[s.Currency].StringFixed(2), s.Sum, "%s: %s: sum", label, s.Currency)
 			assert.Equal(t, counts[s.Currency], s.Rows, "%s: %s: rows of the sum", label, s.Currency)
 		}
 		// Each row of the result is a row of the endpoint, with the same numbers. The rows have no broker IDs,
 		// so the test counts equal rows.
 		unmatched := map[string]int{}
 		for _, c := range want {
-			unmatched[rowKey(t, rowOf(c))]++
+			unmatched[rowKey(t, rowOf(t, c))]++
 		}
 		for _, r := range got.Rows {
 			r.AccountID, r.AccountName, r.Currency = 0, "", ""

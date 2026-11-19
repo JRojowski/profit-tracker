@@ -391,9 +391,9 @@ func checkIncomeMatchesSummaries(t *testing.T, srv *testServer, got incomeResult
 		summary := srv.summary(t, acc.AccountID)
 		require.NotNil(t, acc.NetInterest, "Account %d: net interest", acc.AccountID)
 		assert.Equal(t, summary.Currency, acc.Currency, "Account %d: currency", acc.AccountID)
-		assert.Equal(t, summary.NetDividends, acc.NetDividends, "Account %d: net dividends", acc.AccountID)
-		assert.Equal(t, summary.NetInterest, *acc.NetInterest, "Account %d: net interest", acc.AccountID)
-		assert.Equal(t, summary.Fees, acc.Fees, "Account %d: fees", acc.AccountID)
+		assert.Equal(t, cents(t, summary.NetDividends), acc.NetDividends, "Account %d: net dividends", acc.AccountID)
+		assert.Equal(t, cents(t, summary.NetInterest), *acc.NetInterest, "Account %d: net interest", acc.AccountID)
+		assert.Equal(t, cents(t, summary.Fees), acc.Fees, "Account %d: fees", acc.AccountID)
 		sum := byCurrency[summary.Currency]
 		byCurrency[summary.Currency] = totals{
 			dividends: sum.dividends.Add(decimal.RequireFromString(summary.NetDividends)),
@@ -406,9 +406,10 @@ func checkIncomeMatchesSummaries(t *testing.T, srv *testServer, got incomeResult
 		want, ok := byCurrency[sum.Currency]
 		require.True(t, ok, "currency %s", sum.Currency)
 		require.NotNil(t, sum.NetInterest, "%s: net interest", sum.Currency)
-		assert.True(t, want.dividends.Equal(decimal.RequireFromString(sum.NetDividends)), "%s: net dividends, want %s, got %s", sum.Currency, want.dividends, sum.NetDividends)
-		assert.True(t, want.interest.Equal(decimal.RequireFromString(*sum.NetInterest)), "%s: net interest, want %s, got %s", sum.Currency, want.interest, *sum.NetInterest)
-		assert.True(t, want.fees.Equal(decimal.RequireFromString(sum.Fees)), "%s: fees, want %s, got %s", sum.Currency, want.fees, sum.Fees)
+		// A sum is the exact sum, rounded once.
+		assert.Equal(t, want.dividends.StringFixed(2), sum.NetDividends, "%s: net dividends", sum.Currency)
+		assert.Equal(t, want.interest.StringFixed(2), *sum.NetInterest, "%s: net interest", sum.Currency)
+		assert.Equal(t, want.fees.StringFixed(2), sum.Fees, "%s: fees", sum.Currency)
 	}
 }
 

@@ -54,11 +54,15 @@ type assistantClosedPositionRow struct {
 }
 
 // rowOf returns the row of the Assistant for a row of the endpoint. It has the Account fields empty and
-// no broker IDs.
-func rowOf(c closedPositionResponse) assistantClosedPositionRow {
+// no broker IDs. The Assistant gets each amount with 2 decimal places.
+func rowOf(t *testing.T, c closedPositionResponse) assistantClosedPositionRow {
+	t.Helper()
+
 	return assistantClosedPositionRow{
-		Time: c.Time, Ticker: c.Ticker, Name: c.Name, Volume: c.Volume, Amount: c.Amount, Cost: c.Cost,
-		RealizedProfit: c.RealizedProfit, OpenTime: c.OpenTime, OpenPrice: c.OpenPrice, ClosePrice: c.ClosePrice,
+		Time: c.Time, Ticker: c.Ticker, Name: c.Name, Volume: c.Volume,
+		Amount: cents(t, c.Amount), Cost: cents(t, c.Cost),
+		RealizedProfit: cents(t, c.RealizedProfit),
+		OpenTime:       c.OpenTime, OpenPrice: c.OpenPrice, ClosePrice: c.ClosePrice,
 	}
 }
 
@@ -148,7 +152,7 @@ func TestAskAssistant_ClosedPositions_NoFilter_RowsAgreeWithTheEndpointNewestFir
 	slices.Reverse(endpoint)
 	require.Len(t, got.Rows, len(endpoint))
 	for i, want := range endpoint {
-		wantRow := rowOf(want)
+		wantRow := rowOf(t, want)
 		wantRow.AccountID, wantRow.AccountName, wantRow.Currency = usdID, "XTB USD", "USD"
 		assert.Equal(t, wantRow, got.Rows[i], "row %d", i)
 	}
