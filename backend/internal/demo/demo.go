@@ -2,7 +2,7 @@
 //
 // The data is made up. The three Accounts cover the cases that the pages show:
 // two currencies, a Holding quoted in another currency, a Holding with no price,
-// the same Instrument on two Accounts, sales, dividends and IKZE Contributions.
+// the same Instrument on two Accounts, Closed Positions, dividends and IKZE Contributions.
 package demo
 
 import (

@@ -50,11 +50,11 @@ type warningResponse struct {
 type importConflictResponse struct {
 	ID   int64  `json:"id"`
 	Kind string `json:"kind"`
-	// XTBID is the XTB ID of the Cash Operation. For the kind "check-mismatch", it is the sale.
+	// XTBID is the XTB ID of the Cash Operation. For the kind "check-mismatch", it is the Closed Position.
 	XTBID string `json:"xtbId"`
 	// Existing is the stored data. It is null for the kind "check-mismatch".
 	Existing *cashOperationDataResponse `json:"existing"`
-	// New is the data of the file. For the kind "check-mismatch", it is the sale.
+	// New is the data of the file. For the kind "check-mismatch", it is the Closed Position.
 	New cashOperationDataResponse `json:"new"`
 	// Check is the Realized Profit check. It is null for the kind "changed-data".
 	Check *checkResponse `json:"check"`
@@ -62,7 +62,7 @@ type importConflictResponse struct {
 	Decision *string `json:"decision"`
 }
 
-// checkResponse is the Realized Profit check of one sale. The values are decimal text.
+// checkResponse is the Realized Profit check of one Closed Position. The values are decimal text.
 type checkResponse struct {
 	// Calculated is the Realized Profit from the Ledger. It is exact, with no rounding.
 	Calculated string `json:"calculated"`

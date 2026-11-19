@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { Sale } from "@/lib/api"
+import type { ClosedPosition } from "@/lib/api"
 import {
   amountSign,
   formatAmount,
@@ -18,21 +18,21 @@ import {
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-type SalesTableProps = {
-  // sales are in the order of the rows, newest first.
-  sales: Sale[]
+type ClosedPositionsTableProps = {
+  // closedPositions are in the order of the rows, newest first.
+  closedPositions: ClosedPosition[]
   currency: string
-  // totalRealizedProfit is the exact sum of the Realized Profit of the sales.
+  // totalRealizedProfit is the exact sum of the Realized Profit of the Closed Positions.
   totalRealizedProfit: string
 }
 
-// SalesTable shows each sale with its Realized Profit, and a total row.
-// The date of a sale is in Polish time, so that it agrees with the year filter.
-export function SalesTable({
-  sales,
+// ClosedPositionsTable shows each Closed Position with its Realized Profit, and a total row.
+// The date of a Closed Position is in Polish time, so that it agrees with the year filter.
+export function ClosedPositionsTable({
+  closedPositions,
   currency,
   totalRealizedProfit,
-}: SalesTableProps) {
+}: ClosedPositionsTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -63,50 +63,54 @@ export function SalesTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sales.map((sale) => (
-          <TableRow key={sale.xtbId}>
+        {closedPositions.map((closedPosition) => (
+          <TableRow key={closedPosition.xtbId}>
             <TableCell className="hidden num text-muted-foreground md:table-cell">
-              {formatPolishDate(sale.time)}
+              {formatPolishDate(closedPosition.time)}
             </TableCell>
             <TableCell className="align-top md:align-middle">
               <div className="flex flex-col gap-0.5">
-                <span className="font-medium">{sale.ticker}</span>
+                <span className="font-medium">{closedPosition.ticker}</span>
                 <span className="max-w-32 truncate text-xs text-muted-foreground md:max-w-56">
-                  {sale.name}
+                  {closedPosition.name}
                 </span>
                 <span className="flex flex-col gap-0.5 text-xs text-muted-foreground md:hidden">
-                  <span className="num">{formatPolishDate(sale.time)}</span>
-                  <span className="num">{formatVolume(sale.volume)}</span>
+                  <span className="num">
+                    {formatPolishDate(closedPosition.time)}
+                  </span>
+                  <span className="num">
+                    {formatVolume(closedPosition.volume)}
+                  </span>
                 </span>
               </div>
             </TableCell>
             <TableCell className="hidden text-right num md:table-cell">
-              {formatVolume(sale.volume)}
+              {formatVolume(closedPosition.volume)}
             </TableCell>
             <TableCell className="hidden text-right num md:table-cell">
-              {formatAmount(sale.amount, currency)}
+              {formatAmount(closedPosition.amount, currency)}
             </TableCell>
             <TableCell className="hidden text-right num md:table-cell">
-              {formatAmount(sale.cost, currency)}
+              {formatAmount(closedPosition.cost, currency)}
             </TableCell>
             <TableCell className="text-right align-top md:align-middle">
               <span className="flex flex-col items-end gap-0.5">
                 <span
                   className={cn(
                     "num font-medium",
-                    signColour(amountSign(sale.realizedProfit))
+                    signColour(amountSign(closedPosition.realizedProfit))
                   )}
                 >
-                  {formatAmount(sale.realizedProfit, currency, {
+                  {formatAmount(closedPosition.realizedProfit, currency, {
                     signed: true,
                   })}
                 </span>
                 <span className="flex flex-col items-end gap-0.5 text-xs text-muted-foreground md:hidden">
                   <span className="num">
-                    {formatAmount(sale.amount, currency)}
+                    {formatAmount(closedPosition.amount, currency)}
                   </span>
                   <span className="num">
-                    {formatAmount(sale.cost, currency)}
+                    {formatAmount(closedPosition.cost, currency)}
                   </span>
                 </span>
               </span>

@@ -75,7 +75,7 @@ type History struct {
 // A Holding with no value in the hero counts at its cost. The point of today also has the Cash Operations
 // with a later time.
 //
-// It returns the error of ledger.Calculate if a sale does not fit the Lots.
+// It returns the error of ledger.Calculate if a Closed Position does not fit the Lots.
 func Calculate(in Input) (History, error) {
 	l := in.Ledger
 	state, err := ledger.Calculate(l)
@@ -132,18 +132,18 @@ type calculator struct {
 	atCost     map[string]bool
 }
 
-// lotState is one Lot with the Fills and the sales of the Cash Operations so far.
+// lotState is one Lot with the Fills and the Closed Positions of the Cash Operations so far.
 type lotState struct {
 	ticker string
 	// volume and purchase are the volume and the purchase amount of all Fills. ADR 0001 uses them for the cost
-	// of a sale.
+	// of a Closed Position.
 	volume, purchase decimal.Decimal
 	// filledVolume and filledPurchase are the sums of the Fills so far.
 	filledVolume, filledPurchase decimal.Decimal
 	closedVolume, closedCost     decimal.Decimal
 }
 
-// openVolume is the volume that the Fills so far add and that no sale so far closed.
+// openVolume is the volume that the Fills so far add and that no Closed Position so far closed.
 func (st *lotState) openVolume() decimal.Decimal {
 	return st.filledVolume.Sub(st.closedVolume)
 }
@@ -208,7 +208,7 @@ func (c *calculator) apply(op ledger.CashOperation) decimal.Decimal {
 		})
 		return flow
 	}
-	// ledger.Calculate checked that each sale closes a known Lot within its volume.
+	// ledger.Calculate checked that each Closed Position closes a known Lot within its volume.
 	if op.Type == ledger.TypeStockSell {
 		c.changeLot(op.PositionID, func(st *lotState) {
 			st.closedVolume = st.closedVolume.Add(op.Volume)

@@ -1,6 +1,6 @@
 // Package ledger calculates the state of one Account from its Ledger, the prices and the Exchange Rates.
 // The state has the cash balance, the Net Deposits and the Holdings with their value and Unrealized Profit.
-// It also has the sales with their Realized Profit, the total result with its parts, the Simple Return and the Annual Return.
+// It also has the Closed Positions with their Realized Profit, the total result with its parts, the Simple Return and the Annual Return.
 // It is a pure calculation with no I/O.
 // The tool calculates this state on each request and does not store it.
 package ledger
@@ -34,10 +34,10 @@ const (
 
 // Errors of Calculate. Each error that Calculate returns wraps one of them.
 var (
-	// ErrUnknownLot tells that a sale closes a Lot that the Ledger does not have.
-	ErrUnknownLot = errors.New("the sale closes a lot that the ledger does not have")
-	// ErrLotOverclosed tells that the sales of a Lot close more than the Lot volume.
-	ErrLotOverclosed = errors.New("the sales close more than the lot volume")
+	// ErrUnknownLot tells that a Closed Position closes a Lot that the Ledger does not have.
+	ErrUnknownLot = errors.New("the closed position closes a lot that the ledger does not have")
+	// ErrLotOverclosed tells that the Closed Positions of a Lot close more than the Lot volume.
+	ErrLotOverclosed = errors.New("the closed positions close more than the lot volume")
 )
 
 // PLN is the currency of the Exchange Rates. Each rate is the PLN amount for 1 unit of a currency.
@@ -156,9 +156,9 @@ type State struct {
 	Flows []returns.Flow
 	// Holdings has one Holding per Instrument with an open volume, in ticker order.
 	Holdings []Holding
-	// Sales are the Stock sell operations with their Realized Profit, in time order and then in XTB ID order.
-	Sales []Sale
-	// RealizedProfit is the sum of the Realized Profit of the sales.
+	// ClosedPositions are the Stock sell operations with their Realized Profit, in time order and then in XTB ID order.
+	ClosedPositions []ClosedPosition
+	// RealizedProfit is the sum of the Realized Profit of the Closed Positions.
 	RealizedProfit decimal.Decimal
 	// NetDividends is the sum of the dividends and the withholding tax. The tax is negative.
 	NetDividends decimal.Decimal
@@ -179,13 +179,13 @@ type State struct {
 	AnnualReturn returns.Rate
 }
 
-// Sale is one Stock sell: the close of a part of one Lot. See ADR 0001.
-type Sale struct {
+// ClosedPosition is one Stock sell: the close of a part of one Lot. See ADR 0001.
+type ClosedPosition struct {
 	XTBID string
 	Time  time.Time
 	// Instrument is the Instrument of the Lot.
 	Instrument Instrument
-	// PositionID is the ID of the Lot that the sale closes.
+	// PositionID is the ID of the Lot that the Closed Position closes.
 	PositionID string
 	// Volume is the closed volume.
 	Volume decimal.Decimal
@@ -248,7 +248,7 @@ func (h Holding) UnrealizedProfitPercent() (decimal.Decimal, bool) {
 }
 
 // Calculate returns the state of the Account from its Ledger. The values are exact. Calculate does not round.
-// It returns an error that wraps ErrUnknownLot or ErrLotOverclosed if a sale does not fit the Lots.
+// It returns an error that wraps ErrUnknownLot or ErrLotOverclosed if a Closed Position does not fit the Lots.
 func Calculate(l Ledger) (State, error) {
 	s := State{
 		Cash: decimal.Zero, NetDeposits: decimal.Zero, RealizedProfit: decimal.Zero,
@@ -262,14 +262,14 @@ func Calculate(l Ledger) (State, error) {
 	for _, lot := range l.Lots {
 		lots[lot.PositionID] = newLotState(lot)
 	}
-	sales, err := closeLots(l.CashOperations, lots)
+	closedPositions, err := closeLots(l.CashOperations, lots)
 	if err != nil {
 		return State{}, err
 	}
-	s.Sales = sales
+	s.ClosedPositions = closedPositions
 	s.Holdings = holdings(l, lots)
-	for _, sale := range sales {
-		s.RealizedProfit = s.RealizedProfit.Add(sale.RealizedProfit)
+	for _, closedPosition := range closedPositions {
+		s.RealizedProfit = s.RealizedProfit.Add(closedPosition.RealizedProfit)
 	}
 	s.UnrealizedProfit, s.Value = decimal.Zero, s.Cash
 	for _, h := range s.Holdings {
@@ -335,14 +335,14 @@ func NetDeposit(op CashOperation) decimal.Decimal {
 	return decimal.Zero
 }
 
-// lotState is one Lot with the volume and the cost that its sales closed.
+// lotState is one Lot with the volume and the cost that its Closed Positions closed.
 type lotState struct {
 	instrument Instrument
 	// volume is the Lot volume: the sum of the Fill volumes.
 	volume decimal.Decimal
 	// purchase is the purchase amount of the Lot. It is positive.
 	purchase decimal.Decimal
-	// closedVolume and closedCost are the sums over the sales of the Lot.
+	// closedVolume and closedCost are the sums over the Closed Positions of the Lot.
 	closedVolume decimal.Decimal
 	closedCost   decimal.Decimal
 }
@@ -356,7 +356,7 @@ func newLotState(lot Lot) *lotState {
 	return st
 }
 
-// openVolume is the volume that no sale closed.
+// openVolume is the volume that no Closed Position closed.
 func (st *lotState) openVolume() decimal.Decimal {
 	return st.volume.Sub(st.closedVolume)
 }
@@ -371,26 +371,26 @@ func (st *lotState) openCost() decimal.Decimal {
 }
 
 // closeLots calculates the Realized Profit of each Stock sell and records the closed part in its Lot.
-// It returns the sales in time order and then in XTB ID order.
-func closeLots(ops []CashOperation, lots map[string]*lotState) ([]Sale, error) {
-	var sales []Sale
+// It returns the Closed Positions in time order and then in XTB ID order.
+func closeLots(ops []CashOperation, lots map[string]*lotState) ([]ClosedPosition, error) {
+	var closedPositions []ClosedPosition
 	for _, op := range ops {
 		if op.Type != TypeStockSell {
 			continue
 		}
 		st, ok := lots[op.PositionID]
 		if !ok {
-			return nil, fmt.Errorf("sale %s closes lot %s: %w", op.XTBID, op.PositionID, ErrUnknownLot)
+			return nil, fmt.Errorf("closed position %s closes lot %s: %w", op.XTBID, op.PositionID, ErrUnknownLot)
 		}
 		st.closedVolume = st.closedVolume.Add(op.Volume)
 		if !st.volume.IsPositive() || st.openVolume().IsNegative() {
-			return nil, fmt.Errorf("sale %s closes %s of lot %s, but the lot volume is %s: %w",
+			return nil, fmt.Errorf("closed position %s closes %s of lot %s, but the lot volume is %s: %w",
 				op.XTBID, op.Volume, op.PositionID, st.volume, ErrLotOverclosed)
 		}
 		// ADR 0001, rule 3. The multiplication comes first, so an exact result stays exact.
 		cost := st.purchase.Mul(op.Volume).Div(st.volume)
 		st.closedCost = st.closedCost.Add(cost)
-		sales = append(sales, Sale{
+		closedPositions = append(closedPositions, ClosedPosition{
 			XTBID:          op.XTBID,
 			Time:           op.Time,
 			Instrument:     st.instrument,
@@ -401,10 +401,10 @@ func closeLots(ops []CashOperation, lots map[string]*lotState) ([]Sale, error) {
 			RealizedProfit: op.Amount.Sub(cost),
 		})
 	}
-	slices.SortStableFunc(sales, func(a, b Sale) int {
+	slices.SortStableFunc(closedPositions, func(a, b ClosedPosition) int {
 		return cmp.Or(a.Time.Compare(b.Time), cmp.Compare(a.XTBID, b.XTBID))
 	})
-	return sales, nil
+	return closedPositions, nil
 }
 
 // holdings adds the open part of the Lots per Instrument. A fully closed Lot adds nothing.

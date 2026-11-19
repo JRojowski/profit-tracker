@@ -106,7 +106,7 @@ func TestAccountSummary_DepositsAndPurchases_ReturnsCashAndNetDeposits(t *testin
 }
 
 // incomeAndCostsExport is an export with each Cash Operation type of the total result:
-// a Deposit, a purchase, a sale, a Withdrawal, and the income and cost types.
+// a Deposit, a purchase, a Closed Position, a Withdrawal, and the income and cost types.
 // The Dividend and the Withholding tax have a ticker, but no Position ID, like in a real export.
 //
 //	Cash:            2000.00 - 500.00 + 320.00 + 12.50 - 1.88 + 3.40 - 0.65 - 0.03 - 0.10 - 300.00 = 1533.24
@@ -214,8 +214,8 @@ func TestAccountDashboard_UnknownAccount_ReturnsNotFound(t *testing.T) {
 		"/api/accounts/999/holdings",
 		"/api/accounts/abc/summary",
 		"/api/accounts/abc/holdings",
-		"/api/accounts/999/sales",
-		"/api/accounts/abc/sales",
+		"/api/accounts/999/closed-positions",
+		"/api/accounts/abc/closed-positions",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

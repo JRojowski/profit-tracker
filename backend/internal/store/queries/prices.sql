@@ -79,8 +79,8 @@ GROUP BY i.ticker
 ORDER BY i.ticker;
 
 -- name: TradePrices :many
--- The XTB price of one unit of each Fill and each sale on any Account, with the time of the Cash Operation.
--- The Instrument of a sale is the Instrument of the Lot that it closes.
+-- The XTB price of one unit of each Fill and each Closed Position on any Account, with the time of the Cash Operation.
+-- The Instrument of a Closed Position is the Instrument of the Lot that it closes.
 SELECT i.ticker, c.time, c.price
 FROM lot_fills f
 JOIN lots l ON l.id = f.lot_id

@@ -248,7 +248,7 @@ func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 		return Import{}, err
 	}
 	if p.CheckLedger != nil {
-		// The decisions of the Import Conflicts can change the Lots and the sales. The check sees the result.
+		// The decisions of the Import Conflicts can change the Lots and the Closed Positions. The check sees the result.
 		after, err := readLedger(ctx, q, accountID)
 		if err != nil {
 			return Import{}, err

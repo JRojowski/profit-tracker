@@ -47,7 +47,7 @@ var (
 const (
 	// KindChangedData is a known XTB ID with different data.
 	KindChangedData = store.KindChangedData
-	// KindCheckMismatch is a new sale whose Realized Profit does not agree with Closed Positions.
+	// KindCheckMismatch is a new Closed Position whose Realized Profit does not agree with Closed Positions.
 	KindCheckMismatch = store.KindCheckMismatch
 )
 
@@ -58,7 +58,7 @@ const (
 	// DecisionUseNew replaces the stored Cash Operation with the Cash Operation of the file.
 	// It is valid for the kind "changed-data".
 	DecisionUseNew = store.DecisionUseNew
-	// DecisionAccept imports the sale with the difference noted. It is valid for the kind "check-mismatch".
+	// DecisionAccept imports the Closed Position with the difference noted. It is valid for the kind "check-mismatch".
 	DecisionAccept = store.DecisionAccept
 )
 
@@ -173,7 +173,7 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 	if err != nil {
 		return Preview{}, &RejectedError{Err: fmt.Errorf("%w: %w", errLedgerNotValid, err)}
 	}
-	c.conflicts = append(c.conflicts, checkRealizedProfit(after.Sales, export.ClosedPositions, ops, newOps)...)
+	c.conflicts = append(c.conflicts, checkRealizedProfit(after.ClosedPositions, export.ClosedPositions, ops, newOps)...)
 	warnings, err := s.transferWarnings(ctx, account, export.CashOperations)
 	if err != nil {
 		return Preview{}, err
@@ -408,7 +408,7 @@ func cashOperations(export xtb.Export) ([]store.CashOperation, error) {
 			saved.Price = decimal.NewNullDecimal(op.Purchase.Price)
 			saved.IsFill = true
 		case op.Sale != nil:
-			// ADR 0001: the volume of a sale is the closed volume of its Lot.
+			// ADR 0001: the volume of a Closed Position is the closed volume of its Lot.
 			saved.Volume = decimal.NewNullDecimal(op.Sale.Volume)
 			saved.Price = decimal.NewNullDecimal(op.Sale.Price)
 		}

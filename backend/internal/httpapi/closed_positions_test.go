@@ -14,8 +14,8 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb/xtbtest"
 )
 
-// saleResponse is one row of GET /api/accounts/{id}/sales.
-type saleResponse struct {
+// closedPositionResponse is one row of GET /api/accounts/{id}/Closed Positions.
+type closedPositionResponse struct {
 	XTBID          string `json:"xtbId"`
 	Time           string `json:"time"`
 	Ticker         string `json:"ticker"`
@@ -27,30 +27,30 @@ type saleResponse struct {
 	RealizedProfit string `json:"realizedProfit"`
 }
 
-// saleTime returns the time of a sale on day n of March 2026, at 15:30 UTC.
-func saleTime(day int) time.Time {
+// closeTime returns the time of a Closed Position on day n of March 2026, at 15:30 UTC.
+func closeTime(day int) time.Time {
 	return time.Date(2026, 3, day, 15, 30, 0, 0, time.UTC)
 }
 
 // adrExample1 is ADR 0001 Example 1: one Lot, closed in two parts on the same day.
-// closedProfits are the Profit/Loss values in Closed Positions for the two sales.
+// closedProfits are the Profit/Loss values in Closed Positions for the two Closed Positions.
 //
-//	Sale 1: cost = 109.40 × 9 / 10 = 98.46, profit = 92.34 − 98.46 = −6.12
-//	Sale 2: cost = 109.40 × 1 / 10 = 10.94, profit = 10.28 − 10.94 = −0.66
+//	Closed Position 1: cost = 109.40 × 9 / 10 = 98.46, profit = 92.34 − 98.46 = −6.12
+//	Closed Position 2: cost = 109.40 × 1 / 10 = 10.94, profit = 10.28 − 10.94 = −0.66
 //	The Lot is closed.
 func adrExample1(closedProfit1, closedProfit2 string) xtbtest.Export {
 	return xtbtest.Export{
 		AccountNumber: "50000001",
 		Currency:      "PLN",
 		CashOperations: []xtbtest.CashOperation{
-			{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: saleTime(2).Add(time.Minute), Amount: "10.28", ID: "304", Comment: "CLOSE BUY 1/10 @ 10.28", PositionID: "2636532207"},
-			{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: saleTime(2), Amount: "92.34", ID: "303", Comment: "CLOSE BUY 9/10 @ 10.26", PositionID: "2636532207"},
+			{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: closeTime(2).Add(time.Minute), Amount: "10.28", ID: "304", Comment: "CLOSE BUY 1/10 @ 10.28", PositionID: "2636532207"},
+			{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: closeTime(2), Amount: "92.34", ID: "303", Comment: "CLOSE BUY 9/10 @ 10.26", PositionID: "2636532207"},
 			{Type: "Stock purchase", Ticker: "ABC.PL", Instrument: "ABC", Time: opTime(2), Amount: "-109.40", ID: "302", Comment: "OPEN BUY 10 @ 10.94", PositionID: "2636532207"},
 			{Type: "Deposit", Time: opTime(1), Amount: "200.00", ID: "301", Comment: "Blik deposit"},
 		},
 		ClosedPositions: []xtbtest.ClosedPosition{
-			{Ticker: "ABC.PL", Volume: "1", OpenTime: opTime(2), CloseTime: saleTime(2).Add(time.Minute), ProfitLoss: closedProfit2, PositionID: "2636532207"},
-			{Ticker: "ABC.PL", Volume: "9", OpenTime: opTime(2), CloseTime: saleTime(2), ProfitLoss: closedProfit1, PositionID: "2636532207"},
+			{Ticker: "ABC.PL", Volume: "1", OpenTime: opTime(2), CloseTime: closeTime(2).Add(time.Minute), ProfitLoss: closedProfit2, PositionID: "2636532207"},
+			{Ticker: "ABC.PL", Volume: "9", OpenTime: opTime(2), CloseTime: closeTime(2), ProfitLoss: closedProfit1, PositionID: "2636532207"},
 		},
 	}
 }
@@ -65,22 +65,22 @@ func adrExample2() xtbtest.Export {
 		AccountNumber: "50000002",
 		Currency:      "PLN",
 		CashOperations: []xtbtest.CashOperation{
-			{Type: "Stock sell", Ticker: "XYZ.US", Instrument: "XYZ", Time: saleTime(5), Amount: "162.73", ID: "403", Comment: "CLOSE BUY 0.1504/0.426 @ 256.60", PositionID: "1349972184"},
+			{Type: "Stock sell", Ticker: "XYZ.US", Instrument: "XYZ", Time: closeTime(5), Amount: "162.73", ID: "403", Comment: "CLOSE BUY 0.1504/0.426 @ 256.60", PositionID: "1349972184"},
 			{Type: "Stock purchase", Ticker: "XYZ.US", Instrument: "XYZ", Time: opTime(2), Amount: "-185.31", ID: "402", Comment: "OPEN BUY 0.2638 @ 161.92", PositionID: "1349972184"},
 			{Type: "Deposit", Time: opTime(1), Amount: "200.00", ID: "401", Comment: "Blik deposit"},
 		},
 		ClosedPositions: []xtbtest.ClosedPosition{
-			{Ticker: "XYZ.US", Volume: "0.1504", OpenTime: opTime(2), CloseTime: saleTime(5), ProfitLoss: "57.08", PositionID: "1349972184"},
+			{Ticker: "XYZ.US", Volume: "0.1504", OpenTime: opTime(2), CloseTime: closeTime(5), ProfitLoss: "57.08", PositionID: "1349972184"},
 		},
 	}
 }
 
-// sales returns the sales of the Account.
-func (s *testServer) sales(t *testing.T, accountID int64) []saleResponse {
+// Closed Positions returns the Closed Positions of the Account.
+func (s *testServer) closedPositions(t *testing.T, accountID int64) []closedPositionResponse {
 	t.Helper()
 
-	var got []saleResponse
-	status := s.getJSON(t, fmt.Sprintf("/api/accounts/%d/sales", accountID), &got)
+	var got []closedPositionResponse
+	status := s.getJSON(t, fmt.Sprintf("/api/accounts/%d/closed-positions", accountID), &got)
 	require.Equal(t, http.StatusOK, status)
 	return got
 }
@@ -94,7 +94,7 @@ func cents(t *testing.T, text string) string {
 	return d.StringFixed(2)
 }
 
-func TestSales_ADR0001Example1_LotClosedInTwoParts(t *testing.T) {
+func TestClosedPositions_ADR0001Example1_LotClosedInTwoParts(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	export := adrExample1("-6.12", "-0.66")
@@ -102,9 +102,9 @@ func TestSales_ADR0001Example1_LotClosedInTwoParts(t *testing.T) {
 	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	got := srv.sales(t, accountID)
+	got := srv.closedPositions(t, accountID)
 
-	assert.Equal(t, []saleResponse{
+	assert.Equal(t, []closedPositionResponse{
 		{
 			XTBID: "303", Time: "2026-03-02T15:30:00Z", Ticker: "ABC.PL", Name: "ABC", PositionID: "2636532207",
 			Volume: "9", Amount: "92.34", Cost: "98.46", RealizedProfit: "-6.12",
@@ -118,43 +118,43 @@ func TestSales_ADR0001Example1_LotClosedInTwoParts(t *testing.T) {
 	assert.Equal(t, "193.22", srv.summary(t, accountID).Cash)
 }
 
-func TestSales_ADR0001Example2_LotClosedInPart(t *testing.T) {
+func TestClosedPositions_ADR0001Example2_LotClosedInPart(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	preview := srv.preview(t, adrExample2())
 	require.Empty(t, preview.Conflicts, "the Realized Profit agrees with Closed Positions")
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	sales := srv.sales(t, accountID)
+	closedPositions := srv.closedPositions(t, accountID)
 	holdings := srv.holdings(t, accountID)
 
-	require.Len(t, sales, 1)
-	sale := sales[0]
-	assert.Equal(t, "403", sale.XTBID)
-	assert.Equal(t, "0.1504", sale.Volume)
-	assert.Equal(t, "162.73", sale.Amount)
-	assert.Equal(t, "105.65", cents(t, sale.Cost))
-	assert.Equal(t, "57.08", cents(t, sale.RealizedProfit))
+	require.Len(t, closedPositions, 1)
+	closedPosition := closedPositions[0]
+	assert.Equal(t, "403", closedPosition.XTBID)
+	assert.Equal(t, "0.1504", closedPosition.Volume)
+	assert.Equal(t, "162.73", closedPosition.Amount)
+	assert.Equal(t, "105.65", cents(t, closedPosition.Cost))
+	assert.Equal(t, "57.08", cents(t, closedPosition.RealizedProfit))
 	require.Len(t, holdings, 1)
 	assert.Equal(t, "XYZ.US", holdings[0].Ticker)
 	assert.Equal(t, "0.1134", holdings[0].Volume)
 	assert.Equal(t, "79.66", cents(t, holdings[0].Cost))
 	// The cost of the closed part plus the open cost is the purchase amount.
-	assert.Equal(t, "185.31", cents(t, decimal.RequireFromString(sale.Cost).Add(decimal.RequireFromString(holdings[0].Cost)).String()))
+	assert.Equal(t, "185.31", cents(t, decimal.RequireFromString(closedPosition.Cost).Add(decimal.RequireFromString(holdings[0].Cost)).String()))
 }
 
-func TestSales_NoSales_ReturnsEmptyList(t *testing.T) {
+func TestClosedPositions_NoClosedPositions_ReturnsEmptyList(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	accountID := srv.importAccount(t, usdExport(), "XTB USD")
 
-	status, _, body := srv.get(t, fmt.Sprintf("/api/accounts/%d/sales", accountID))
+	status, _, body := srv.get(t, fmt.Sprintf("/api/accounts/%d/closed-positions", accountID))
 
 	assert.Equal(t, http.StatusOK, status)
 	assert.JSONEq(t, "[]", body)
 }
 
-func TestImportPreview_SaleOfUnknownLot_IsRejected(t *testing.T) {
+func TestImportPreview_ClosedPositionOfUnknownLot_IsRejected(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	export := usdExport()
@@ -243,30 +243,30 @@ func TestImportPreview_RealizedProfitCheck(t *testing.T) {
 	}
 }
 
-// TestImportPreview_RealizedProfitCheck_SameTimeAndVolume_ClosePriceDecides covers two sales of one Lot
+// TestImportPreview_RealizedProfitCheck_SameTimeAndVolume_ClosePriceDecides covers two Closed Positions of one Lot
 // with the same time and the same volume. Only the Close Price tells their Closed Positions rows apart.
 //
 //	Lot: OPEN BUY 4 @ 23.00, amount -92.00. The cost of 2 is 46.00.
-//	Sale 402: CLOSE BUY 2/8 @ 18.00, amount 36.00, profit 36.00 − 46.00 = −10.00
-//	Sale 403: CLOSE BUY 2/8 @ 17.95, amount 35.90, profit 35.90 − 46.00 = −10.10
+//	Closed Position 402: CLOSE BUY 2/8 @ 18.00, amount 36.00, profit 36.00 − 46.00 = −10.00
+//	Closed Position 403: CLOSE BUY 2/8 @ 17.95, amount 35.90, profit 35.90 − 46.00 = −10.10
 func TestImportPreview_RealizedProfitCheck_SameTimeAndVolume_ClosePriceDecides(t *testing.T) {
 	t.Parallel()
 
 	row402 := xtbtest.ClosedPosition{
-		Ticker: "DEF.PL", Volume: "2", OpenTime: opTime(3), ClosePrice: "18.00", CloseTime: saleTime(4),
+		Ticker: "DEF.PL", Volume: "2", OpenTime: opTime(3), ClosePrice: "18.00", CloseTime: closeTime(4),
 		ProfitLoss: "-10.00", PositionID: "2700000001",
 	}
 	// The Excel cell of the Close Price can carry float noise.
 	row403 := xtbtest.ClosedPosition{
-		Ticker: "DEF.PL", Volume: "2", OpenTime: opTime(3), ClosePrice: "17.950000000000003", CloseTime: saleTime(4),
+		Ticker: "DEF.PL", Volume: "2", OpenTime: opTime(3), ClosePrice: "17.950000000000003", CloseTime: closeTime(4),
 		ProfitLoss: "-10.10", PositionID: "2700000001",
 	}
 	tests := []struct {
 		name string
 		rows []xtbtest.ClosedPosition
 	}{
-		{name: "row of the second sale first", rows: []xtbtest.ClosedPosition{row403, row402}},
-		{name: "row of the first sale first", rows: []xtbtest.ClosedPosition{row402, row403}},
+		{name: "row of the second Closed Position first", rows: []xtbtest.ClosedPosition{row403, row402}},
+		{name: "row of the first Closed Position first", rows: []xtbtest.ClosedPosition{row402, row403}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -276,8 +276,8 @@ func TestImportPreview_RealizedProfitCheck_SameTimeAndVolume_ClosePriceDecides(t
 				AccountNumber: "50000002",
 				Currency:      "PLN",
 				CashOperations: []xtbtest.CashOperation{
-					{Type: "Stock sell", Ticker: "DEF.PL", Instrument: "DEF", Time: saleTime(4), Amount: "35.90", ID: "403", Comment: "CLOSE BUY 2/8 @ 17.95", PositionID: "2700000001"},
-					{Type: "Stock sell", Ticker: "DEF.PL", Instrument: "DEF", Time: saleTime(4), Amount: "36.00", ID: "402", Comment: "CLOSE BUY 2/8 @ 18.00", PositionID: "2700000001"},
+					{Type: "Stock sell", Ticker: "DEF.PL", Instrument: "DEF", Time: closeTime(4), Amount: "35.90", ID: "403", Comment: "CLOSE BUY 2/8 @ 17.95", PositionID: "2700000001"},
+					{Type: "Stock sell", Ticker: "DEF.PL", Instrument: "DEF", Time: closeTime(4), Amount: "36.00", ID: "402", Comment: "CLOSE BUY 2/8 @ 18.00", PositionID: "2700000001"},
 					{Type: "Stock purchase", Ticker: "DEF.PL", Instrument: "DEF", Time: opTime(3), Amount: "-92.00", ID: "401", Comment: "OPEN BUY 4 @ 23.00", PositionID: "2700000001"},
 					{Type: "Deposit", Time: opTime(1), Amount: "100.00", ID: "400", Comment: "Blik deposit"},
 				},
@@ -343,25 +343,25 @@ func TestImport_CheckMismatchAccepted_SavesTheLedgerValue(t *testing.T) {
 
 	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
 
-	sales := srv.sales(t, accountID)
-	require.Len(t, sales, 2)
-	assert.Equal(t, "-6.12", sales[0].RealizedProfit, "the Ledger is the source of truth")
-	assert.Equal(t, "-0.66", sales[1].RealizedProfit)
+	closedPositions := srv.closedPositions(t, accountID)
+	require.Len(t, closedPositions, 2)
+	assert.Equal(t, "-6.12", closedPositions[0].RealizedProfit, "the Ledger is the source of truth")
+	assert.Equal(t, "-0.66", closedPositions[1].RealizedProfit)
 }
 
-func TestImport_KnownSaleWithWrongClosedPositions_GivesNoConflict(t *testing.T) {
+func TestImport_KnownClosedPositionWithWrongClosedPositions_GivesNoConflict(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
 
-	// The check runs only for the sales that are new in the Import.
+	// The check runs only for the Closed Positions that are new in the Import.
 	preview := srv.preview(t, adrExample1("-6.20", "-0.70"))
 
 	assert.Equal(t, "preview", preview.State)
 	assert.Empty(t, preview.Conflicts)
 }
 
-func TestImport_SaleInLaterImport_ClosesLotOfEarlierImport(t *testing.T) {
+func TestImport_ClosedPositionInLaterImport_ClosesLotOfEarlierImport(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	full := adrExample1("-6.12", "-0.66")
@@ -379,7 +379,7 @@ func TestImport_SaleInLaterImport_ClosesLotOfEarlierImport(t *testing.T) {
 	srv.decide(t, preview.ID, preview.Conflicts[0].ID, "accept")
 	srv.confirm(t, preview.ID, nil)
 	assert.Empty(t, srv.holdings(t, accountID))
-	assert.Len(t, srv.sales(t, accountID), 2)
+	assert.Len(t, srv.closedPositions(t, accountID), 2)
 }
 
 func TestImportPreview_CheckMismatchConflict_HasContractJSON(t *testing.T) {
@@ -411,16 +411,16 @@ func TestImportPreview_CheckMismatchConflict_HasContractJSON(t *testing.T) {
 	}`, conflict.ID), string(got.Conflicts[0]))
 }
 
-func TestSales_SaleTimeOrder_ThenXTBID(t *testing.T) {
+func TestClosedPositions_CloseTimeOrder_ThenXTBID(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	export := adrExample1("-6.12", "-0.66")
-	// Both sales at the same time: the XTB ID decides the order.
-	export.CashOperations[0].Time = saleTime(2)
-	export.ClosedPositions[0].CloseTime = saleTime(2)
+	// Both Closed Positions at the same time: the XTB ID decides the order.
+	export.CashOperations[0].Time = closeTime(2)
+	export.ClosedPositions[0].CloseTime = closeTime(2)
 	accountID := srv.importAccount(t, export, "XTB PLN")
 
-	got := srv.sales(t, accountID)
+	got := srv.closedPositions(t, accountID)
 
 	require.Len(t, got, 2)
 	assert.Equal(t, "303", got[0].XTBID)
@@ -431,9 +431,9 @@ func TestImportConfirm_UseNewThatOvercloses_IsRejectedAndSavesNothing(t *testing
 	t.Parallel()
 	srv := startServer(t)
 	accountID := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
-	summary, holdings, sales := srv.summary(t, accountID), srv.holdings(t, accountID), srv.sales(t, accountID)
+	summary, holdings, closedPositions := srv.summary(t, accountID), srv.holdings(t, accountID), srv.closedPositions(t, accountID)
 
-	// The purchase 302 now has volume 5. The stored sales close 9 + 1 of the Lot.
+	// The purchase 302 now has volume 5. The stored Closed Positions close 9 + 1 of the Lot.
 	smaller := adrExample1("-6.12", "-0.66")
 	smaller.CashOperations[2].Comment = "OPEN BUY 5 @ 10.94"
 	preview := srv.preview(t, smaller)
@@ -446,20 +446,20 @@ func TestImportConfirm_UseNewThatOvercloses_IsRejectedAndSavesNothing(t *testing
 	assert.Equal(t, http.StatusBadRequest, status)
 	var got errorBody
 	decode(t, body, &got)
-	assert.Contains(t, got.Error, "sale 303")
+	assert.Contains(t, got.Error, "closed position 303")
 	assert.Contains(t, got.Error, "lot 2636532207")
 	assert.Equal(t, summary, srv.summary(t, accountID))
 	assert.Equal(t, holdings, srv.holdings(t, accountID))
-	assert.Equal(t, sales, srv.sales(t, accountID))
+	assert.Equal(t, closedPositions, srv.closedPositions(t, accountID))
 	assert.Len(t, srv.imports(t), 1, "the import is not saved")
 
 	// The Import stays open: a different decision lets the confirm succeed.
 	srv.decide(t, preview.ID, preview.Conflicts[0].ID, "keep-existing")
 	srv.confirm(t, preview.ID, nil)
-	assert.Equal(t, sales, srv.sales(t, accountID))
+	assert.Equal(t, closedPositions, srv.closedPositions(t, accountID))
 }
 
-func TestImportPreview_ZeroVolumeSale_IsRejected(t *testing.T) {
+func TestImportPreview_ZeroVolumeClosedPosition_IsRejected(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	export := adrExample1("-6.12", "-0.66")
@@ -473,4 +473,15 @@ func TestImportPreview_ZeroVolumeSale_IsRejected(t *testing.T) {
 	assert.Contains(t, got.Error, "row 6")
 	assert.Contains(t, got.Error, `"CLOSE BUY 0 @ 10.28"`)
 	assert.Empty(t, srv.imports(t))
+}
+
+func TestClosedPositions_OldSalesPath_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	preview := srv.preview(t, adrExample2())
+	accountID := srv.confirm(t, preview.ID, newAccountBody("XTB PLN", "regular", "PLN")).AccountID
+
+	status, _, _ := srv.get(t, fmt.Sprintf("/api/accounts/%d/sales", accountID))
+
+	assert.Equal(t, http.StatusNotFound, status)
 }

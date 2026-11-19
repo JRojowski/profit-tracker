@@ -40,6 +40,10 @@ _Avoid_: Execution, partial
 One or more Fills of an Instrument that the broker tracks as one unit, identified by the broker's position ID. A Lot can be closed fully or in parts, in any order.
 _Avoid_: Position, pozycja, trade
 
+**Closed Position**:
+One closed part of one Lot. The name is the name that the XTB export uses for the same record. The word "Position" alone stays a word to avoid.
+_Avoid_: Sale, sell transaction, trade
+
 **Holding**:
 All open Lots of one Instrument on one Account, taken together.
 _Avoid_: Position, pozycja, asset

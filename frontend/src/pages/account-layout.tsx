@@ -36,7 +36,7 @@ export function AccountLayout() {
   const tabs = [
     { label: "Overview", to: paths.account(account.id) },
     { label: "Holdings", to: paths.holdings(account.id) },
-    { label: "Sales", to: paths.sales(account.id) },
+    { label: "Closed Positions", to: paths.closedPositions(account.id) },
     ...(account.type === "IKZE"
       ? [{ label: "IKZE", to: paths.ikze(account.id) }]
       : []),

@@ -2,39 +2,42 @@ import { useState } from "react"
 
 import { FigureLabel } from "@/components/figure-label"
 import { LoadedView } from "@/components/loaded-view"
-import { SalesTable } from "@/components/sales-table"
+import { ClosedPositionsTable } from "@/components/closed-positions-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useLoad } from "@/hooks/use-load"
-import { fetchSales, type Sale } from "@/lib/api"
+import { fetchClosedPositions, type ClosedPosition } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { sumDecimals } from "@/lib/decimal"
 import { amountSign, formatAmount, polishYear, signColour } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useAccount } from "@/pages/account-layout"
 
-// allYears is the value of the year filter that shows the sales of all years.
+// allYears is the value of the year filter that shows the Closed Positions of all years.
 const allYears = "all"
 
 // selectedItem marks the selected year with the accent, as in the mockup. The default muted background is too faint.
 const selectedItem =
   "data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
 
-// AccountSalesPage shows the total Realized Profit and the number of sales of one Account,
-// and the table of the sales, newest first. A filter selects one calendar year in Polish time.
-export function AccountSalesPage() {
+// AccountClosedPositionsPage shows the total Realized Profit and the number of Closed Positions of one Account,
+// and the table of the Closed Positions, newest first. A filter selects one calendar year in Polish time.
+export function AccountClosedPositionsPage() {
   const account = useAccount()
   const { valuesVersion } = useAppState()
   const [year, setYear] = useState(allYears)
-  const sales = useLoad(String(account.id), valuesVersion, (signal) =>
-    fetchSales(account.id, signal)
+  const closedPositions = useLoad(String(account.id), valuesVersion, (signal) =>
+    fetchClosedPositions(account.id, signal)
   )
 
   return (
-    <LoadedView loaded={sales} errorTitle="Cannot load the sales">
+    <LoadedView
+      loaded={closedPositions}
+      errorTitle="Cannot load the Closed Positions"
+    >
       {(data) => (
-        <SalesView
-          sales={data}
+        <ClosedPositionsView
+          closedPositions={data}
           currency={account.currency}
           year={year}
           onYearChange={setYear}
@@ -44,28 +47,42 @@ export function AccountSalesPage() {
   )
 }
 
-type SalesViewProps = {
-  // sales are in the order of the backend, oldest first.
-  sales: Sale[]
+type ClosedPositionsViewProps = {
+  // closedPositions are in the order of the backend, oldest first.
+  closedPositions: ClosedPosition[]
   currency: string
   // year is the selected year as text, or allYears.
   year: string
   onYearChange: (year: string) => void
 }
 
-// SalesView shows the figures and the table of the sales of the selected year.
-function SalesView({ sales, currency, year, onYearChange }: SalesViewProps) {
-  const newestFirst = sales.toReversed()
+// ClosedPositionsView shows the figures and the table of the Closed Positions of the selected year.
+function ClosedPositionsView({
+  closedPositions,
+  currency,
+  year,
+  onYearChange,
+}: ClosedPositionsViewProps) {
+  const newestFirst = closedPositions.toReversed()
   const years = [
-    ...new Set(newestFirst.map((sale) => String(polishYear(sale.time)))),
+    ...new Set(
+      newestFirst.map((closedPosition) =>
+        String(polishYear(closedPosition.time))
+      )
+    ),
   ]
   // The selected year can be missing, for example after an Import. Then the page shows all years.
   const selected = years.includes(year) ? year : allYears
   const shown =
     selected === allYears
       ? newestFirst
-      : newestFirst.filter((sale) => String(polishYear(sale.time)) === selected)
-  const total = sumDecimals(shown.map((sale) => sale.realizedProfit))
+      : newestFirst.filter(
+          (closedPosition) =>
+            String(polishYear(closedPosition.time)) === selected
+        )
+  const total = sumDecimals(
+    shown.map((closedPosition) => closedPosition.realizedProfit)
+  )
   const period = selected === allYears ? "All years" : selected
 
   return (
@@ -87,7 +104,7 @@ function SalesView({ sales, currency, year, onYearChange }: SalesViewProps) {
         </Card>
         <Card>
           <CardContent className="flex min-w-0 flex-col gap-1.5">
-            <FigureLabel>Sales</FigureLabel>
+            <FigureLabel>Closed Positions</FigureLabel>
             <p className="num text-2xl font-semibold sm:text-3xl md:text-4xl">
               {shown.length}
             </p>
@@ -97,7 +114,7 @@ function SalesView({ sales, currency, year, onYearChange }: SalesViewProps) {
       </div>
       <Card className="min-w-0">
         <CardHeader>
-          <CardTitle>Sales</CardTitle>
+          <CardTitle>Closed Positions</CardTitle>
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
           {years.length > 0 && (
@@ -130,13 +147,13 @@ function SalesView({ sales, currency, year, onYearChange }: SalesViewProps) {
               </ToggleGroup>
             </div>
           )}
-          {sales.length === 0 ? (
+          {closedPositions.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              The Account has no sales.
+              The Account has no Closed Positions.
             </p>
           ) : (
-            <SalesTable
-              sales={shown}
+            <ClosedPositionsTable
+              closedPositions={shown}
               currency={currency}
               totalRealizedProfit={total}
             />

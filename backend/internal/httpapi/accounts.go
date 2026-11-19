@@ -100,8 +100,8 @@ type holdingResponse struct {
 	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
 }
 
-// saleResponse is one row of GET /api/accounts/{id}/sales. Amounts and the volume are decimal text.
-type saleResponse struct {
+// closedPositionResponse is one row of GET /api/accounts/{id}/Closed Positions. Amounts and the volume are decimal text.
+type closedPositionResponse struct {
 	XTBID string `json:"xtbId"`
 	// Time is RFC 3339 text in UTC.
 	Time       string `json:"time"`
@@ -205,15 +205,15 @@ func (a *api) accountHoldings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// accountSales returns the sales of the Account with their Realized Profit, in time order and then in XTB ID order.
-func (a *api) accountSales(w http.ResponseWriter, r *http.Request) {
+// accountClosedPositions returns the Closed Positions of the Account with their Realized Profit, in time order and then in XTB ID order.
+func (a *api) accountClosedPositions(w http.ResponseWriter, r *http.Request) {
 	view, ok := a.accountView(w, r)
 	if !ok {
 		return
 	}
-	resp := make([]saleResponse, 0, len(view.state.Sales))
-	for _, s := range view.state.Sales {
-		resp = append(resp, saleResponse{
+	resp := make([]closedPositionResponse, 0, len(view.state.ClosedPositions))
+	for _, s := range view.state.ClosedPositions {
+		resp = append(resp, closedPositionResponse{
 			XTBID:          s.XTBID,
 			Time:           s.Time.UTC().Format(time.RFC3339),
 			Ticker:         s.Instrument.Ticker,
