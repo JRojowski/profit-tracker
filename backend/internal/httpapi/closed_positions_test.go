@@ -16,15 +16,18 @@ import (
 
 // closedPositionResponse is one row of GET /api/accounts/{id}/Closed Positions.
 type closedPositionResponse struct {
-	XTBID          string `json:"xtbId"`
-	Time           string `json:"time"`
-	Ticker         string `json:"ticker"`
-	Name           string `json:"name"`
-	PositionID     string `json:"positionId"`
-	Volume         string `json:"volume"`
-	Amount         string `json:"amount"`
-	Cost           string `json:"cost"`
-	RealizedProfit string `json:"realizedProfit"`
+	XTBID          string  `json:"xtbId"`
+	Time           string  `json:"time"`
+	Ticker         string  `json:"ticker"`
+	Name           string  `json:"name"`
+	PositionID     string  `json:"positionId"`
+	Volume         string  `json:"volume"`
+	Amount         string  `json:"amount"`
+	Cost           string  `json:"cost"`
+	RealizedProfit string  `json:"realizedProfit"`
+	OpenTime       string  `json:"openTime"`
+	OpenPrice      *string `json:"openPrice"`
+	ClosePrice     *string `json:"closePrice"`
 }
 
 // closeTime returns the time of a Closed Position on day n of March 2026, at 15:30 UTC.
@@ -108,10 +111,12 @@ func TestClosedPositions_ADR0001Example1_LotClosedInTwoParts(t *testing.T) {
 		{
 			XTBID: "303", Time: "2026-03-02T15:30:00Z", Ticker: "ABC.PL", Name: "ABC", PositionID: "2636532207",
 			Volume: "9", Amount: "92.34", Cost: "98.46", RealizedProfit: "-6.12",
+			OpenTime: "2026-02-02T10:00:00Z", OpenPrice: ptr("10.94"), ClosePrice: ptr("10.26"),
 		},
 		{
 			XTBID: "304", Time: "2026-03-02T15:31:00Z", Ticker: "ABC.PL", Name: "ABC", PositionID: "2636532207",
 			Volume: "1", Amount: "10.28", Cost: "10.94", RealizedProfit: "-0.66",
+			OpenTime: "2026-02-02T10:00:00Z", OpenPrice: ptr("10.94"), ClosePrice: ptr("10.28"),
 		},
 	}, got)
 	assert.Empty(t, srv.holdings(t, accountID), "the Lot is closed")
@@ -484,4 +489,89 @@ func TestClosedPositions_OldSalesPath_ReturnsNotFound(t *testing.T) {
 	status, _, _ := srv.get(t, fmt.Sprintf("/api/accounts/%d/sales", accountID))
 
 	assert.Equal(t, http.StatusNotFound, status)
+}
+
+// TestClosedPositions_OpenTimeOpenPriceAndClosePrice covers the Fill and sale prices of the Closed Positions.
+func TestClosedPositions_OpenTimeOpenPriceAndClosePrice(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ops  []xtbtest.CashOperation
+		want []closedPositionResponse
+	}{
+		{
+			name: "Lot with one Fill",
+			ops: []xtbtest.CashOperation{
+				{Type: "Stock purchase", Ticker: "ABC.PL", Instrument: "ABC", Time: opTime(3), Amount: "-50.00", ID: "501", Comment: "OPEN BUY 5 @ 10.00", PositionID: "2800000001"},
+				{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: closeTime(4), Amount: "60.00", ID: "502", Comment: "CLOSE BUY 5 @ 12.00", PositionID: "2800000001"},
+			},
+			want: []closedPositionResponse{
+				{OpenTime: "2026-02-03T10:00:00Z", OpenPrice: ptr("10"), ClosePrice: ptr("12")},
+			},
+		},
+		{
+			name: "Lot with two Fills at different prices and volumes, weighted average",
+			ops: []xtbtest.CashOperation{
+				// The later Fill comes first in the list. The open time is the earliest Fill time.
+				{Type: "Stock purchase", Ticker: "ABC.PL", Instrument: "ABC", Time: opTime(5), Amount: "-90.00", ID: "512", Comment: "OPEN BUY 3 @ 30.00", PositionID: "2800000002"},
+				{Type: "Stock purchase", Ticker: "ABC.PL", Instrument: "ABC", Time: opTime(3), Amount: "-10.00", ID: "511", Comment: "OPEN BUY 1 @ 10.00", PositionID: "2800000002"},
+				{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: closeTime(6), Amount: "120.00", ID: "513", Comment: "CLOSE BUY 4 @ 30.00", PositionID: "2800000002"},
+			},
+			// Plain average (10 + 30) / 2 = 20. Weighted (10 × 1 + 30 × 3) / 4 = 25.
+			want: []closedPositionResponse{
+				{OpenTime: "2026-02-03T10:00:00Z", OpenPrice: ptr("25"), ClosePrice: ptr("30")},
+			},
+		},
+		{
+			name: "Lot closed in two parts",
+			ops: []xtbtest.CashOperation{
+				{Type: "Stock purchase", Ticker: "ABC.PL", Instrument: "ABC", Time: opTime(3), Amount: "-10.00", ID: "521", Comment: "OPEN BUY 1 @ 10.00", PositionID: "2800000003"},
+				{Type: "Stock purchase", Ticker: "ABC.PL", Instrument: "ABC", Time: opTime(5), Amount: "-90.00", ID: "522", Comment: "OPEN BUY 3 @ 30.00", PositionID: "2800000003"},
+				{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: closeTime(6), Amount: "62.00", ID: "523", Comment: "CLOSE BUY 2/4 @ 31.00", PositionID: "2800000003"},
+				{Type: "Stock sell", Ticker: "ABC.PL", Instrument: "ABC", Time: closeTime(7), Amount: "66.00", ID: "524", Comment: "CLOSE BUY 2/4 @ 33.00", PositionID: "2800000003"},
+			},
+			want: []closedPositionResponse{
+				{OpenTime: "2026-02-03T10:00:00Z", OpenPrice: ptr("25"), ClosePrice: ptr("31")},
+				{OpenTime: "2026-02-03T10:00:00Z", OpenPrice: ptr("25"), ClosePrice: ptr("33")},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := startServer(t)
+			export := xtbtest.Export{
+				AccountNumber:  "50000003",
+				Currency:       "PLN",
+				CashOperations: append(tc.ops, xtbtest.CashOperation{Type: "Deposit", Time: opTime(1), Amount: "500.00", ID: "500", Comment: "Blik deposit"}),
+			}
+			accountID := srv.importAccount(t, export, "XTB PLN")
+
+			got := srv.closedPositions(t, accountID)
+
+			require.Len(t, got, len(tc.want))
+			for i, want := range tc.want {
+				assert.Equal(t, want.OpenTime, got[i].OpenTime, "row %d open time", i)
+				assert.Equal(t, want.OpenPrice, got[i].OpenPrice, "row %d open price", i)
+				assert.Equal(t, want.ClosePrice, got[i].ClosePrice, "row %d close price", i)
+			}
+		})
+	}
+}
+
+func TestClosedPositions_HasContractJSONFields(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	accountID := srv.importAccount(t, adrExample1("-6.12", "-0.66"), "XTB PLN")
+
+	status, _, body := srv.get(t, fmt.Sprintf("/api/accounts/%d/closed-positions", accountID))
+
+	require.Equal(t, http.StatusOK, status)
+	var rows []map[string]json.RawMessage
+	decode(t, body, &rows)
+	require.NotEmpty(t, rows)
+	assert.JSONEq(t, `"2026-02-02T10:00:00Z"`, string(rows[0]["openTime"]))
+	assert.JSONEq(t, `"10.94"`, string(rows[0]["openPrice"]))
+	assert.JSONEq(t, `"10.26"`, string(rows[0]["closePrice"]))
 }

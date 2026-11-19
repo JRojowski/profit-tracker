@@ -54,13 +54,13 @@ INSERT INTO lot_fills (lot_id, cash_operation_id)
 VALUES (?, ?);
 
 -- name: LedgerCashOperations :many
-SELECT xtb_id, type, time, amount, position_id, volume
+SELECT xtb_id, type, time, amount, position_id, volume, price
 FROM cash_operations
 WHERE account_id = ?
 ORDER BY time, id;
 
 -- name: LedgerFills :many
-SELECT l.position_id, i.ticker, i.name AS instrument_name, c.xtb_id, c.volume, c.amount
+SELECT l.position_id, i.ticker, i.name AS instrument_name, c.xtb_id, c.time, c.volume, c.price, c.amount
 FROM lots l
 JOIN instruments i ON i.id = l.instrument_id
 JOIN lot_fills f ON f.lot_id = l.id

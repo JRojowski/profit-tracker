@@ -197,7 +197,7 @@ func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]K
 }
 
 const ledgerCashOperations = `-- name: LedgerCashOperations :many
-SELECT xtb_id, type, time, amount, position_id, volume
+SELECT xtb_id, type, time, amount, position_id, volume, price
 FROM cash_operations
 WHERE account_id = ?
 ORDER BY time, id
@@ -210,6 +210,7 @@ type LedgerCashOperationsRow struct {
 	Amount     decimal.Decimal
 	PositionID sql.NullString
 	Volume     decimal.NullDecimal
+	Price      decimal.NullDecimal
 }
 
 func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]LedgerCashOperationsRow, error) {
@@ -228,6 +229,7 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 			&i.Amount,
 			&i.PositionID,
 			&i.Volume,
+			&i.Price,
 		); err != nil {
 			return nil, err
 		}
@@ -243,7 +245,7 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 }
 
 const ledgerFills = `-- name: LedgerFills :many
-SELECT l.position_id, i.ticker, i.name AS instrument_name, c.xtb_id, c.volume, c.amount
+SELECT l.position_id, i.ticker, i.name AS instrument_name, c.xtb_id, c.time, c.volume, c.price, c.amount
 FROM lots l
 JOIN instruments i ON i.id = l.instrument_id
 JOIN lot_fills f ON f.lot_id = l.id
@@ -257,7 +259,9 @@ type LedgerFillsRow struct {
 	Ticker         string
 	InstrumentName string
 	XtbID          string
+	Time           string
 	Volume         decimal.NullDecimal
+	Price          decimal.NullDecimal
 	Amount         decimal.Decimal
 }
 
@@ -275,7 +279,9 @@ func (q *Queries) LedgerFills(ctx context.Context, accountID int64) ([]LedgerFil
 			&i.Ticker,
 			&i.InstrumentName,
 			&i.XtbID,
+			&i.Time,
 			&i.Volume,
+			&i.Price,
 			&i.Amount,
 		); err != nil {
 			return nil, err

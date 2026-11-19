@@ -114,6 +114,14 @@ type closedPositionResponse struct {
 	// Cost is the cost of the closed part. ADR 0001: it is exact. The frontend rounds for display.
 	Cost           string `json:"cost"`
 	RealizedProfit string `json:"realizedProfit"`
+	// OpenTime is the time of the first Fill of the Lot, RFC 3339 text in UTC.
+	OpenTime string `json:"openTime"`
+	// OpenPrice is the average of the Fill prices, weighted by volume. It is null if a Fill has no price.
+	// The price is in the currency of the broker price, which can be different from the Account currency.
+	// The response does not state that currency.
+	OpenPrice *string `json:"openPrice"`
+	// ClosePrice is the price of the sell Cash Operation. It is null if the operation has no price.
+	ClosePrice *string `json:"closePrice"`
 }
 
 // listAccounts returns all Accounts, ordered by name.
@@ -223,9 +231,20 @@ func (a *api) accountClosedPositions(w http.ResponseWriter, r *http.Request) {
 			Amount:         formatAmount(s.Amount),
 			Cost:           formatAmount(s.Cost),
 			RealizedProfit: formatAmount(s.RealizedProfit),
+			OpenTime:       s.OpenTime.UTC().Format(time.RFC3339),
+			OpenPrice:      nullPrice(s.OpenPrice),
+			ClosePrice:     nullPrice(s.ClosePrice),
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// nullPrice returns the price as decimal text, or nil if the price is not valid.
+func nullPrice(p decimal.NullDecimal) *string {
+	if !p.Valid {
+		return nil
+	}
+	return new(p.Decimal.String())
 }
 
 // accountView reads the Account of the path and calculates its state from the Ledger and the stored prices.
