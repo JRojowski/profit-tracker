@@ -162,7 +162,7 @@ func (a *api) assistantInstructions(ctx context.Context, page *assistant.Page) (
 }
 
 // assistantPage resolves the page context of the request. It returns nil if the request has no page context.
-// An unknown Account or Instrument gives a problem text for the 400 error. The ticker has the case of the
+// An unknown Account gives a problem text for the 400 error. An unknown Instrument is left out. The ticker has the case of the
 // Instrument in the tool, so that the instructions never hold text that the user typed.
 func (a *api) assistantPage(ctx context.Context, c *pageContext) (*assistant.Page, string, error) {
 	if c == nil {
@@ -182,10 +182,8 @@ func (a *api) assistantPage(ctx context.Context, c *pageContext) (*assistant.Pag
 	if c.Instrument != nil && *c.Instrument != "" {
 		ticker, err := a.assistantInstrument(ctx, *c.Instrument)
 		var argErr *assistant.ArgumentError
-		if errors.As(err, &argErr) {
-			return nil, fmt.Sprintf("the context has an unknown Instrument %q", *c.Instrument), nil
-		}
-		if err != nil {
+		// An old link can hold a ticker that the tool does not know. The page then has no Instrument.
+		if err != nil && !errors.As(err, &argErr) {
 			return nil, "", err
 		}
 		page.Instrument = ticker

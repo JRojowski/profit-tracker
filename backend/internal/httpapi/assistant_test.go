@@ -250,7 +250,6 @@ func TestAskAssistant_RequestThatIsNotValid_Returns400(t *testing.T) {
 		{name: "too many messages", body: tooManyMessagesBody()},
 		{name: "message that is too long", body: fmt.Sprintf(`{"messages": [{"role": "user", "content": %q}]}`, strings.Repeat("a", 4001))},
 		{name: "context with an unknown Account", body: `{"messages": [{"role": "user", "content": "Hi"}], "context": {"accountId": 999}}`},
-		{name: "context with an unknown Instrument", body: `{"messages": [{"role": "user", "content": "Hi"}], "context": {"instrument": "NOPE.US"}}`},
 		{name: "context with a text Account ID", body: `{"messages": [{"role": "user", "content": "Hi"}], "context": {"accountId": "one"}}`},
 	}
 	for _, tc := range tests {
@@ -343,6 +342,7 @@ func TestAskAssistant_PageContext_ReachesTheModelInTheInstructions(t *testing.T)
 	srv := startServerWithOptions(t, serverOptions{model: model})
 	accountID := srv.importAccount(t, dashboardExport(), "XTB USD")
 	ticker := "aapl.us"
+	unknown := "NOPE.US"
 
 	tests := []struct {
 		name    string
@@ -363,6 +363,12 @@ func TestAskAssistant_PageContext_ReachesTheModelInTheInstructions(t *testing.T)
 			context: &pageContext{AccountID: &accountID},
 			want:    []string{fmt.Sprintf(`The page that is open: Account ID %d, "XTB USD".`, accountID)},
 			notWant: []string{"Instrument \"AAPL.US\""},
+		},
+		{
+			name:    "unknown Instrument is left out",
+			context: &pageContext{AccountID: &accountID, Instrument: &unknown},
+			want:    []string{fmt.Sprintf(`The page that is open: Account ID %d, "XTB USD".`, accountID)},
+			notWant: []string{"NOPE.US", "Instrument \"", "an old link"},
 		},
 		{
 			name:    "no context",
