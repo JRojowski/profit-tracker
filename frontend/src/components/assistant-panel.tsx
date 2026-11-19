@@ -1,7 +1,12 @@
-import { LoaderCircleIcon, MessageSquarePlusIcon, SendIcon } from "lucide-react"
+import {
+  LoaderCircleIcon,
+  MessageSquarePlusIcon,
+  RotateCwIcon,
+  SendIcon,
+} from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -19,20 +24,63 @@ import { assistantStepText } from "@/lib/assistant-step-text"
 import {
   maxQuestionLength,
   useAssistant,
+  type AssistantErrorKind,
   type AssistantTurn,
 } from "@/lib/assistant-state"
 
-// failedAnswerText is the one message for each error. The panel shows it in place of the answer.
-const failedAnswerText =
-  "The Assistant cannot answer now. Try the question again later."
+// failureTexts is the message for each kind of failure. The panel shows it in place of the answer.
+// The text for a rate limit names the daily limit of the free model. The text for a failure of the provider
+// tells that the data of the user is not the cause.
+const failureTexts: Record<
+  AssistantErrorKind,
+  { title: string; description: string }
+> = {
+  not_configured: {
+    title: "The Assistant is not set up",
+    description:
+      "The tool has no API key for the model provider. Set the key and start the tool again.",
+  },
+  invalid_request: {
+    title: "The question is not valid",
+    description:
+      "The tool cannot send this conversation. Shorten the question or start a new conversation.",
+  },
+  rate_limited: {
+    title: "The provider refuses the question",
+    description:
+      "The provider limits how many questions it answers. The daily limit of the free model can be the cause. Try again later.",
+  },
+  provider_failure: {
+    title: "The provider does not answer",
+    description:
+      "The model provider does not answer or answers too slowly. Your data is not the cause. Send the question again.",
+  },
+  network: {
+    title: "The tool is not reachable",
+    description:
+      "The question did not reach the tool. Check that the tool runs and that the network works, then send the question again.",
+  },
+  unknown: {
+    title: "The Assistant cannot answer now",
+    description: "Something went wrong. Send the question again.",
+  },
+}
 
 // AssistantPanel shows the conversation with the Assistant in a panel at the right side. Like the Instrument
 // Overview panel, it does not block the page: it has no overlay, and a click on the page does not close it.
 // It stands above the Instrument Overview panel. Escape closes it first, because it is the layer that opened
 // last, or because the Instrument Overview panel passes the key on to it.
 export function AssistantPanel() {
-  const { available, open, setOpen, turns, asking, ask, newConversation } =
-    useAssistant()
+  const {
+    available,
+    open,
+    setOpen,
+    turns,
+    asking,
+    ask,
+    retry,
+    newConversation,
+  } = useAssistant()
   const { accounts } = useAppState()
   const account = useRouteAccount(accounts)
   const overview = useOverviewUrl().state
@@ -69,6 +117,7 @@ export function AssistantPanel() {
     event.preventDefault()
     send()
   }
+  const lastTurn = turns[turns.length - 1]
 
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
@@ -103,7 +152,13 @@ export function AssistantPanel() {
             />
           )}
           {turns.map((turn) => (
-            <TurnView key={turn.id} turn={turn} />
+            <TurnView
+              key={turn.id}
+              turn={turn}
+              onRetry={
+                turn === lastTurn && !asking ? () => retry(context) : null
+              }
+            />
           ))}
           <div ref={listEnd} />
         </div>
@@ -199,7 +254,14 @@ function EmptyConversation({
 }
 
 // TurnView shows one question, and below it the answer, the work in progress state or the error.
-function TurnView({ turn }: { turn: AssistantTurn }) {
+// onRetry is set for the last turn when it failed. It sends the question again.
+function TurnView({
+  turn,
+  onRetry,
+}: {
+  turn: AssistantTurn
+  onRetry: (() => void) | null
+}) {
   return (
     <section className="flex flex-col gap-3" aria-label="Question and answer">
       <p className="max-w-[85%] self-end rounded-lg bg-muted px-3 py-2 text-sm break-words whitespace-pre-wrap">
@@ -215,12 +277,40 @@ function TurnView({ turn }: { turn: AssistantTurn }) {
         </p>
       )}
       {turn.status === "failed" && (
-        <Alert variant="destructive">
-          <AlertDescription>{failedAnswerText}</AlertDescription>
-        </Alert>
+        <FailureView kind={turn.error ?? "unknown"} onRetry={onRetry} />
       )}
       {turn.status === "answered" && <AnswerView turn={turn} />}
     </section>
+  )
+}
+
+// FailureView shows the message of a failure in place of the answer, and a control that sends the question again.
+function FailureView({
+  kind,
+  onRetry,
+}: {
+  kind: AssistantErrorKind
+  onRetry: (() => void) | null
+}) {
+  const text = failureTexts[kind]
+  return (
+    <Alert variant="destructive">
+      <AlertTitle>{text.title}</AlertTitle>
+      <AlertDescription>
+        <p>{text.description}</p>
+        {onRetry && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 text-foreground"
+            onClick={onRetry}
+          >
+            <RotateCwIcon data-icon="inline-start" />
+            Send again
+          </Button>
+        )}
+      </AlertDescription>
+    </Alert>
   )
 }
 

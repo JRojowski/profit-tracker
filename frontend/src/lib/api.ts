@@ -109,14 +109,17 @@ export type ImportSummary = {
   skippedCashOperations: number
 }
 
-// ApiError holds the error message that the backend returns.
+// ApiError holds the error message that the backend returns. The code is the machine-readable code of the
+// error, when the backend gives one, for example "rate_limited".
 export class ApiError extends Error {
   readonly status: number
+  readonly code: string | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.code = code
   }
 }
 
@@ -128,13 +131,15 @@ export function errorMessage(err: unknown): string {
 async function readJSON<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `HTTP ${response.status}`
+    let code: string | null = null
     try {
-      const body = (await response.json()) as { error?: string }
+      const body = (await response.json()) as { error?: string; code?: string }
       if (body.error) message = body.error
+      if (body.code) code = body.code
     } catch {
       // The body is not JSON. Keep the status message.
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, code)
   }
   return (await response.json()) as T
 }

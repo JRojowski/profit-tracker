@@ -10,6 +10,7 @@ import {
 } from "react"
 
 import {
+  ApiError,
   askAssistant,
   fetchAssistantAvailable,
   type AssistantContext,
@@ -23,14 +24,25 @@ export const maxQuestionLength = 4000
 // maxMessages is the largest number of messages that the backend accepts in one request.
 const maxMessages = 40
 
+// AssistantErrorKind is the kind of failure of a question. Each kind has its own message in the panel.
+// "network" is a request that did not reach the backend. "unknown" is each other failure.
+export type AssistantErrorKind =
+  | "not_configured"
+  | "invalid_request"
+  | "rate_limited"
+  | "provider_failure"
+  | "network"
+  | "unknown"
+
 // AssistantTurn is one question of the user and what the Assistant did with it.
 export type AssistantTurn = {
   id: number
   question: string
-  // status is "pending" while the Assistant works. A "failed" turn has no answer.
+  // status is "pending" while the Assistant works. A "failed" turn has no answer and has an error.
   status: "pending" | "answered" | "failed"
   answer: string
   steps: AssistantStep[]
+  error: AssistantErrorKind | null
 }
 
 type AssistantState = {
@@ -44,6 +56,8 @@ type AssistantState = {
   asking: boolean
   // ask sends one question with the page context. It does nothing when the text is empty or another question waits.
   ask: (question: string, context: AssistantContext) => void
+  // retry sends the last question again, when it failed. It uses the page context of the moment.
+  retry: (context: AssistantContext) => void
   // newConversation removes all questions and answers. A question that waits is dropped.
   newConversation: () => void
 }
@@ -95,11 +109,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             status: "answered",
             answer: result.answer,
             steps: result.steps,
+            error: null,
           })
         )
-        .catch(() => {
+        .catch((err: unknown) => {
           if (controller.signal.aborted) return
-          finish({ status: "failed" })
+          finish({ status: "failed", error: errorKind(err) })
         })
     },
     []
@@ -118,9 +133,26 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           status: "pending",
           answer: "",
           steps: [],
+          error: null,
         },
       ])
       run(id, text, context, turns)
+    },
+    [asking, turns, run]
+  )
+
+  const retry = useCallback(
+    (context: AssistantContext) => {
+      const last = turns[turns.length - 1]
+      if (last === undefined || last.status !== "failed" || asking) return
+      setTurns((list) =>
+        list.map((turn) =>
+          turn.id === last.id
+            ? { ...turn, status: "pending", error: null }
+            : turn
+        )
+      )
+      run(last.id, last.question, context, turns.slice(0, -1))
     },
     [asking, turns, run]
   )
@@ -139,9 +171,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       turns,
       asking,
       ask,
+      retry,
       newConversation,
     }),
-    [available, open, turns, asking, ask, newConversation]
+    [available, open, turns, asking, ask, retry, newConversation]
   )
 
   return (
@@ -149,6 +182,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       {children}
     </AssistantContextValue.Provider>
   )
+}
+
+// errorKind gives the kind of a failure of a question. A request that did not reach the backend throws a TypeError.
+function errorKind(err: unknown): AssistantErrorKind {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case "not_configured":
+      case "invalid_request":
+      case "rate_limited":
+      case "provider_failure":
+        return err.code
+      default:
+        return "unknown"
+    }
+  }
+  return err instanceof TypeError ? "network" : "unknown"
 }
 
 // messagesFor gives the messages that go to the backend for a new question: each answered turn before it, in
