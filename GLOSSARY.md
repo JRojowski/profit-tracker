@@ -85,7 +85,7 @@ The current value of the open part of a Lot minus the cost of that part, in the 
 _Avoid_: Paper profit, open P/L
 
 **Total Result**:
-The current value of an Account (cash and Holdings) minus its Net Deposits. It is equal to the sum of Realized Profit, Unrealized Profit, net dividends, net interest and fees.
+The current value of an Account (cash and Holdings) minus its Net Deposits. It is equal to the sum of Realized Profit, Unrealized Profit, net dividends, net interest and fees. The Total Result of a period is the change of the Total Result from the end of the day before the period to the end of its last day.
 _Avoid_: Total P/L, return, wynik
 
 **Simple Return**:
@@ -113,6 +113,12 @@ _Avoid_: IKZE deposit, wpłata
 **IKZE Limit**:
 The highest sum of IKZE Contributions in one calendar year that the law allows for the user.
 _Avoid_: Cap, contribution cap
+
+### Assistant
+
+**Assistant**:
+The part of the tool that answers the questions of the user in plain language. It uses only the results that the tool calculates. It describes and analyses the investments. It does not recommend a purchase or a sale.
+_Avoid_: AI, chatbot, bot, agent
 
 ### Import
 
