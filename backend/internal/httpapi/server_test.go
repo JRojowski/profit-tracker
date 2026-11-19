@@ -110,6 +110,8 @@ type serverOptions struct {
 	model assistant.Model
 	// logs receives the log lines of the server. If it is nil, the server discards them.
 	logs io.Writer
+	// questionTimeout is the time limit of one question to the Assistant. If it is zero, the server uses its default.
+	questionTimeout time.Duration
 }
 
 // startServerWithOptions starts the backend with the options. The clock starts at testToday.
@@ -139,13 +141,14 @@ func startServerWithOptions(t *testing.T, opts serverOptions) *testServer {
 	rateProvider := newFakeRateProvider()
 	rates := exchange.NewService(db, rateProvider, clock.Now)
 	handler := httpapi.NewHandler(httpapi.Options{
-		Store:         db,
-		Frontend:      frontend,
-		Logger:        logger,
-		Prices:        prices,
-		ExchangeRates: rates,
-		Now:           clock.Now,
-		Assistant:     opts.model,
+		Store:            db,
+		Frontend:         frontend,
+		Logger:           logger,
+		Prices:           prices,
+		ExchangeRates:    rates,
+		Now:              clock.Now,
+		Assistant:        opts.model,
+		AssistantTimeout: opts.questionTimeout,
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)

@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -100,14 +99,25 @@ type chatResponse struct {
 			Content   string     `json:"content"`
 			ToolCalls []toolCall `json:"tool_calls"`
 		} `json:"message"`
+		// Error is set when the provider fails after it started to answer. The status stays 200.
+		Error *providerError `json:"error"`
 	} `json:"choices"`
 	Error *providerError `json:"error"`
 }
 
 // providerError is the error object of OpenRouter.
 type providerError struct {
-	Code    json.RawMessage `json:"code"`
-	Message string          `json:"message"`
+	Code     json.RawMessage `json:"code"`
+	Message  string          `json:"message"`
+	Metadata struct {
+		ErrorType string `json:"error_type"`
+	} `json:"metadata"`
+}
+
+// rateLimited tells if the error is a rate limit. The code is a number, but a provider can send text.
+func (e providerError) rateLimited() bool {
+	return strings.TrimSpace(string(e.Code)) == strconv.Itoa(http.StatusTooManyRequests) ||
+		e.Metadata.ErrorType == "rate_limit_exceeded"
 }
 
 // Reply sends the messages and the function definitions to the model and returns its answer.
@@ -134,26 +144,30 @@ func (c *Client) reply(ctx context.Context, messages []assistant.Message, functi
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		// The error of the HTTP client holds the method and the URL, not the headers. Thus it holds no key.
-		return assistant.Reply{}, fmt.Errorf("send request: %w", err)
+		return assistant.Reply{}, fmt.Errorf("send request: %w: %w", assistant.ErrProviderFailure, err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
-		return assistant.Reply{}, fmt.Errorf("read response: %w", err)
+		return assistant.Reply{}, fmt.Errorf("read response: %w: %w", assistant.ErrProviderFailure, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return assistant.Reply{}, statusError(resp.StatusCode, c.redact(data))
+		return assistant.Reply{}, c.statusError(resp.StatusCode, data)
 	}
 
 	var chat chatResponse
 	if err := json.Unmarshal(data, &chat); err != nil {
-		return assistant.Reply{}, fmt.Errorf("decode response: %w", err)
+		return assistant.Reply{}, fmt.Errorf("decode response: %w: %w", assistant.ErrProviderFailure, err)
 	}
+	// The provider can send an error in a response with the status 200.
 	if chat.Error != nil {
-		return assistant.Reply{}, fmt.Errorf("provider error %s: %s", chat.Error.Code, c.redact([]byte(chat.Error.Message)))
+		return assistant.Reply{}, c.bodyError(*chat.Error)
 	}
 	if len(chat.Choices) == 0 {
-		return assistant.Reply{}, errors.New("the response has no choice")
+		return assistant.Reply{}, fmt.Errorf("the response has no choice: %w", assistant.ErrProviderFailure)
+	}
+	if chat.Choices[0].Error != nil {
+		return assistant.Reply{}, c.bodyError(*chat.Choices[0].Error)
 	}
 	message := chat.Choices[0].Message
 	reply := assistant.Reply{Text: message.Content}
@@ -227,16 +241,31 @@ func (c *Client) redact(text []byte) []byte {
 	return bytes.ReplaceAll(text, []byte(c.Key), []byte("[API key]"))
 }
 
-// statusError returns the error for a response with a status that is not 200. It holds the message of the
-// provider if the body has one, or else the start of the body.
-func statusError(status int, body []byte) error {
+// bodyError returns the error for an error object of the provider in a response with the status 200.
+func (c *Client) bodyError(e providerError) error {
+	kind := assistant.ErrProviderFailure
+	if e.rateLimited() {
+		kind = assistant.ErrRateLimited
+	}
+	return fmt.Errorf("provider error %s: %s: %w", e.Code, c.redact([]byte(e.Message)), kind)
+}
+
+// statusError returns the error for a response with a status that is not 200. The status 429 is a rate limit.
+// Each other status is a failure of the provider. The error holds the message of the provider if the body has
+// one, or else the start of the body.
+func (c *Client) statusError(status int, body []byte) error {
+	kind := assistant.ErrProviderFailure
+	if status == http.StatusTooManyRequests {
+		kind = assistant.ErrRateLimited
+	}
+	body = c.redact(body)
 	var parsed chatResponse
 	if err := json.Unmarshal(body, &parsed); err == nil && parsed.Error != nil && parsed.Error.Message != "" {
-		return fmt.Errorf("status %d: %s", status, parsed.Error.Message)
+		return fmt.Errorf("status %d: %s: %w", status, parsed.Error.Message, kind)
 	}
 	text := strings.TrimSpace(string(body))
 	if len(text) > maxErrorText {
 		text = text[:maxErrorText]
 	}
-	return fmt.Errorf("status %d: %s", status, text)
+	return fmt.Errorf("status %d: %s: %w", status, text, kind)
 }

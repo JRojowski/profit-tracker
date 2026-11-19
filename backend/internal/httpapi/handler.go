@@ -35,6 +35,9 @@ type Options struct {
 	Now func() time.Time
 	// Assistant is the language model of the Assistant. If it is nil, the Assistant is off.
 	Assistant assistant.Model
+	// AssistantTimeout is the time limit of one question to the Assistant, with all its model calls.
+	// If it is zero, the API uses DefaultAssistantTimeout.
+	AssistantTimeout time.Duration
 }
 
 // NewHandler returns the handler for the API routes and the frontend.
@@ -45,7 +48,10 @@ func NewHandler(opts Options) http.Handler {
 	}
 	a := &api{
 		store: opts.Store, importer: importer.NewService(opts.Store), prices: opts.Prices, rates: opts.ExchangeRates,
-		now: now, logger: opts.Logger, model: opts.Assistant,
+		now: now, logger: opts.Logger, model: opts.Assistant, questionTimeout: opts.AssistantTimeout,
+	}
+	if a.questionTimeout <= 0 {
+		a.questionTimeout = DefaultAssistantTimeout
 	}
 
 	mux := http.NewServeMux()
@@ -89,11 +95,16 @@ type api struct {
 	logger   *slog.Logger
 	// model is the language model of the Assistant, or nil if the Assistant is off.
 	model assistant.Model
+	// questionTimeout is the time limit of one question to the Assistant.
+	questionTimeout time.Duration
 }
 
 // errorResponse is the JSON body of each API error.
 type errorResponse struct {
 	Error string `json:"error"`
+	// Code is a stable name of the case, so that the frontend can tell the cases apart. Only the errors of the
+	// Assistant have a code.
+	Code string `json:"code,omitempty"`
 }
 
 // notFound answers an unknown /api path. It never returns the frontend.
