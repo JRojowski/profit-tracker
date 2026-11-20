@@ -106,7 +106,7 @@ function ViewTitle({ account }: { account: Account | null }) {
   if (account) {
     return (
       <div className="flex min-w-0 items-center gap-2">
-        <h1 className="truncate text-base font-semibold tracking-tight">
+        <h1 className="truncate text-xl font-semibold tracking-title">
           {account.name}
         </h1>
         <AccountBadges account={account} />
@@ -121,7 +121,7 @@ function ViewTitle({ account }: { account: Account | null }) {
   else if (accountRoute && pathname !== paths.allAccounts)
     title = "Unknown Account"
   return (
-    <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+    <h1 className="truncate text-xl font-semibold tracking-title">{title}</h1>
   )
 }
 

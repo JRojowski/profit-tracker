@@ -1,3 +1,4 @@
+import { SectionHeading } from "@/components/section-heading"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { MessageSquareIcon, PencilIcon } from "lucide-react"
 
@@ -244,25 +245,28 @@ function OverviewBody({
   return (
     <>
       <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h3 className="font-heading text-sm font-medium">Price</h3>
-          <span className="text-xs text-muted-foreground">
-            {mismatch
-              ? `Broker prices in ${mismatch.quoteCurrency}`
-              : currency
-                ? `Daily close in ${currency}`
-                : "Daily close"}
-            {" · "}
-            <span aria-hidden className="text-chart-7">
-              ▲
-            </span>{" "}
-            Buy{" "}
-            <span aria-hidden className="text-chart-8">
-              ◆
-            </span>{" "}
-            Sell
-          </span>
-        </div>
+        <SectionHeading
+          level="h3"
+          title="Price"
+          action={
+            <span className="text-xs text-muted-foreground">
+              {mismatch
+                ? `Broker prices in ${mismatch.quoteCurrency}`
+                : currency
+                  ? `Daily close in ${currency}`
+                  : "Daily close"}
+              {" · "}
+              <span aria-hidden className="text-chart-7">
+                ▲
+              </span>{" "}
+              Buy{" "}
+              <span aria-hidden className="text-chart-8">
+                ◆
+              </span>{" "}
+              Sell
+            </span>
+          }
+        />
         {prices.series.length === 0 && (
           <Alert className="border-warning/40 bg-warning/10 *:[svg]:text-warning">
             <AlertTitle>No price data</AlertTitle>
@@ -351,7 +355,7 @@ function HoldingSection({
 }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="font-heading text-sm font-medium">Holding</h3>
+      <SectionHeading level="h3" title="Holding" />
       <dl className="flex flex-col divide-y rounded-lg border px-3 text-sm">
         <DetailRow label="Volume">{formatVolume(holding.volume)}</DetailRow>
         <DetailRow label="Average cost">
@@ -450,10 +454,15 @@ function LotList({
 }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="font-heading text-sm font-medium">
-        Open Lots{" "}
-        <span className="num text-muted-foreground">{lots.length}</span>
-      </h3>
+      <SectionHeading
+        level="h3"
+        title={
+          <>
+            Open Lots
+            <span className="num text-muted-foreground">{lots.length}</span>
+          </>
+        }
+      />
       <ul className="flex flex-col divide-y rounded-lg border text-sm">
         {lots.map((lot) => (
           <li key={lot.positionId} className="flex flex-col gap-1 px-3 py-2">
@@ -519,12 +528,17 @@ function ClosedPositionList({
   }
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="font-heading text-sm font-medium">
-        Closed Positions{" "}
-        <span className="num text-muted-foreground">
-          {closedPositions.length}
-        </span>
-      </h3>
+      <SectionHeading
+        level="h3"
+        title={
+          <>
+            Closed Positions
+            <span className="num text-muted-foreground">
+              {closedPositions.length}
+            </span>
+          </>
+        }
+      />
       <ul className="flex flex-col divide-y rounded-lg border text-sm">
         {closedPositions.toReversed().map((closedPosition) => {
           const highlighted = closedPosition.xtbId === highlightedId

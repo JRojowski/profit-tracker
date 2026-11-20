@@ -1,3 +1,4 @@
+import { SectionHeading } from "@/components/section-heading"
 import { TriangleAlertIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
@@ -6,7 +7,7 @@ import { FigureLabel } from "@/components/figure-label"
 import { InsetSurface } from "@/components/inset-surface"
 import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   ChartContainer,
   ChartTooltip,
@@ -74,49 +75,56 @@ export function ValueHistoryCard({
 
   return (
     <Card className="min-w-0">
-      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <CardTitle>Value History</CardTitle>
-          <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-muted-foreground">
-            Time-Weighted Return
-            <span
-              className={cn(
-                "num text-base font-semibold text-foreground",
-                twr !== null && signColour(amountSign(twr))
+      <CardHeader>
+        <SectionHeading
+          title="Value History"
+          description={
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-muted-foreground">
+                Time-Weighted Return
+                <span
+                  className={cn(
+                    "num text-base font-semibold text-foreground",
+                    twr !== null && signColour(amountSign(twr))
+                  )}
+                >
+                  {twr === null ? "—" : formatPercent(twr, { signed: true })}
+                </span>
+              </p>
+              {twr === null && unavailable === undefined && (
+                <p className="text-sm text-muted-foreground">
+                  The tool cannot calculate the Time-Weighted Return of this
+                  period.
+                </p>
               )}
+            </div>
+          }
+          action={
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              spacing={0}
+              aria-label="Period"
+              value={period}
+              onValueChange={(value) => {
+                // An empty value means that the user clicked the selected item again.
+                if (value) setPeriod(value as HistoryPeriod)
+              }}
+              className="shrink-0"
             >
-              {twr === null ? "—" : formatPercent(twr, { signed: true })}
-            </span>
-          </p>
-          {twr === null && unavailable === undefined && (
-            <p className="text-sm text-muted-foreground">
-              The tool cannot calculate the Time-Weighted Return of this period.
-            </p>
-          )}
-        </div>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          spacing={0}
-          aria-label="Period"
-          value={period}
-          onValueChange={(value) => {
-            // An empty value means that the user clicked the selected item again.
-            if (value) setPeriod(value as HistoryPeriod)
-          }}
-          className="shrink-0"
-        >
-          {historyPeriods.map((item) => (
-            <ToggleGroupItem
-              key={item}
-              value={item}
-              className={cn("num", selectedItem)}
-            >
-              {item}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+              {historyPeriods.map((item) => (
+                <ToggleGroupItem
+                  key={item}
+                  value={item}
+                  className={cn("num", selectedItem)}
+                >
+                  {item}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          }
+        />
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">
         {(history.priceWarnings.length > 0 ||

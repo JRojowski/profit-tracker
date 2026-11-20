@@ -8,6 +8,8 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
+  /* The tight letter spacing of a page title. A section title uses the lighter tracking-tight. */
+  --tracking-title: -0.05em;
   --font-sans: "Geist Variable", sans-serif;
   --font-mono: "Geist Mono Variable", monospace;
   --color-positive: var(--positive);

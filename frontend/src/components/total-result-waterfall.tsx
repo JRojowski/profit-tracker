@@ -8,8 +8,9 @@ import {
   YAxis,
 } from "recharts"
 
+import { SectionHeading } from "@/components/section-heading"
 import { InsetSurface } from "@/components/inset-surface"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -74,7 +75,7 @@ export function TotalResultWaterfall({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Total Result breakdown</CardTitle>
+        <SectionHeading title="Total Result breakdown" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {bars === null ? (

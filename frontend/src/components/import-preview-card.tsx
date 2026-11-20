@@ -1,16 +1,11 @@
+import { SectionHeading } from "@/components/section-heading"
 import { useState, type FormEvent, type ReactNode } from "react"
 import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
 
 import { AccountBadges } from "@/components/account-badges"
 import { FigureLabel } from "@/components/figure-label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   Field,
   FieldDescription,
@@ -71,10 +66,12 @@ export function ImportPreviewCard({
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle>Preview</CardTitle>
-        <CardDescription className="font-mono break-all">
-          {preview.fileName}
-        </CardDescription>
+        <SectionHeading
+          title="Preview"
+          description={
+            <span className="font-mono break-all">{preview.fileName}</span>
+          }
+        />
       </CardHeader>
       <CardContent>
         <form

@@ -1,3 +1,4 @@
+import { SectionHeading } from "@/components/section-heading"
 import { PlusIcon } from "lucide-react"
 import { Link } from "react-router"
 
@@ -6,13 +7,7 @@ import { LoadedView } from "@/components/loaded-view"
 import { StackedHead } from "@/components/stacked-head"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -40,22 +35,26 @@ export function ImportsPage() {
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          Imports
-          {imports.status === "ok" && (
-            <Badge variant="secondary" className="num font-mono">
-              {imports.data.length}
-            </Badge>
-          )}
-        </CardTitle>
-        <CardAction>
-          <Button asChild size="sm">
-            <Link to={paths.import}>
-              <PlusIcon data-icon="inline-start" />
-              New Import
-            </Link>
-          </Button>
-        </CardAction>
+        <SectionHeading
+          title={
+            <>
+              Imports
+              {imports.status === "ok" && (
+                <Badge variant="secondary" className="num font-mono">
+                  {imports.data.length}
+                </Badge>
+              )}
+            </>
+          }
+          action={
+            <Button asChild size="sm">
+              <Link to={paths.import}>
+                <PlusIcon data-icon="inline-start" />
+                New Import
+              </Link>
+            </Button>
+          }
+        />
       </CardHeader>
       <CardContent className="min-w-0">
         <LoadedView loaded={imports} errorTitle="Cannot load the Imports">

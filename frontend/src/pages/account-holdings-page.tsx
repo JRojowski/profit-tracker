@@ -1,3 +1,4 @@
+import { SectionHeading } from "@/components/section-heading"
 import { useMemo } from "react"
 
 import { AllocationChart } from "@/components/allocation-donut"
@@ -12,14 +13,7 @@ import { InstrumentOverviewPanel } from "@/components/instrument-overview-panel"
 import { LoadedView } from "@/components/loaded-view"
 import { UnrealizedProfitChart } from "@/components/unrealized-profit-chart"
 import { Badge } from "@/components/ui/badge"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useLoad } from "@/hooks/use-load"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useOverviewUrl } from "@/hooks/use-overview-url"
@@ -57,10 +51,10 @@ export function AccountHoldingsPage() {
       <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle>Allocation by Quote Currency</CardTitle>
-            <CardDescription>
-              The cash counts in the Account currency.
-            </CardDescription>
+            <SectionHeading
+              title="Allocation by Quote Currency"
+              description="The cash counts in the Account currency."
+            />
           </CardHeader>
           <CardContent className="@container">
             <LoadedView
@@ -75,8 +69,10 @@ export function AccountHoldingsPage() {
         </Card>
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle>Unrealized Profit by Holding</CardTitle>
-            <CardDescription>In {account.currency}.</CardDescription>
+            <SectionHeading
+              title="Unrealized Profit by Holding"
+              description={`In ${account.currency}.`}
+            />
           </CardHeader>
           <CardContent>
             <LoadedView loaded={holdings} errorTitle="Cannot load the Holdings">
@@ -92,22 +88,26 @@ export function AccountHoldingsPage() {
       </div>
       <Card className="min-w-0">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Holdings
-            {holdings.status === "ok" && (
-              <Badge variant="secondary" className="num font-mono">
-                {holdings.data.length}
-              </Badge>
-            )}
-          </CardTitle>
-          {!isMobile && (
-            <CardAction>
-              <ResetColumnsButton
-                isDefault={view.isDefault}
-                onReset={view.reset}
-              />
-            </CardAction>
-          )}
+          <SectionHeading
+            title={
+              <>
+                Holdings
+                {holdings.status === "ok" && (
+                  <Badge variant="secondary" className="num font-mono">
+                    {holdings.data.length}
+                  </Badge>
+                )}
+              </>
+            }
+            action={
+              !isMobile && (
+                <ResetColumnsButton
+                  isDefault={view.isDefault}
+                  onReset={view.reset}
+                />
+              )
+            }
+          />
         </CardHeader>
         <CardContent>
           <LoadedView loaded={holdings} errorTitle="Cannot load the Holdings">

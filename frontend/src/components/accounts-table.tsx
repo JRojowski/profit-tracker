@@ -1,8 +1,9 @@
+import { SectionHeading } from "@/components/section-heading"
 import { Link } from "react-router"
 
 import { AccountBadges } from "@/components/account-badges"
 import { unpricedNote } from "@/components/overview-hero"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   Table,
   TableBody,
@@ -32,7 +33,7 @@ export function AccountsTable({ summary }: AccountsTableProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Accounts</CardTitle>
+        <SectionHeading title="Accounts" />
       </CardHeader>
       <CardContent>
         <Table>

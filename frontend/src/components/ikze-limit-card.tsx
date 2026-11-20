@@ -1,8 +1,9 @@
+import { SectionHeading } from "@/components/section-heading"
 import { FigureLabel } from "@/components/figure-label"
 import { InsetSurface } from "@/components/inset-surface"
 import { StackedHead } from "@/components/stacked-head"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import {
   Table,
@@ -131,7 +132,7 @@ function PastYearsCard({ rows }: { rows: IkzeLimitYear[] }) {
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle>Past years</CardTitle>
+        <SectionHeading label="IKZE Limit" title="Past years" />
       </CardHeader>
       <CardContent>
         <Table>
