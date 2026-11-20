@@ -225,11 +225,11 @@ function EmptyConversation({
   const year = new Date().getFullYear() - 1
   const examples = [
     instrument === undefined
-      ? "What is my Total Result, and what are its parts?"
-      : `How much did I earn on ${instrument}, with the dividends?`,
-    `What was my Total Result in ${year}?`,
-    `Which Closed Position was the worst in ${year}?`,
-    "How much of the IKZE Limit is left this year?",
+      ? "Jaki jest mój łączny wynik i z czego się składa?"
+      : `Ile zarobiłem na ${instrument}, razem z dywidendami?`,
+    `Jaki był mój łączny wynik w ${year} roku?`,
+    `Która zamknięta pozycja była najgorsza w ${year} roku?`,
+    "Ile limitu IKZE zostało mi w tym roku?",
   ]
   return (
     <div className="flex flex-col gap-4">
