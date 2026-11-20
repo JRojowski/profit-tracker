@@ -262,7 +262,7 @@ function DayTooltip({ active, row, currency }: DayTooltipProps) {
     return marker ? [marker] : []
   })
   return (
-    <div className="grid min-w-44 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-xl">
+    <div className="grid min-w-44 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-(--shadow-raised)">
       <span className="font-medium">{formatDate(row.date)}</span>
       {row.closeText !== undefined && (
         <span className="flex justify-between gap-4">

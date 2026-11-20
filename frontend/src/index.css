@@ -56,6 +56,8 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* The card radius is 16 px. The card and inset surface rules below use it. */
+  --radius-card: calc(var(--radius) * 1.6);
 }
 
 :root {
@@ -102,6 +104,11 @@
   --sidebar-accent-foreground: #0369a1;
   --sidebar-border: #dbe3ee;
   --sidebar-ring: #0284c7;
+  /* The card shadow is soft and wide, with a negative spread and low opacity. The raised shadow is for a tooltip, a popover, a dialog and a panel. */
+  --shadow-card:
+    0 1px 2px -1px rgb(15 23 42 / 0.06), 0 8px 24px -8px rgb(15 23 42 / 0.1);
+  --shadow-raised:
+    0 2px 6px -2px rgb(15 23 42 / 0.1), 0 16px 40px -12px rgb(15 23 42 / 0.22);
 }
 
 /* The dark theme is the mockup "Variant B" in docs/design/v3/all-accounts.html. */
@@ -109,7 +116,7 @@
   color-scheme: dark;
   --background: #0c1017;
   --foreground: #f1f5f9;
-  --card: #131923;
+  --card: #151c28;
   --card-foreground: #f1f5f9;
   --popover: #131923;
   --popover-foreground: #f1f5f9;
@@ -146,6 +153,10 @@
   --sidebar-accent-foreground: #38bdf8;
   --sidebar-border: #1a2332;
   --sidebar-ring: #38bdf8;
+  /* The dark card shadow is almost invisible. The lighter card surface and the ring separate the card. */
+  --shadow-card: 0 8px 24px -10px rgb(0 0 0 / 0.35);
+  --shadow-raised:
+    0 2px 6px -2px rgb(0 0 0 / 0.4), 0 16px 40px -12px rgb(0 0 0 / 0.65);
 }
 
 @layer base {
@@ -170,4 +181,18 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* The card surface: one radius and one shadow for each Card. The shadow joins the ring through the Tailwind shadow variable. */
+[data-slot="card"] {
+  --tw-shadow: var(--shadow-card);
+  border-radius: var(--radius-card);
+}
+
+/* The raised surfaces use the raised shadow. */
+[data-slot="popover-content"],
+[data-slot="select-content"],
+[data-slot="dialog-content"],
+[data-slot="sheet-content"] {
+  --tw-shadow: var(--shadow-raised);
 }

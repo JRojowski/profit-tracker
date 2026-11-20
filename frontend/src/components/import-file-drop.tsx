@@ -6,6 +6,7 @@ import {
   XIcon,
 } from "lucide-react"
 
+import { InsetSurface } from "@/components/inset-surface"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -101,7 +102,7 @@ export function ImportFileDrop({
           </label>
 
           {file && (
-            <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border bg-muted/40 p-3">
+            <InsetSurface className="flex min-w-0 flex-wrap items-center gap-3 p-3">
               {previewReady ? (
                 <CircleCheckIcon className="size-5 shrink-0 text-positive" />
               ) : (
@@ -137,7 +138,7 @@ export function ImportFileDrop({
                   </Button>
                 </div>
               )}
-            </div>
+            </InsetSurface>
           )}
         </form>
       </CardContent>

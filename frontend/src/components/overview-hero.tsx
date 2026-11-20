@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 
 import { AllocationDonut } from "@/components/allocation-donut"
 import { FigureLabel } from "@/components/figure-label"
+import { InsetSurface } from "@/components/inset-surface"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Loaded } from "@/hooks/use-load"
 import type { Allocation, Returns } from "@/lib/api"
@@ -112,11 +113,11 @@ type FigureBoxProps = {
 // FigureBox shows one medium figure of the hero.
 function FigureBox({ label, note, children }: FigureBoxProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border bg-muted/40 p-4">
+    <InsetSurface className="flex min-w-0 flex-col gap-1.5 p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       {children}
       {note && <p className="text-sm text-muted-foreground">{note}</p>}
-    </div>
+    </InsetSurface>
   )
 }
 

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { FigureLabel } from "@/components/figure-label"
+import { InsetSurface } from "@/components/inset-surface"
 import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -303,7 +304,7 @@ function HistoryTooltip({ active, point, currency }: HistoryTooltipProps) {
   if (!active || !point) return null
   const totalResult = subtractDecimals(point.value, point.netDeposits)
   return (
-    <div className="grid min-w-48 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-xl">
+    <div className="grid min-w-48 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-(--shadow-raised)">
       <span className="num font-medium">{formatDate(point.date)}</span>
       <TooltipRow label="Value" colour="value">
         {formatAmount(point.value, currency)}
@@ -386,7 +387,7 @@ type AmountBoxProps = {
 // AmountBox shows one exact amount under the chart, with the key of its line.
 function AmountBox({ label, colour, dashed, children }: AmountBoxProps) {
   return (
-    <li className="flex min-w-0 flex-col gap-1 rounded-lg border bg-muted/40 p-3">
+    <InsetSurface as="li" className="flex min-w-0 flex-col gap-1 p-3">
       <span className="flex items-center gap-2 text-xs text-muted-foreground">
         {colour && (
           <span
@@ -398,7 +399,7 @@ function AmountBox({ label, colour, dashed, children }: AmountBoxProps) {
         {label}
       </span>
       <span className="num text-sm font-medium">{children}</span>
-    </li>
+    </InsetSurface>
   )
 }
 
