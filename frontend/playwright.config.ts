@@ -22,6 +22,8 @@ export default defineConfig({
       animations: "disabled",
       caret: "hide",
       scale: "css",
+      // The default threshold of 0.2 hides small changes of a surface. The value 0 is unstable: one anti-aliased pixel flickers between runs. The value 0.01 is stable.
+      threshold: 0.01,
       maxDiffPixels: 0,
     },
   },
