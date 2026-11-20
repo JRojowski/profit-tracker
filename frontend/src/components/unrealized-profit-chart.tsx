@@ -1,3 +1,4 @@
+import { chartTooltipClass } from "@/lib/chart-style"
 import { Bar, BarChart, Cell, ReferenceLine, XAxis, YAxis } from "recharts"
 
 import {
@@ -224,7 +225,12 @@ type BarTooltipProps = {
 function BarTooltip({ active, bar }: BarTooltipProps) {
   if (!active || !bar) return null
   return (
-    <div className="grid min-w-40 gap-1 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-(--shadow-raised)">
+    <div
+      className={cn(
+        "grid min-w-40 gap-1 px-2.5 py-1.5 text-xs",
+        chartTooltipClass
+      )}
+    >
       <span className="font-medium">{bar.name}</span>
       <span className={cn("num", labelText[bar.sign])}>
         {bar.text}

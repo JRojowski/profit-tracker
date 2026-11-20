@@ -12,6 +12,8 @@ type PageCase = {
   charts: boolean
   // panel tells that the page opens the Instrument Overview panel.
   panel?: boolean
+  // populatedSet is the data set of the populated state. The default is "populated".
+  populatedSet?: DataSet
 }
 
 const pageCases: PageCase[] = [
@@ -26,6 +28,14 @@ const pageCases: PageCase[] = [
     url: "/accounts/1",
     empty: "emptyAccounts",
     charts: true,
+  },
+  {
+    // The last values of the Value History are within 1 percent. The two end tags of the chart must move apart.
+    name: "account-overview-near-equal",
+    url: "/accounts/1",
+    empty: null,
+    charts: true,
+    populatedSet: "nearEqualEnd",
   },
   {
     name: "holdings",
@@ -85,7 +95,9 @@ async function waitForRenderedPage(
 for (const pageCase of pageCases) {
   for (const state of ["populated", "empty"] as const) {
     const dataSet: DataSet | null =
-      state === "populated" ? "populated" : pageCase.empty
+      state === "populated"
+        ? (pageCase.populatedSet ?? "populated")
+        : pageCase.empty
     if (dataSet === null) continue
     for (const theme of themes) {
       for (const viewport of viewports) {

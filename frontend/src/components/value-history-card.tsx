@@ -1,3 +1,14 @@
+import {
+  ChartEndTags,
+  tagOffset,
+  type EndTag,
+} from "@/components/chart-end-tags"
+import {
+  chartGridProps,
+  chartLineWidth,
+  chartTooltipClass,
+} from "@/lib/chart-style"
+import { compactAmount, tagWidth } from "@/lib/end-tags"
 import { SectionHeading } from "@/components/section-heading"
 import { TriangleAlertIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
@@ -211,6 +222,13 @@ type HistoryChartProps = {
 function HistoryChart({ points, currency }: HistoryChartProps) {
   const isMobile = useIsMobile()
   const data = points.map(chartPoint)
+  // The end tags show the exact amount on a wide screen and a compact amount on a narrow screen.
+  // The exact amounts are always in the row under the chart.
+  const lastPoint = points[points.length - 1]
+  const tags = endTags(lastPoint, currency, isMobile)
+  // The right margin holds the widest tag, so that no tag clips.
+  const tagMargin =
+    Math.max(...tags.map((tag) => tagWidth(tag.text))) + tagOffset + 2
   const first = data[0].time
   const last = data[data.length - 1].time
   // A period of more than about 4 months shows the month and the year on the axis.
@@ -226,10 +244,10 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
     >
       <LineChart
         data={data}
-        margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+        margin={{ top: 8, right: tagMargin, bottom: 0, left: 0 }}
         accessibilityLayer
       >
-        <CartesianGrid vertical={false} />
+        <CartesianGrid {...chartGridProps} />
         <XAxis
           dataKey="time"
           type="number"
@@ -262,7 +280,7 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
           dataKey="netDeposits"
           type="stepAfter"
           stroke="var(--color-netDeposits)"
-          strokeWidth={2}
+          strokeWidth={chartLineWidth}
           strokeDasharray="4 4"
           dot={false}
           isAnimationActive={false}
@@ -271,13 +289,38 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
           dataKey="value"
           type="linear"
           stroke="var(--color-value)"
-          strokeWidth={2}
+          strokeWidth={chartLineWidth}
           dot={false}
           isAnimationActive={false}
         />
+        <ChartEndTags time={data[data.length - 1].time} tags={tags} />
       </LineChart>
     </ChartContainer>
   )
+}
+
+// endTags gives the tag of the Net Deposits line and the tag of the value line for the last point.
+function endTags(
+  point: ValueHistoryPoint,
+  currency: string,
+  compact: boolean
+): EndTag[] {
+  const text = (amount: string) =>
+    compact ? compactAmount(amount) : formatAmount(amount, currency)
+  return [
+    {
+      value: Number(point.netDeposits),
+      text: text(point.netDeposits),
+      fill: "var(--chart-other)",
+      ink: "var(--chart-other-foreground)",
+    },
+    {
+      value: Number(point.value),
+      text: text(point.value),
+      fill: "var(--chart-1)",
+      ink: "var(--chart-1-foreground)",
+    },
+  ]
 }
 
 type HistoryTooltipProps = {
@@ -291,7 +334,12 @@ function HistoryTooltip({ active, point, currency }: HistoryTooltipProps) {
   if (!active || !point) return null
   const totalResult = subtractDecimals(point.value, point.netDeposits)
   return (
-    <div className="grid min-w-48 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-(--shadow-raised)">
+    <div
+      className={cn(
+        "grid min-w-48 gap-1.5 px-2.5 py-1.5 text-xs",
+        chartTooltipClass
+      )}
+    >
       <span className="num font-medium">{formatDate(point.date)}</span>
       <TooltipRow label="Value" colour="value">
         {formatAmount(point.value, currency)}

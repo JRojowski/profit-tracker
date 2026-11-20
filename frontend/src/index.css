@@ -97,6 +97,9 @@
   --chart-8: #e11d48;
   --chart-cash: #10b981;
   --chart-other: #94a3b8;
+  /* The tag text colors have a contrast of 4.5:1 or more on their fills: 4.65 on chart-1 and 6.96 on chart-other. */
+  --chart-1-foreground: #0c1017;
+  --chart-other-foreground: #0f172a;
   --radius: 0.625rem;
   --sidebar: #eef2f7;
   --sidebar-foreground: #475569;
@@ -147,6 +150,9 @@
   --chart-8: #fb7185;
   --chart-cash: #10b981;
   --chart-other: #475569;
+  /* In the dark theme the contrast is 8.89 on chart-1 and 6.92 on chart-other. */
+  --chart-1-foreground: #0c1017;
+  --chart-other-foreground: #f1f5f9;
   --sidebar: #090d13;
   --sidebar-foreground: #94a3b8;
   --sidebar-primary: #38bdf8;

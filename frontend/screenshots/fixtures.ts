@@ -26,7 +26,8 @@ export const fixedNow = new Date("2026-06-15T12:00:00Z")
 const today = "2026-06-15"
 
 // DataSet selects which data the fake backend answers with.
-export type DataSet = "populated" | "noAccounts" | "emptyAccounts"
+export type DataSet =
+  "populated" | "nearEqualEnd" | "noAccounts" | "emptyAccounts"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -462,6 +463,12 @@ const mainHistory: AccountValueHistory = {
   priceWarnings: [priceMismatch],
 }
 
+// nearEqualHistory ends with a value within 1 percent of the Net Deposits, so the two end tags of the chart overlap.
+const nearEqualHistory: AccountValueHistory = {
+  ...mainHistory,
+  points: historyPoints(39519.4, 39700.0, 5000, 300),
+}
+
 const ikzeHistory: AccountValueHistory = {
   accountId: 2,
   currency: "PLN",
@@ -749,7 +756,7 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
-  if (dataSet === "populated") {
+  if (dataSet === "populated" || dataSet === "nearEqualEnd") {
     return {
       accounts: [ikzeAccount, mainAccount].sort((a, b) =>
         a.name.localeCompare(b.name)
@@ -759,7 +766,10 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       allHistory,
       summary: { 1: mainSummary, 2: ikzeSummary },
       allocation: { 1: mainAllocation, 2: ikzeAllocation },
-      history: { 1: mainHistory, 2: ikzeHistory },
+      history: {
+        1: dataSet === "nearEqualEnd" ? nearEqualHistory : mainHistory,
+        2: ikzeHistory,
+      },
       holdings: { 1: mainHoldings, 2: ikzeHoldings },
       closedPositions: { 1: mainClosed, 2: [] },
       ikzeLimit: { 2: ikzeLimit },

@@ -1,3 +1,9 @@
+import { cn } from "@/lib/utils"
+import {
+  chartGridProps,
+  chartLineWidth,
+  chartTooltipClass,
+} from "@/lib/chart-style"
 import { useState, type ReactElement } from "react"
 import { CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts"
 
@@ -177,7 +183,7 @@ export function InstrumentPriceChart({
         margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
         accessibilityLayer={false}
       >
-        <CartesianGrid vertical={false} />
+        <CartesianGrid {...chartGridProps} />
         <XAxis
           dataKey="t"
           type="number"
@@ -219,7 +225,7 @@ export function InstrumentPriceChart({
           name="Close"
           type="monotone"
           stroke="var(--color-close)"
-          strokeWidth={1.75}
+          strokeWidth={chartLineWidth}
           dot={false}
           activeDot={false}
           connectNulls
@@ -262,7 +268,12 @@ function DayTooltip({ active, row, currency }: DayTooltipProps) {
     return marker ? [marker] : []
   })
   return (
-    <div className="grid min-w-44 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-(--shadow-raised)">
+    <div
+      className={cn(
+        "grid min-w-44 gap-1.5 px-2.5 py-1.5 text-xs",
+        chartTooltipClass
+      )}
+    >
       <span className="font-medium">{formatDate(row.date)}</span>
       {row.closeText !== undefined && (
         <span className="flex justify-between gap-4">
