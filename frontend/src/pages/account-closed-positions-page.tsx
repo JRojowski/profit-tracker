@@ -1,3 +1,4 @@
+import { SectionHeading } from "@/components/section-heading"
 import { useMemo } from "react"
 import { useSearchParams } from "react-router"
 
@@ -15,13 +16,7 @@ import {
   ResetFiltersButton,
 } from "@/components/closed-positions-filters"
 import { ResetColumnsButton } from "@/components/reset-columns-button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useLoad } from "@/hooks/use-load"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useOverviewUrl } from "@/hooks/use-overview-url"
@@ -164,15 +159,18 @@ function ClosedPositionsView({
       </div>
       <Card className="min-w-0">
         <CardHeader>
-          <CardTitle>Closed Positions</CardTitle>
-          {!isMobile && (
-            <CardAction>
-              <ResetColumnsButton
-                isDefault={view.isDefault}
-                onReset={view.reset}
-              />
-            </CardAction>
-          )}
+          <SectionHeading
+            label="Realized Profit"
+            title="Closed Positions"
+            action={
+              !isMobile && (
+                <ResetColumnsButton
+                  isDefault={view.isDefault}
+                  onReset={view.reset}
+                />
+              )
+            }
+          />
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
           {closedPositions.length > 0 && (

@@ -1,6 +1,6 @@
 WEB_DIST := backend/internal/web/dist
 
-.PHONY: test lint frontend-install frontend-check frontend-dev backend-dev build demo bicep-lint
+.PHONY: test lint frontend-install frontend-check frontend-screenshots frontend-screenshots-update frontend-dev backend-dev build demo bicep-lint
 
 # Run all backend tests.
 test:
@@ -20,6 +20,15 @@ frontend/node_modules: frontend/package-lock.json
 # Typecheck, lint, check the format of and build the frontend.
 frontend-check: frontend/node_modules
 	cd frontend && npm run typecheck && npm run lint && npm run format:check && npm run build
+
+# Build the frontend and compare each page with its stored image. The tests need no backend and no network.
+# The first run downloads the Chromium of Playwright.
+frontend-screenshots: frontend/node_modules
+	cd frontend && npx playwright install chromium && npm run build && npm run screenshots
+
+# Build the frontend and replace the stored images with the current look. Read the image differences before you commit.
+frontend-screenshots-update: frontend/node_modules
+	cd frontend && npx playwright install chromium && npm run build && npm run screenshots:update
 
 # Start the Vite dev server. It sends /api requests to the Go program.
 frontend-dev: frontend/node_modules

@@ -1,11 +1,25 @@
+import {
+  ChartEndTags,
+  tagOffset,
+  type EndTag,
+} from "@/components/chart-end-tags"
+import {
+  chartGridProps,
+  chartLineWidth,
+  chartTooltipClass,
+} from "@/lib/chart-style"
+import { tagWidth } from "@/lib/end-tags"
+import { SectionHeading } from "@/components/section-heading"
 import { TriangleAlertIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { FigureLabel } from "@/components/figure-label"
+import { InsetSurface } from "@/components/inset-surface"
 import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ResultBadge } from "@/components/result-badge"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   ChartContainer,
   ChartTooltip,
@@ -25,8 +39,8 @@ import { subtractDecimals } from "@/lib/decimal"
 import {
   amountSign,
   formatAmount,
+  formatCompact,
   formatDate,
-  formatPercent,
   signColour,
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -35,10 +49,6 @@ const chartConfig = {
   value: { label: "Value", color: "var(--chart-1)" },
   netDeposits: { label: "Net Deposits", color: "var(--chart-other)" },
 } satisfies ChartConfig
-
-// selectedItem marks the selected period with the accent, as the year filter of the Closed Positions page does.
-const selectedItem =
-  "data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
 
 // ChartPoint is one day of the chart. The sizes are for the geometry only. The texts come from the exact amounts.
 type ChartPoint = {
@@ -73,49 +83,44 @@ export function ValueHistoryCard({
 
   return (
     <Card className="min-w-0">
-      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <CardTitle>Value History</CardTitle>
-          <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-muted-foreground">
-            Time-Weighted Return
-            <span
-              className={cn(
-                "num text-base font-semibold text-foreground",
-                twr !== null && signColour(amountSign(twr))
+      <CardHeader>
+        <SectionHeading
+          title="Value History"
+          description={
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-muted-foreground">
+                Time-Weighted Return
+                <ResultBadge value={twr} />
+              </p>
+              {twr === null && unavailable === undefined && (
+                <p className="text-sm text-muted-foreground">
+                  The tool cannot calculate the Time-Weighted Return of this
+                  period.
+                </p>
               )}
+            </div>
+          }
+          action={
+            <ToggleGroup
+              type="single"
+              size="sm"
+              data-pills
+              aria-label="Period"
+              value={period}
+              onValueChange={(value) => {
+                // An empty value means that the user clicked the selected item again.
+                if (value) setPeriod(value as HistoryPeriod)
+              }}
+              className="shrink-0"
             >
-              {twr === null ? "—" : formatPercent(twr, { signed: true })}
-            </span>
-          </p>
-          {twr === null && unavailable === undefined && (
-            <p className="text-sm text-muted-foreground">
-              The tool cannot calculate the Time-Weighted Return of this period.
-            </p>
-          )}
-        </div>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          spacing={0}
-          aria-label="Period"
-          value={period}
-          onValueChange={(value) => {
-            // An empty value means that the user clicked the selected item again.
-            if (value) setPeriod(value as HistoryPeriod)
-          }}
-          className="shrink-0"
-        >
-          {historyPeriods.map((item) => (
-            <ToggleGroupItem
-              key={item}
-              value={item}
-              className={cn("num", selectedItem)}
-            >
-              {item}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+              {historyPeriods.map((item) => (
+                <ToggleGroupItem key={item} value={item} className="num">
+                  {item}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          }
+        />
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">
         {(history.priceWarnings.length > 0 ||
@@ -223,6 +228,13 @@ type HistoryChartProps = {
 function HistoryChart({ points, currency }: HistoryChartProps) {
   const isMobile = useIsMobile()
   const data = points.map(chartPoint)
+  // The end tags show the exact amount on a wide screen and a compact amount on a narrow screen.
+  // The exact amounts are always in the row under the chart.
+  const lastPoint = points[points.length - 1]
+  const tags = endTags(lastPoint, currency, isMobile)
+  // The right margin holds the widest tag, so that no tag clips.
+  const tagMargin =
+    Math.max(...tags.map((tag) => tagWidth(tag.text))) + tagOffset + 2
   const first = data[0].time
   const last = data[data.length - 1].time
   // A period of more than about 4 months shows the month and the year on the axis.
@@ -238,10 +250,10 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
     >
       <LineChart
         data={data}
-        margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+        margin={{ top: 8, right: tagMargin, bottom: 0, left: 0 }}
         accessibilityLayer
       >
-        <CartesianGrid vertical={false} />
+        <CartesianGrid {...chartGridProps} />
         <XAxis
           dataKey="time"
           type="number"
@@ -259,7 +271,7 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
           axisLine={false}
           width={isMobile ? 44 : 64}
           domain={["auto", "auto"]}
-          tickFormatter={(value: number) => compactNumber(value)}
+          tickFormatter={(value: number) => formatCompact(value)}
         />
         <ChartTooltip
           content={({ active, payload }) => (
@@ -274,7 +286,7 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
           dataKey="netDeposits"
           type="stepAfter"
           stroke="var(--color-netDeposits)"
-          strokeWidth={2}
+          strokeWidth={chartLineWidth}
           strokeDasharray="4 4"
           dot={false}
           isAnimationActive={false}
@@ -283,13 +295,38 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
           dataKey="value"
           type="linear"
           stroke="var(--color-value)"
-          strokeWidth={2}
+          strokeWidth={chartLineWidth}
           dot={false}
           isAnimationActive={false}
         />
+        <ChartEndTags time={data[data.length - 1].time} tags={tags} />
       </LineChart>
     </ChartContainer>
   )
+}
+
+// endTags gives the tag of the Net Deposits line and the tag of the value line for the last point.
+function endTags(
+  point: ValueHistoryPoint,
+  currency: string,
+  compact: boolean
+): EndTag[] {
+  const text = (amount: string) =>
+    compact ? formatCompact(amount) : formatAmount(amount, currency)
+  return [
+    {
+      value: Number(point.netDeposits),
+      text: text(point.netDeposits),
+      fill: "var(--color-netDeposits)",
+      ink: "var(--chart-other-foreground)",
+    },
+    {
+      value: Number(point.value),
+      text: text(point.value),
+      fill: "var(--color-value)",
+      ink: "var(--chart-1-foreground)",
+    },
+  ]
 }
 
 type HistoryTooltipProps = {
@@ -303,7 +340,12 @@ function HistoryTooltip({ active, point, currency }: HistoryTooltipProps) {
   if (!active || !point) return null
   const totalResult = subtractDecimals(point.value, point.netDeposits)
   return (
-    <div className="grid min-w-48 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-xl">
+    <div
+      className={cn(
+        "grid min-w-48 gap-1.5 px-2.5 py-1.5 text-xs",
+        chartTooltipClass
+      )}
+    >
       <span className="num font-medium">{formatDate(point.date)}</span>
       <TooltipRow label="Value" colour="value">
         {formatAmount(point.value, currency)}
@@ -386,7 +428,7 @@ type AmountBoxProps = {
 // AmountBox shows one exact amount under the chart, with the key of its line.
 function AmountBox({ label, colour, dashed, children }: AmountBoxProps) {
   return (
-    <li className="flex min-w-0 flex-col gap-1 rounded-lg border bg-muted/40 p-3">
+    <InsetSurface as="li" className="flex min-w-0 flex-col gap-1 p-3">
       <span className="flex items-center gap-2 text-xs text-muted-foreground">
         {colour && (
           <span
@@ -398,7 +440,7 @@ function AmountBox({ label, colour, dashed, children }: AmountBoxProps) {
         {label}
       </span>
       <span className="num text-sm font-medium">{children}</span>
-    </li>
+    </InsetSurface>
   )
 }
 
@@ -454,12 +496,4 @@ function axisDate(time: number, long: boolean): string {
       ? { month: "short", year: "2-digit" }
       : { day: "numeric", month: "short" }),
   })
-}
-
-// compactNumber shows an axis value in a short form, for example "12K". It is for the axis only.
-function compactNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value)
 }

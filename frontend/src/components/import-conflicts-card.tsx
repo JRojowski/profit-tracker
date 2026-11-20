@@ -1,11 +1,7 @@
+import { InsetSurface } from "@/components/inset-surface"
+import { SectionHeading } from "@/components/section-heading"
 import { Badge } from "@/components/ui/badge"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   CashOperationData,
@@ -110,39 +106,49 @@ export function ImportConflictsCard({
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle className="flex flex-wrap items-center gap-2">
-          Import Conflicts
-          <Badge variant="secondary" className="num font-mono">
-            {conflicts.length}
-          </Badge>
-          {openCount > 0 ? (
-            <Badge variant="outline" className={cn("font-mono", warningBadge)}>
-              {openCount} with no decision
-            </Badge>
-          ) : (
-            <Badge
-              variant="outline"
-              className="border-positive/30 bg-positive/10 font-mono text-positive"
-            >
-              All decided
-            </Badge>
-          )}
-        </CardTitle>
-        <CardDescription>
-          A Cash Operation with a known XTB ID but different data needs a
-          decision: keep the stored data or use the new data. A Closed Position
-          with a Realized Profit that differs from Closed Positions by more than
-          0.01 needs your acceptance. You can confirm the Import when each
-          conflict has a decision.
-        </CardDescription>
+        <SectionHeading
+          title={
+            <>
+              Import Conflicts
+              <Badge variant="secondary" className="num font-mono">
+                {conflicts.length}
+              </Badge>
+              {openCount > 0 ? (
+                <Badge
+                  variant="outline"
+                  className={cn("font-mono", warningBadge)}
+                >
+                  {openCount} with no decision
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="border-positive/30 bg-positive/10 font-mono text-positive"
+                >
+                  All decided
+                </Badge>
+              )}
+            </>
+          }
+          description={
+            <>
+              A Cash Operation with a known XTB ID but different data needs a
+              decision: keep the stored data or use the new data. A Closed
+              Position with a Realized Profit that differs from Closed Positions
+              by more than 0.01 needs your acceptance. You can confirm the
+              Import when each conflict has a decision.
+            </>
+          }
+        />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {conflicts.map((conflict) => (
-          <section
+          <InsetSurface
+            as="section"
             key={conflict.id}
             aria-label={`Import Conflict, XTB ID ${conflict.xtbId}`}
             className={cn(
-              "flex min-w-0 flex-col gap-4 rounded-lg border p-3 md:p-4",
+              "flex min-w-0 flex-col gap-4 p-3 md:p-4",
               conflict.decision === null && "border-warning/40"
             )}
           >
@@ -219,7 +225,7 @@ export function ImportConflictsCard({
                 ))}
               </ToggleGroup>
             </div>
-          </section>
+          </InsetSurface>
         ))}
       </CardContent>
     </Card>
@@ -245,9 +251,9 @@ function DataPanel({
   isNew = false,
 }: DataPanelProps) {
   return (
-    <div
+    <InsetSurface
       className={cn(
-        "flex min-w-0 flex-col gap-2 rounded-md border bg-muted/30 p-3",
+        "flex min-w-0 flex-col gap-2 p-3",
         isNew && "border-primary/30"
       )}
     >
@@ -291,7 +297,7 @@ function DataPanel({
           )
         })}
       </dl>
-    </div>
+    </InsetSurface>
   )
 }
 
@@ -308,7 +314,7 @@ function ProfitCheckList({
   currency,
 }: ProfitCheckListProps) {
   return (
-    <dl className="flex flex-col rounded-md border bg-muted/30 px-3 py-1 text-sm">
+    <InsetSurface as="dl" className="flex flex-col px-3 py-1 text-sm">
       <div className="flex min-w-0 items-baseline justify-between gap-3 border-b border-border/60 py-1.5">
         <dt className="shrink-0 text-muted-foreground">Closed Position</dt>
         <dd className="min-w-0 text-right break-words">
@@ -335,6 +341,6 @@ function ProfitCheckList({
           })}
         </dd>
       </div>
-    </dl>
+    </InsetSurface>
   )
 }

@@ -46,7 +46,7 @@ export function AppShell() {
       <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-20 flex flex-col border-b bg-background/90 backdrop-blur">
           <div className="flex h-14 items-center gap-2 px-4 md:px-8">
-            <SidebarTrigger className="md:hidden" />
+            <SidebarTrigger />
             {viewKnown && <ViewTitle account={account} />}
             <div className="ml-auto flex items-center gap-2 md:gap-4">
               <PriceDatesLine
@@ -106,7 +106,7 @@ function ViewTitle({ account }: { account: Account | null }) {
   if (account) {
     return (
       <div className="flex min-w-0 items-center gap-2">
-        <h1 className="truncate text-base font-semibold tracking-tight">
+        <h1 className="truncate text-xl font-semibold tracking-title">
           {account.name}
         </h1>
         <AccountBadges account={account} />
@@ -117,11 +117,11 @@ function ViewTitle({ account }: { account: Account | null }) {
 
   let title = "All Accounts"
   if (pathname === paths.import) title = "Import"
-  else if (pathname === paths.imports) title = "Imports"
+  else if (pathname === paths.imports) title = "Import history"
   else if (accountRoute && pathname !== paths.allAccounts)
     title = "Unknown Account"
   return (
-    <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+    <h1 className="truncate text-xl font-semibold tracking-title">{title}</h1>
   )
 }
 

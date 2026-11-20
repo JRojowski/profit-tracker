@@ -1,3 +1,4 @@
+import { InsetSurface } from "@/components/inset-surface"
 import { ChevronRightIcon, WrenchIcon } from "lucide-react"
 import { useId, useState } from "react"
 
@@ -14,9 +15,10 @@ export function AssistantSteps({ steps }: { steps: AssistantStep[] }) {
     return <p className="text-xs text-muted-foreground">No function used</p>
   }
   return (
-    <section
+    <InsetSurface
+      as="section"
       aria-label="Steps"
-      className="flex min-w-0 flex-col overflow-hidden rounded-lg border"
+      className="flex min-w-0 flex-col overflow-hidden"
     >
       <h3 className="flex items-center gap-1.5 border-b bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground">
         Steps
@@ -29,7 +31,7 @@ export function AssistantSteps({ steps }: { steps: AssistantStep[] }) {
           <StepRow key={index} step={step} />
         ))}
       </ul>
-    </section>
+    </InsetSurface>
   )
 }
 

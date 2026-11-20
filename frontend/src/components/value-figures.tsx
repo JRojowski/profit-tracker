@@ -1,3 +1,4 @@
+import { ResultBadge } from "@/components/result-badge"
 import {
   amountSign,
   formatAmount,
@@ -7,19 +8,25 @@ import {
 import { cn } from "@/lib/utils"
 
 // ProfitFigure shows a profit with its percentage under it, in the colour of its sign.
+// With badge set, the percentage is a result badge. A table cell leaves it off and keeps plain text.
 export function ProfitFigure({
   profit,
   percent,
   currency,
+  badge = false,
 }: {
   profit: string
   percent: string | null
   currency: string
+  badge?: boolean
 }) {
   return (
     <div className={cn("flex flex-col", signColour(amountSign(profit)))}>
       <span>{formatAmount(profit, currency, { signed: true })}</span>
-      {percent !== null && (
+      {percent !== null && badge && (
+        <ResultBadge value={percent} className="mt-1 text-xs" />
+      )}
+      {percent !== null && !badge && (
         <span className="text-xs">
           {formatPercent(percent, { signed: true })}
         </span>

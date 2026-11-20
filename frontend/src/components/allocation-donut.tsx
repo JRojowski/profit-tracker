@@ -1,3 +1,4 @@
+import { chartTooltipClass } from "@/lib/chart-style"
 import { TriangleAlertIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { Cell, Pie, PieChart } from "recharts"
@@ -175,7 +176,12 @@ type PartTooltipProps = {
 function PartTooltip({ active, part }: PartTooltipProps) {
   if (!active || !part) return null
   return (
-    <div className="grid min-w-40 gap-1.5 rounded-lg border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-xl">
+    <div
+      className={cn(
+        "grid min-w-40 gap-1.5 px-2.5 py-1.5 text-xs",
+        chartTooltipClass
+      )}
+    >
       <div className="flex items-center justify-between gap-4 font-medium">
         <span>{part.name}</span>
         <span className="num">{formatPercent(part.share)}</span>

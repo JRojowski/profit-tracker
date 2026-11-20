@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright reports and test output. The stored images in screenshots/images stay.
+test-results
+playwright-report

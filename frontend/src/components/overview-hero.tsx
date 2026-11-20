@@ -2,6 +2,8 @@ import type { ReactNode } from "react"
 
 import { AllocationDonut } from "@/components/allocation-donut"
 import { FigureLabel } from "@/components/figure-label"
+import { InsetSurface } from "@/components/inset-surface"
+import { ResultBadge } from "@/components/result-badge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Loaded } from "@/hooks/use-load"
 import type { Allocation, Returns } from "@/lib/api"
@@ -52,8 +54,8 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
             </div>
             <div className="grid gap-4 border-t pt-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
               <FigureBox label="Total Result" note={unpriced}>
-                <SignedAmount
-                  amount={figures.totalResult}
+                <SignedFigure
+                  value={figures.totalResult}
                   currency={figures.currency}
                   className="text-2xl md:text-3xl xl:text-2xl 2xl:text-3xl"
                 />
@@ -66,9 +68,9 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
                     : undefined
                 }
               >
-                <SignedPercent
-                  percent={figures.annualReturn}
-                  className="text-2xl md:text-3xl xl:text-2xl 2xl:text-3xl"
+                <ResultBadge
+                  value={figures.annualReturn}
+                  className="text-lg md:text-xl"
                 />
               </FigureBox>
             </div>
@@ -85,7 +87,7 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
               : undefined
           }
         >
-          <SignedPercent percent={figures.simpleReturn} className="text-2xl" />
+          <SignedFigure value={figures.simpleReturn} className="text-2xl" />
         </DetailCard>
         <DetailCard label="Cash">
           <p className="num text-2xl font-semibold">
@@ -112,11 +114,11 @@ type FigureBoxProps = {
 // FigureBox shows one medium figure of the hero.
 function FigureBox({ label, note, children }: FigureBoxProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-lg border bg-muted/40 p-4">
+    <InsetSurface className="flex min-w-0 flex-col gap-1.5 p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
       {children}
       {note && <p className="text-sm text-muted-foreground">{note}</p>}
-    </div>
+    </InsetSurface>
   )
 }
 
@@ -133,43 +135,32 @@ function DetailCard({ label, note, children }: FigureBoxProps) {
   )
 }
 
-type SignedAmountProps = {
-  amount: string | null
-  currency: string
+type SignedFigureProps = {
+  // value is the decimal text, or null when the tool cannot calculate it.
+  value: string | null
+  // currency is set for an amount and omitted for a percent.
+  currency?: string
   className?: string
 }
 
-// SignedAmount shows a result with its sign, in the colour of the sign.
-function SignedAmount({ amount, currency, className }: SignedAmountProps) {
+// SignedFigure shows a result with its sign, in the colour of the sign. It shows a percent when it has no currency.
+function SignedFigure({ value, currency, className }: SignedFigureProps) {
+  let text = "—"
+  if (value !== null) {
+    text =
+      currency === undefined
+        ? formatPercent(value, { signed: true })
+        : formatAmount(value, currency, { signed: true })
+  }
   return (
     <p
       className={cn(
         "num font-semibold",
-        amount !== null && signColour(amountSign(amount)),
+        value !== null && signColour(amountSign(value)),
         className
       )}
     >
-      {amount === null ? "—" : formatAmount(amount, currency, { signed: true })}
-    </p>
-  )
-}
-
-type SignedPercentProps = {
-  percent: string | null
-  className?: string
-}
-
-// SignedPercent shows a return with its sign, in the colour of the sign. A null return shows "—".
-function SignedPercent({ percent, className }: SignedPercentProps) {
-  return (
-    <p
-      className={cn(
-        "num font-semibold",
-        percent !== null && signColour(amountSign(percent)),
-        className
-      )}
-    >
-      {percent === null ? "—" : formatPercent(percent, { signed: true })}
+      {text}
     </p>
   )
 }

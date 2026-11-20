@@ -8,7 +8,9 @@ import {
   YAxis,
 } from "recharts"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { SectionHeading } from "@/components/section-heading"
+import { InsetSurface } from "@/components/inset-surface"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
@@ -73,7 +75,7 @@ export function TotalResultWaterfall({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Total Result breakdown</CardTitle>
+        <SectionHeading title="Total Result breakdown" />
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {bars === null ? (
@@ -269,9 +271,10 @@ type AmountBoxProps = {
 // AmountBox shows the exact amount of one part, or of the Total Result.
 function AmountBox({ part, currency, total }: AmountBoxProps) {
   return (
-    <li
+    <InsetSurface
+      as="li"
       className={cn(
-        "flex min-w-0 flex-col gap-1 rounded-lg border bg-muted/40 p-3",
+        "flex min-w-0 flex-col gap-1 p-3",
         total && "border-primary/40 bg-primary/10"
       )}
     >
@@ -290,7 +293,7 @@ function AmountBox({ part, currency, total }: AmountBoxProps) {
           ? "—"
           : formatAmount(part.amount, currency, { signed: true })}
       </span>
-    </li>
+    </InsetSurface>
   )
 }
 
