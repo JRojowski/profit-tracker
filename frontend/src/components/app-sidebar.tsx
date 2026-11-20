@@ -1,16 +1,17 @@
 import {
+  BriefcaseIcon,
   ChartLineIcon,
   HistoryIcon,
-  LandmarkIcon,
+  LayoutDashboardIcon,
   MessageSquareIcon,
+  PiggyBankIcon,
+  ReceiptIcon,
   UploadIcon,
-  WalletIcon,
   type LucideIcon,
 } from "lucide-react"
-import type { ReactNode } from "react"
 import { Link, useLocation } from "react-router"
 
-import { AccountBadges } from "@/components/account-badges"
+import { ViewSwitch } from "@/components/view-switch"
 import {
   Sidebar,
   SidebarContent,
@@ -22,30 +23,65 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSkeleton,
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useRouteAccount } from "@/hooks/use-route-account"
 import { useAppState } from "@/lib/app-state"
 import { useAssistant } from "@/lib/assistant-state"
 import { paths } from "@/lib/routes"
 
-// AppSidebar shows "All Accounts", each Account, the Import pages and, when the Assistant is on, a button for the
-// Assistant. The Instrument Overview panel can cover the button of the top bar, but not this one. On a narrow screen
-// the sidebar is a sheet.
+type NavEntry = { to: string; icon: LucideIcon; label: string }
+
+// AppSidebar shows the view switch, the pages of the selected view, the Import pages and, when the Assistant is on,
+// a button for the Assistant. It collapses to icons. On a narrow screen it is a sheet behind the trigger of the top bar.
 export function AppSidebar() {
   const { accounts } = useAppState()
   const { pathname } = useLocation()
   const assistant = useAssistant()
   const { setOpenMobile } = useSidebar()
+  const account = useRouteAccount(accounts)
 
-  const allAccountsActive =
-    pathname === paths.root || pathname === paths.allAccounts
+  const viewPages: NavEntry[] = account
+    ? [
+        {
+          to: paths.account(account.id),
+          icon: LayoutDashboardIcon,
+          label: "Overview",
+        },
+        {
+          to: paths.holdings(account.id),
+          icon: BriefcaseIcon,
+          label: "Holdings",
+        },
+        {
+          to: paths.closedPositions(account.id),
+          icon: ReceiptIcon,
+          label: "Closed Positions",
+        },
+        ...(account.type === "IKZE"
+          ? [{ to: paths.ikze(account.id), icon: PiggyBankIcon, label: "IKZE" }]
+          : []),
+      ]
+    : [
+        {
+          to: paths.allAccounts,
+          icon: LayoutDashboardIcon,
+          label: "Overview",
+        },
+      ]
+  const importPages: NavEntry[] = [
+    { to: paths.import, icon: UploadIcon, label: "Import" },
+    { to: paths.imports, icon: HistoryIcon, label: "Import history" },
+  ]
+  // The root URL shows All Accounts, and a trailing slash opens the same page.
+  const current =
+    pathname === paths.root ? paths.allAccounts : trimSlash(pathname)
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-3 px-2 py-1.5">
+        <div className="flex items-center gap-3 px-2 py-1.5 group-data-[collapsible=icon]:hidden">
           <div className="flex size-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/15 text-primary">
             <ChartLineIcon className="size-4" />
           </div>
@@ -53,68 +89,19 @@ export function AppSidebar() {
             Profit Tracker
           </span>
         </div>
+        <ViewSwitch accounts={accounts} selected={account} />
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="font-mono tracking-wider uppercase">
-            Accounts
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <NavItem
-                to={paths.allAccounts}
-                icon={LandmarkIcon}
-                label="All Accounts"
-                active={allAccountsActive}
-              />
-              {accounts === null ? (
-                <SidebarMenuItem>
-                  <SidebarMenuSkeleton />
-                </SidebarMenuItem>
-              ) : (
-                accounts.map((account) => (
-                  <NavItem
-                    key={account.id}
-                    to={paths.account(account.id)}
-                    icon={WalletIcon}
-                    label={account.name}
-                    active={isUnder(pathname, paths.account(account.id))}
-                  >
-                    <AccountBadges account={account} className="ml-auto" />
-                  </NavItem>
-                ))
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavGroup label="Pages" entries={viewPages} current={current} />
         <SidebarSeparator />
-        <SidebarGroup>
-          <SidebarGroupLabel className="font-mono tracking-wider uppercase">
-            Data
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <NavItem
-                to={paths.import}
-                icon={UploadIcon}
-                label="Import"
-                active={pathname === paths.import}
-              />
-              <NavItem
-                to={paths.imports}
-                icon={HistoryIcon}
-                label="Imports"
-                active={pathname === paths.imports}
-              />
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavGroup label="Data" entries={importPages} current={current} />
       </SidebarContent>
       {assistant.available && (
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
+                tooltip="Assistant"
                 onClick={() => {
                   setOpenMobile(false)
                   assistant.setOpen(true)
@@ -131,39 +118,47 @@ export function AppSidebar() {
   )
 }
 
-type NavItemProps = {
-  to: string
-  icon: LucideIcon
-  label: string
-  active: boolean
-  // children is shown at the end of the item, for example the badges of an Account.
-  children?: ReactNode
-}
+type NavGroupProps = { label: string; entries: NavEntry[]; current: string }
 
-function NavItem({ to, icon: Icon, label, active, children }: NavItemProps) {
+// NavGroup shows a labeled group of navigation items. The item of the open page is marked as current.
+function NavGroup({ label, entries, current }: NavGroupProps) {
   const { setOpenMobile } = useSidebar()
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        className="data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:ring-1 data-active:ring-sidebar-primary/25"
-      >
-        <Link
-          to={to}
-          aria-current={active ? "page" : undefined}
-          onClick={() => setOpenMobile(false)}
-        >
-          <Icon />
-          <span className="truncate">{label}</span>
-          {children}
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+    <SidebarGroup>
+      <SidebarGroupLabel className="font-mono tracking-wider uppercase">
+        {label}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {entries.map(({ to, icon: Icon, label: text }) => {
+            const active = current === to
+            return (
+              <SidebarMenuItem key={to}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={active}
+                  tooltip={text}
+                  className="data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:ring-1 data-active:ring-sidebar-primary/25"
+                >
+                  <Link
+                    to={to}
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => setOpenMobile(false)}
+                  >
+                    <Icon />
+                    <span className="truncate">{text}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   )
 }
 
-// isUnder tells that the path is the base path or a page under it.
-function isUnder(pathname: string, base: string): boolean {
-  return pathname === base || pathname.startsWith(`${base}/`)
+// trimSlash removes the trailing slashes of a path.
+function trimSlash(path: string): string {
+  return path.replace(/\/+$/, "")
 }

@@ -18,3 +18,23 @@ export function parseAccountId(segment: string | undefined): number | null {
   if (segment === undefined || !/^[1-9][0-9]*$/.test(segment)) return null
   return Number(segment)
 }
+
+// ViewTarget is a view of the view switch: all Accounts, or one Account with the data that decides its pages.
+export type ViewTarget =
+  { kind: "all" } | { kind: "account"; account: { id: number; type: string } }
+
+// switchViewPath gives the URL that opens when the user changes the view. The same page type opens when the new
+// view has it, otherwise the overview opens. The query string is dropped, because filters and the Instrument
+// Overview name data of the old view.
+export function switchViewPath(pathname: string, target: ViewTarget): string {
+  if (target.kind === "all") return paths.allAccounts
+  const { id, type } = target.account
+  const parts = pathname.replace(/\/+$/, "").split("/")
+  const onAccountPage =
+    parts[1] === "accounts" && parseAccountId(parts[2]) !== null
+  const page = onAccountPage ? parts[3] : undefined
+  if (page === "holdings") return paths.holdings(id)
+  if (page === "closed-positions") return paths.closedPositions(id)
+  if (page === "ikze" && type === "IKZE") return paths.ikze(id)
+  return paths.account(id)
+}

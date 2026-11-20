@@ -120,3 +120,61 @@ for (const pageCase of pageCases) {
     }
   }
 }
+
+// Each sidebar case opens the Holdings page of the standard Account and puts the sidebar in one state.
+const sidebarCases = [
+  {
+    name: "sidebar-collapsed",
+    viewport: viewports[0],
+    prepare: async (page: Page) => {
+      await page.getByRole("button", { name: "Toggle Sidebar" }).click()
+      await expect(page.locator('[data-slot="sidebar"]')).toHaveAttribute(
+        "data-state",
+        "collapsed"
+      )
+    },
+  },
+  {
+    name: "view-switch-open",
+    viewport: viewports[0],
+    prepare: async (page: Page) => {
+      await page.getByRole("button", { name: "Change the view" }).click()
+      await expect(page.getByRole("menu")).toBeVisible()
+    },
+  },
+  {
+    name: "sidebar-sheet",
+    viewport: viewports[1],
+    prepare: async (page: Page) => {
+      await page.getByRole("button", { name: "Toggle Sidebar" }).click()
+      await expect(page.getByRole("dialog")).toBeVisible()
+    },
+  },
+]
+
+for (const sidebarCase of sidebarCases) {
+  for (const theme of themes) {
+    const name = `${sidebarCase.name}-${theme}-${sidebarCase.viewport.name}`
+    test(name, async ({ page }) => {
+      await page.setViewportSize(sidebarCase.viewport.size)
+      await page.addInitScript((value) => {
+        localStorage.setItem("theme", value)
+      }, theme)
+      await page.clock.setFixedTime(fixedNow)
+      const failures = await installFakeBackend(page, "populated")
+
+      await page.goto("/accounts/1/holdings")
+      await waitForRenderedPage(
+        page,
+        { name, url: "", empty: null, charts: false },
+        true
+      )
+      await sidebarCase.prepare(page)
+      // The sidebar slides and the sheet fades in, so wait for the settled state.
+      await page.waitForTimeout(400)
+
+      await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true })
+      expect(failures).toEqual([])
+    })
+  }
+}
