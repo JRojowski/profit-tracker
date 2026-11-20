@@ -5,8 +5,9 @@ import { switchViewPath, type ViewTarget } from "../src/lib/routes"
 const all: ViewTarget = { kind: "all" }
 const standard: ViewTarget = {
   kind: "account",
-  account: { id: 1, type: "standard" },
+  account: { id: 1, type: "regular" },
 }
+const ike: ViewTarget = { kind: "account", account: { id: 3, type: "IKE" } }
 const ikze: ViewTarget = { kind: "account", account: { id: 2, type: "IKZE" } }
 
 // Each case is one change of the view: the page that is open, the new view and the page that must open.
@@ -27,6 +28,9 @@ const cases: { from: string; to: ViewTarget; expected: string }[] = [
   // The IKZE page exists only in an IKZE Account.
   { from: "/accounts/2/ikze", to: standard, expected: "/accounts/1" },
   { from: "/accounts/1/", to: ikze, expected: "/accounts/2" },
+  // The IKZE page does not exist in an IKE Account.
+  { from: "/accounts/2/ikze", to: ike, expected: "/accounts/3" },
+  { from: "/accounts/1/holdings", to: ike, expected: "/accounts/3/holdings" },
   // The pages of the Import group are not pages of a view.
   { from: "/import", to: standard, expected: "/accounts/1" },
   { from: "/imports", to: all, expected: "/accounts/all" },

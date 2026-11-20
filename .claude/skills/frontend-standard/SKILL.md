@@ -90,7 +90,7 @@ The project tokens in addition to the shadcn tokens:
 ## Routes
 
 1. Build each URL with `paths` from `src/lib/routes.ts`. Do not write a URL as text in a component.
-2. A tab page of an Account gets its Account from `useAccount()`.
+2. A page of an Account gets its Account from `useAccount()`. The pages of a view are the items of the sidebar group "Pages".
 3. Use `Link` or `NavLink` for navigation, so that the back button works.
 
 ## Layout and narrow screens

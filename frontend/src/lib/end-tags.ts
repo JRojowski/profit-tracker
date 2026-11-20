@@ -68,12 +68,3 @@ export function spreadTags(
   }
   return result
 }
-
-// compactAmount shows an amount in a short form for a narrow tag, for example "51.8K". It has no currency.
-// The conversion to a float is for display only.
-export function compactAmount(amount: string): string {
-  return new Intl.NumberFormat("en-US", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(Number(amount))
-}

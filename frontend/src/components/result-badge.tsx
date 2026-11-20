@@ -16,11 +16,12 @@ type ResultBadgeProps = {
   className?: string
 }
 
-// tints gives the tint and the text colour of each sign. Zero is neutral. A tint of 10 percent keeps the text at 4.5:1 or more in both themes.
+// tints gives the tint and the text colour of each sign. Zero is neutral. Each pair keeps the text at 4.5:1 or more in both themes.
+// The neutral pair has 9.21:1 in the light theme and 10.92:1 in the dark theme.
 const tints: Record<Sign, string> = {
   positive: "bg-positive/10 text-positive",
   negative: "bg-negative/10 text-negative",
-  zero: "bg-muted text-muted-foreground",
+  zero: "bg-muted text-secondary-foreground",
 }
 
 // ResultBadge shows a signed percent or a signed amount in a pill.

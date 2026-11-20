@@ -1,3 +1,4 @@
+import { InsetSurface } from "@/components/inset-surface"
 import { SectionHeading } from "@/components/section-heading"
 import { useEffect, useMemo, useRef, type ReactNode } from "react"
 import { MessageSquareIcon, PencilIcon } from "lucide-react"
@@ -356,7 +357,7 @@ function HoldingSection({
   return (
     <section className="flex flex-col gap-2">
       <SectionHeading level="h3" title="Holding" />
-      <dl className="flex flex-col divide-y rounded-lg border px-3 text-sm">
+      <InsetSurface as="dl" className="flex flex-col divide-y px-3 text-sm">
         <DetailRow label="Volume">{formatVolume(holding.volume)}</DetailRow>
         <DetailRow label="Average cost">
           {formatAmount(holding.averageCost, currency)}
@@ -410,7 +411,7 @@ function HoldingSection({
             <NoValue />
           )}
         </DetailRow>
-      </dl>
+      </InsetSurface>
       {holding.note && (
         <p className="text-sm text-muted-foreground">{holding.note}</p>
       )}
@@ -429,7 +430,7 @@ function RealizedProfitSection({
 }) {
   return (
     <section>
-      <dl className="flex flex-col rounded-lg border px-3 text-sm">
+      <InsetSurface as="dl" className="flex flex-col px-3 text-sm">
         <DetailRow label="Realized Profit">
           <span
             className={cn("font-medium", signColour(amountSign(sum)))}
@@ -438,7 +439,7 @@ function RealizedProfitSection({
             {formatAmount(sum, currency, { signed: true })}
           </span>
         </DetailRow>
-      </dl>
+      </InsetSurface>
     </section>
   )
 }
@@ -459,12 +460,12 @@ function LotList({
         level="h3"
         title={
           <>
-            Open Lots
+            Open Lots{" "}
             <span className="num text-muted-foreground">{lots.length}</span>
           </>
         }
       />
-      <ul className="flex flex-col divide-y rounded-lg border text-sm">
+      <InsetSurface as="ul" className="flex flex-col divide-y text-sm">
         {lots.map((lot) => (
           <li key={lot.positionId} className="flex flex-col gap-1 px-3 py-2">
             <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
@@ -501,7 +502,7 @@ function LotList({
             )}
           </li>
         ))}
-      </ul>
+      </InsetSurface>
     </section>
   )
 }
@@ -533,14 +534,14 @@ function ClosedPositionList({
         level="h3"
         title={
           <>
-            Closed Positions
+            Closed Positions{" "}
             <span className="num text-muted-foreground">
               {closedPositions.length}
             </span>
           </>
         }
       />
-      <ul className="flex flex-col divide-y rounded-lg border text-sm">
+      <InsetSurface as="ul" className="flex flex-col divide-y text-sm">
         {closedPositions.toReversed().map((closedPosition) => {
           const highlighted = closedPosition.xtbId === highlightedId
           return (
@@ -557,7 +558,7 @@ function ClosedPositionList({
             />
           )
         })}
-      </ul>
+      </InsetSurface>
     </section>
   )
 }

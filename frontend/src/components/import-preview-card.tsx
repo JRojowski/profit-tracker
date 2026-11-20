@@ -1,3 +1,4 @@
+import { InsetSurface } from "@/components/inset-surface"
 import { SectionHeading } from "@/components/section-heading"
 import { useState, type FormEvent, type ReactNode } from "react"
 import { CircleCheckIcon, TriangleAlertIcon } from "lucide-react"
@@ -135,7 +136,7 @@ export function ImportPreviewCard({
           )}
 
           {preview.account ? (
-            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3 text-sm">
+            <InsetSurface className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 p-3 text-sm">
               <CircleCheckIcon className="size-4 shrink-0 text-positive" />
               <span className="text-muted-foreground">Known Account:</span>
               <span className="min-w-0 font-medium break-words">
@@ -145,9 +146,9 @@ export function ImportPreviewCard({
               <span className="text-xs text-muted-foreground md:ml-auto">
                 The Import adds the new Cash Operations to its Ledger.
               </span>
-            </div>
+            </InsetSurface>
           ) : (
-            <div className="flex flex-col gap-4 rounded-lg border p-4">
+            <InsetSurface className="flex flex-col gap-4 p-4">
               <div className="flex flex-col gap-1">
                 <FigureLabel>New Account</FigureLabel>
                 <p className="text-sm text-muted-foreground">
@@ -213,7 +214,7 @@ export function ImportPreviewCard({
                   )}
                 </Field>
               </div>
-            </div>
+            </InsetSurface>
           )}
         </form>
       </CardContent>
@@ -231,9 +232,9 @@ type FigureProps = {
 // Figure shows one figure of the preview in a small tile.
 function Figure({ label, highlight = false, children }: FigureProps) {
   return (
-    <div
+    <InsetSurface
       className={cn(
-        "flex min-w-0 flex-col gap-1.5 rounded-lg border p-3",
+        "flex min-w-0 flex-col gap-1.5 p-3",
         highlight && "border-warning/50 bg-warning/5"
       )}
     >
@@ -241,6 +242,6 @@ function Figure({ label, highlight = false, children }: FigureProps) {
         <FigureLabel>{label}</FigureLabel>
       </dt>
       <dd className="num text-lg font-semibold">{children}</dd>
-    </div>
+    </InsetSurface>
   )
 }

@@ -38,7 +38,7 @@ export function ImportsPage() {
         <SectionHeading
           title={
             <>
-              Imports
+              Import history
               {imports.status === "ok" && (
                 <Badge variant="secondary" className="num font-mono">
                   {imports.data.length}

@@ -26,7 +26,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useRouteAccount } from "@/hooks/use-route-account"
+import { useSidebarView } from "@/hooks/use-sidebar-view"
 import { useAppState } from "@/lib/app-state"
 import { useAssistant } from "@/lib/assistant-state"
 import { paths } from "@/lib/routes"
@@ -40,7 +40,8 @@ export function AppSidebar() {
   const { pathname } = useLocation()
   const assistant = useAssistant()
   const { setOpenMobile } = useSidebar()
-  const account = useRouteAccount(accounts)
+  const view = useSidebarView(accounts)
+  const account = view.state === "view" ? view.account : null
 
   const viewPages: NavEntry[] = account
     ? [
@@ -89,11 +90,15 @@ export function AppSidebar() {
             Profit Tracker
           </span>
         </div>
-        <ViewSwitch accounts={accounts} selected={account} />
+        <ViewSwitch accounts={accounts} view={view} />
       </SidebarHeader>
       <SidebarContent>
-        <NavGroup label="Pages" entries={viewPages} current={current} />
-        <SidebarSeparator />
+        {view.state !== "loading" && (
+          <>
+            <NavGroup label="Pages" entries={viewPages} current={current} />
+            <SidebarSeparator />
+          </>
+        )}
         <NavGroup label="Data" entries={importPages} current={current} />
       </SidebarContent>
       {assistant.available && (

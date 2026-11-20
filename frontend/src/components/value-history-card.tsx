@@ -8,7 +8,7 @@ import {
   chartLineWidth,
   chartTooltipClass,
 } from "@/lib/chart-style"
-import { compactAmount, tagWidth } from "@/lib/end-tags"
+import { tagWidth } from "@/lib/end-tags"
 import { SectionHeading } from "@/components/section-heading"
 import { TriangleAlertIcon } from "lucide-react"
 import { useState, type ReactNode } from "react"
@@ -36,7 +36,13 @@ import {
   type ValuedInstrument,
 } from "@/lib/api"
 import { subtractDecimals } from "@/lib/decimal"
-import { amountSign, formatAmount, formatDate, signColour } from "@/lib/format"
+import {
+  amountSign,
+  formatAmount,
+  formatCompact,
+  formatDate,
+  signColour,
+} from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 const chartConfig = {
@@ -265,7 +271,7 @@ function HistoryChart({ points, currency }: HistoryChartProps) {
           axisLine={false}
           width={isMobile ? 44 : 64}
           domain={["auto", "auto"]}
-          tickFormatter={(value: number) => compactNumber(value)}
+          tickFormatter={(value: number) => formatCompact(value)}
         />
         <ChartTooltip
           content={({ active, payload }) => (
@@ -306,18 +312,18 @@ function endTags(
   compact: boolean
 ): EndTag[] {
   const text = (amount: string) =>
-    compact ? compactAmount(amount) : formatAmount(amount, currency)
+    compact ? formatCompact(amount) : formatAmount(amount, currency)
   return [
     {
       value: Number(point.netDeposits),
       text: text(point.netDeposits),
-      fill: "var(--chart-other)",
+      fill: "var(--color-netDeposits)",
       ink: "var(--chart-other-foreground)",
     },
     {
       value: Number(point.value),
       text: text(point.value),
-      fill: "var(--chart-1)",
+      fill: "var(--color-value)",
       ink: "var(--chart-1-foreground)",
     },
   ]
@@ -490,12 +496,4 @@ function axisDate(time: number, long: boolean): string {
       ? { month: "short", year: "2-digit" }
       : { day: "numeric", month: "short" }),
   })
-}
-
-// compactNumber shows an axis value in a short form, for example "12K". It is for the axis only.
-function compactNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value)
 }

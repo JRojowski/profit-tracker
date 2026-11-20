@@ -117,7 +117,7 @@ function ViewTitle({ account }: { account: Account | null }) {
 
   let title = "All Accounts"
   if (pathname === paths.import) title = "Import"
-  else if (pathname === paths.imports) title = "Imports"
+  else if (pathname === paths.imports) title = "Import history"
   else if (accountRoute && pathname !== paths.allAccounts)
     title = "Unknown Account"
   return (

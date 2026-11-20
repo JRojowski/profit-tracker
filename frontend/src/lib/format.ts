@@ -161,3 +161,14 @@ export function formatPolishTime(time: string): string {
     timeZone: polishTimeZone,
   })
 }
+
+// formatCompact shows a number in a short form, for example "12K" or "−1.2K". It is for axes and narrow tags.
+// The conversion to a float is for display only. Never calculate with the result.
+export function formatCompact(value: string | number): string {
+  return withMinusSign(
+    new Intl.NumberFormat(undefined, {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(Number(value))
+  )
+}

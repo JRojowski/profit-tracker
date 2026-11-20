@@ -58,7 +58,7 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  /* The card radius is 16 px. The card and inset surface rules below use it. */
+  /* The card radius is 16 px. The card rule below uses it. */
   --radius-card: calc(var(--radius) * 1.6);
 }
 
@@ -197,15 +197,11 @@
   border-radius: var(--radius-card);
 }
 
-/* Pills: the default and outline buttons have a full radius, and an icon button is round. A button in a table or in an input group keeps the standard radius. */
+/* Pills: the default and outline buttons have a full radius, and an icon button is round. The rule uses the class and the attributes of Button, because a Radix trigger with asChild replaces the data-slot attribute. A button in a table or in an input group keeps the standard radius, and so does a day button of the calendar. */
 :is(
-    [data-slot="button"]:is([data-variant="default"], [data-variant="outline"]),
-    :is(
-        [data-slot="button"],
-        [data-slot="sheet-close"],
-        [data-slot="dialog-close"]
-      )[data-size^="icon"]
-  ):not(:is(table, [data-slot="input-group"]) *) {
+  .group\/button:is([data-variant="default"], [data-variant="outline"]),
+  .group\/button[data-size^="icon"]
+):not(:is(table, [data-slot="input-group"]) *, [data-day]) {
   border-radius: calc(infinity * 1px);
 }
 
@@ -224,6 +220,8 @@
 [data-slot="popover-content"],
 [data-slot="select-content"],
 [data-slot="dialog-content"],
-[data-slot="sheet-content"] {
+[data-slot="sheet-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"] {
   --tw-shadow: var(--shadow-raised);
 }

@@ -7,7 +7,12 @@ import { ResultBadge } from "@/components/result-badge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Loaded } from "@/hooks/use-load"
 import type { Allocation, Returns } from "@/lib/api"
-import { amountSign, formatAmount, signColour } from "@/lib/format"
+import {
+  amountSign,
+  formatAmount,
+  formatPercent,
+  signColour,
+} from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // OverviewFigures are the figures of the hero of an Overview, in one currency.
@@ -49,8 +54,8 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
             </div>
             <div className="grid gap-4 border-t pt-6 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
               <FigureBox label="Total Result" note={unpriced}>
-                <SignedAmount
-                  amount={figures.totalResult}
+                <SignedFigure
+                  value={figures.totalResult}
                   currency={figures.currency}
                   className="text-2xl md:text-3xl xl:text-2xl 2xl:text-3xl"
                 />
@@ -82,7 +87,7 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
               : undefined
           }
         >
-          <ResultBadge value={figures.simpleReturn} className="text-lg" />
+          <SignedFigure value={figures.simpleReturn} className="text-2xl" />
         </DetailCard>
         <DetailCard label="Cash">
           <p className="num text-2xl font-semibold">
@@ -130,23 +135,32 @@ function DetailCard({ label, note, children }: FigureBoxProps) {
   )
 }
 
-type SignedAmountProps = {
-  amount: string | null
-  currency: string
+type SignedFigureProps = {
+  // value is the decimal text, or null when the tool cannot calculate it.
+  value: string | null
+  // currency is set for an amount and omitted for a percent.
+  currency?: string
   className?: string
 }
 
-// SignedAmount shows a result with its sign, in the colour of the sign.
-function SignedAmount({ amount, currency, className }: SignedAmountProps) {
+// SignedFigure shows a result with its sign, in the colour of the sign. It shows a percent when it has no currency.
+function SignedFigure({ value, currency, className }: SignedFigureProps) {
+  let text = "—"
+  if (value !== null) {
+    text =
+      currency === undefined
+        ? formatPercent(value, { signed: true })
+        : formatAmount(value, currency, { signed: true })
+  }
   return (
     <p
       className={cn(
         "num font-semibold",
-        amount !== null && signColour(amountSign(amount)),
+        value !== null && signColour(amountSign(value)),
         className
       )}
     >
-      {amount === null ? "—" : formatAmount(amount, currency, { signed: true })}
+      {text}
     </p>
   )
 }

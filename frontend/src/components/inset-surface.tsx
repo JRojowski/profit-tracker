@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 
 type InsetSurfaceProps = HTMLAttributes<HTMLElement> & {
   // as picks the element, so a list item stays a list item.
-  as?: "div" | "li"
+  as?: "div" | "li" | "dl" | "ul" | "section"
 }
 
 // InsetSurface is the shared box inside a card, for example one figure or one amount. It defines the border, the tint and the radius.

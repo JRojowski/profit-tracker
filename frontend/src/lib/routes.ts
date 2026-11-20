@@ -1,3 +1,5 @@
+import type { Account } from "./api"
+
 // accountPattern is the route pattern of the pages of one Account.
 export const accountPattern = "/accounts/:id"
 
@@ -21,7 +23,7 @@ export function parseAccountId(segment: string | undefined): number | null {
 
 // ViewTarget is a view of the view switch: all Accounts, or one Account with the data that decides its pages.
 export type ViewTarget =
-  { kind: "all" } | { kind: "account"; account: { id: number; type: string } }
+  { kind: "all" } | { kind: "account"; account: Pick<Account, "id" | "type"> }
 
 // switchViewPath gives the URL that opens when the user changes the view. The same page type opens when the new
 // view has it, otherwise the overview opens. The query string is dropped, because filters and the Instrument

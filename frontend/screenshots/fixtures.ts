@@ -13,6 +13,7 @@ import type {
   Holding,
   HistoryPeriod,
   IkzeLimit,
+  ImportPreview,
   ImportSummary,
   InstrumentOverview,
   PriceWarning,
@@ -801,4 +802,63 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     overview: {},
     imports: [],
   }
+}
+
+// previewOperation is a Cash Operation of the Import conflicts.
+const previewOperation = {
+  type: "Deposit",
+  time: "2026-05-04T09:12:00Z",
+  amount: "1500.00",
+  comment: "Synthetic deposit",
+  ticker: "",
+  positionId: "",
+  volume: null,
+  price: null,
+}
+
+// importPreviews are the answers of an upload. "known" is a file of the Main Account with an Import Conflict and a warning.
+// "new" is a file with a new account number.
+export const importPreviews: Record<"known" | "new", ImportPreview> = {
+  known: {
+    id: 3,
+    fileName: "account_10000001_2026.xlsx",
+    accountNumber: "10000001",
+    account: mainAccount,
+    suggestedCurrency: "PLN",
+    newCashOperations: 12,
+    skippedCashOperations: 148,
+    state: "needs-review",
+    conflicts: [
+      {
+        id: 1,
+        kind: "changed-data",
+        xtbId: "900001",
+        existing: previewOperation,
+        new: { ...previewOperation, amount: "1550.00" },
+        check: null,
+        decision: null,
+      },
+    ],
+    warnings: [
+      {
+        kind: "transfer-without-other-side",
+        direction: "out",
+        xtbId: "900002",
+        time: "2026-05-20T10:00:00Z",
+        amount: "-500.00",
+      },
+    ],
+  },
+  new: {
+    id: 4,
+    fileName: "account_10000003_2026.xlsx",
+    accountNumber: "10000003",
+    account: null,
+    suggestedCurrency: "PLN",
+    newCashOperations: 30,
+    skippedCashOperations: 0,
+    state: "preview",
+    conflicts: [],
+    warnings: [],
+  },
 }

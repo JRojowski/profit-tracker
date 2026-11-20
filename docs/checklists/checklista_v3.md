@@ -17,9 +17,9 @@ v3 changes only the user interface and adds the Allocation. Section 12 compares 
 - [ ] Click "Import" in the sidebar. The URL is `/import`. The page shows the file drop zone.
 - [ ] Upload `exports/USD_…xlsx` and click Preview. The figures show. Warnings show only when the export has them.
 - [ ] The new-Account form shows. Type a name, select the type "regular" and click "Confirm Import".
-- [ ] The Imports page opens. The sidebar shows the new Account with the badge "USD".
+- [ ] The Import history page opens. The sidebar shows the new Account with the badge "USD".
 - [ ] Upload the same file again and click Preview. New is 0, and there are no Import Conflicts. The page shows the known Account and no new-Account form. Click "Confirm Import".
-- [ ] Upload an export, click Preview and click Cancel. The Imports page does not list this Import.
+- [ ] Upload an export, click Preview and click Cancel. The Import history page does not list this Import.
 - [ ] Upload a file that is not an XTB export and click Preview. A clear "The Import failed" error shows.
 - [ ] Find the IKZE export by its account number. Import it with the type IKZE. The preview shows a warning about a Transfer with no other side.
 - [ ] Import the other PLN export with the type "regular". The sidebar shows 3 Accounts. The IKZE Account shows the tag "IKZE".
@@ -34,16 +34,16 @@ v3 changes only the user interface and adds the Allocation. Section 12 compares 
 
 ## 4. Imports
 
-- [ ] Click "Imports" in the sidebar. The URL is `/imports`.
+- [ ] Click "Import history" in the sidebar. The URL is `/imports`.
 - [ ] The table lists each Import with the date, the file name, the Account and the New and Known counts.
 - [ ] The table fits in its card. A long file name does not break the layout.
 
 ## 5. Navigation and URLs
 
 - [ ] Click each item in the sidebar. The selected item is highlighted. The top bar shows the title of the view.
-- [ ] Open an Account. The tabs Overview, Holdings and Closed Positions show under the title. Only the IKZE Account also has the tab "IKZE".
-- [ ] Open each tab. The URL changes to `/accounts/{id}`, `/accounts/{id}/holdings`, `/accounts/{id}/closed-positions` or `/accounts/{id}/ikze`.
-- [ ] Reload the page on each tab. The same view opens.
+- [ ] Select an Account in the view switch. The group "Pages" of the sidebar lists Overview, Holdings and Closed Positions. Only the IKZE Account also has the item "IKZE".
+- [ ] Click each item of the group "Pages". The URL changes to `/accounts/{id}`, `/accounts/{id}/holdings`, `/accounts/{id}/closed-positions` or `/accounts/{id}/ikze`.
+- [ ] Reload the page on each item. The same view opens.
 - [ ] Click the browser back button. The previous view opens.
 - [ ] Open `/accounts/999`. The message "The tool has no such Account" shows with the link "Open All Accounts".
 - [ ] Open `/accounts/{id}/ikze` for an Account that is not IKZE. The URL changes to `/accounts/{id}`. The Overview shows.
@@ -124,8 +124,8 @@ Each program refreshes the prices at start. Two refreshes at different times giv
 - [ ] Set the browser width to 375 px.
 - [ ] The sidebar is hidden. The menu button opens it. Select an item. The sidebar closes.
 - [ ] The cards show in one column. No page needs horizontal scrolling.
-- [ ] Open the IKZE Account. All four tabs are reachable.
+- [ ] Open the IKZE Account. All four items of the group "Pages" are reachable.
 - [ ] The Holdings show as a list of compact rows. A row opens the price source dialog.
 - [ ] The charts show in a compact form with the same information.
 - [ ] No number and its currency break into two lines.
-- [ ] Open Import, Imports, Closed Positions and IKZE. No page needs horizontal scrolling.
+- [ ] Open Import, Import history, Closed Positions and IKZE. No page needs horizontal scrolling.
