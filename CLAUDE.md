@@ -11,6 +11,8 @@ Run these commands from the repository root.
 | Lint the backend | `make lint` |
 | Install the frontend packages | `make frontend-install` |
 | Typecheck, lint, check the format of and build the frontend | `make frontend-check` |
+| Compare each page with its stored image (screenshot tests of the frontend) | `make frontend-screenshots` (It builds the frontend. It needs no backend and no network. The fixtures are in `frontend/screenshots/fixtures.ts`.) |
+| Replace the stored images with the current look | `make frontend-screenshots-update` (Read the image differences in `frontend/screenshots/images/` before you commit. The images are for macOS.) |
 | Build one binary with the embedded frontend | `make build` (output: `bin/profit-tracker`) |
 | Start the backend for development | `make backend-dev` |
 | Start the binary with a new database of synthetic demo data | `make demo` (It needs network access for the prices. It prints the URL and the stop command. `DEMO_ADDR` sets the address, default `127.0.0.1:8099`.) |
