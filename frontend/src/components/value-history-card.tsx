@@ -7,6 +7,7 @@ import { FigureLabel } from "@/components/figure-label"
 import { InsetSurface } from "@/components/inset-surface"
 import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ResultBadge } from "@/components/result-badge"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -24,23 +25,13 @@ import {
   type ValuedInstrument,
 } from "@/lib/api"
 import { subtractDecimals } from "@/lib/decimal"
-import {
-  amountSign,
-  formatAmount,
-  formatDate,
-  formatPercent,
-  signColour,
-} from "@/lib/format"
+import { amountSign, formatAmount, formatDate, signColour } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 const chartConfig = {
   value: { label: "Value", color: "var(--chart-1)" },
   netDeposits: { label: "Net Deposits", color: "var(--chart-other)" },
 } satisfies ChartConfig
-
-// selectedItem marks the selected period with the accent, as the year filter of the Closed Positions page does.
-const selectedItem =
-  "data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
 
 // ChartPoint is one day of the chart. The sizes are for the geometry only. The texts come from the exact amounts.
 type ChartPoint = {
@@ -82,14 +73,7 @@ export function ValueHistoryCard({
             <div className="flex min-w-0 flex-col gap-1.5">
               <p className="flex flex-wrap items-baseline gap-x-2 text-sm text-muted-foreground">
                 Time-Weighted Return
-                <span
-                  className={cn(
-                    "num text-base font-semibold text-foreground",
-                    twr !== null && signColour(amountSign(twr))
-                  )}
-                >
-                  {twr === null ? "—" : formatPercent(twr, { signed: true })}
-                </span>
+                <ResultBadge value={twr} />
               </p>
               {twr === null && unavailable === undefined && (
                 <p className="text-sm text-muted-foreground">
@@ -102,9 +86,8 @@ export function ValueHistoryCard({
           action={
             <ToggleGroup
               type="single"
-              variant="outline"
               size="sm"
-              spacing={0}
+              data-pills
               aria-label="Period"
               value={period}
               onValueChange={(value) => {
@@ -114,11 +97,7 @@ export function ValueHistoryCard({
               className="shrink-0"
             >
               {historyPeriods.map((item) => (
-                <ToggleGroupItem
-                  key={item}
-                  value={item}
-                  className={cn("num", selectedItem)}
-                >
+                <ToggleGroupItem key={item} value={item} className="num">
                   {item}
                 </ToggleGroupItem>
               ))}

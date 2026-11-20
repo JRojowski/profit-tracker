@@ -3,15 +3,11 @@ import type { ReactNode } from "react"
 import { AllocationDonut } from "@/components/allocation-donut"
 import { FigureLabel } from "@/components/figure-label"
 import { InsetSurface } from "@/components/inset-surface"
+import { ResultBadge } from "@/components/result-badge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Loaded } from "@/hooks/use-load"
 import type { Allocation, Returns } from "@/lib/api"
-import {
-  amountSign,
-  formatAmount,
-  formatPercent,
-  signColour,
-} from "@/lib/format"
+import { amountSign, formatAmount, signColour } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // OverviewFigures are the figures of the hero of an Overview, in one currency.
@@ -67,9 +63,9 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
                     : undefined
                 }
               >
-                <SignedPercent
-                  percent={figures.annualReturn}
-                  className="text-2xl md:text-3xl xl:text-2xl 2xl:text-3xl"
+                <ResultBadge
+                  value={figures.annualReturn}
+                  className="text-lg md:text-xl"
                 />
               </FigureBox>
             </div>
@@ -86,7 +82,7 @@ export function OverviewHero({ figures, allocation }: OverviewHeroProps) {
               : undefined
           }
         >
-          <SignedPercent percent={figures.simpleReturn} className="text-2xl" />
+          <ResultBadge value={figures.simpleReturn} className="text-lg" />
         </DetailCard>
         <DetailCard label="Cash">
           <p className="num text-2xl font-semibold">
@@ -151,26 +147,6 @@ function SignedAmount({ amount, currency, className }: SignedAmountProps) {
       )}
     >
       {amount === null ? "—" : formatAmount(amount, currency, { signed: true })}
-    </p>
-  )
-}
-
-type SignedPercentProps = {
-  percent: string | null
-  className?: string
-}
-
-// SignedPercent shows a return with its sign, in the colour of the sign. A null return shows "—".
-function SignedPercent({ percent, className }: SignedPercentProps) {
-  return (
-    <p
-      className={cn(
-        "num font-semibold",
-        percent !== null && signColour(amountSign(percent)),
-        className
-      )}
-    >
-      {percent === null ? "—" : formatPercent(percent, { signed: true })}
     </p>
   )
 }

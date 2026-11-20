@@ -191,6 +191,29 @@
   border-radius: var(--radius-card);
 }
 
+/* Pills: the default and outline buttons have a full radius, and an icon button is round. A button in a table or in an input group keeps the standard radius. */
+:is(
+    [data-slot="button"]:is([data-variant="default"], [data-variant="outline"]),
+    :is(
+        [data-slot="button"],
+        [data-slot="sheet-close"],
+        [data-slot="dialog-close"]
+      )[data-size^="icon"]
+  ):not(:is(table, [data-slot="input-group"]) *) {
+  border-radius: calc(infinity * 1px);
+}
+
+/* The period selector and the year filter are rows of separate pills. The selected pill uses the primary colour. */
+[data-slot="toggle-group"][data-pills] [data-slot="toggle-group-item"] {
+  border-radius: calc(infinity * 1px);
+  padding-inline: calc(var(--spacing) * 3);
+}
+[data-slot="toggle-group"][data-pills]
+  [data-slot="toggle-group-item"][data-state="on"] {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
 /* The raised surfaces use the raised shadow. */
 [data-slot="popover-content"],
 [data-slot="select-content"],

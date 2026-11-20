@@ -404,6 +404,7 @@ function HoldingSection({
               profit={holding.unrealizedProfit}
               percent={holding.unrealizedProfitPercent}
               currency={currency}
+              badge
             />
           ) : (
             <NoValue />

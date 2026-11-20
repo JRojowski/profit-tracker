@@ -34,10 +34,6 @@ import {
 import { formatDate } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
-// selectedItem marks the selected year with the accent, as in the mockup. The default muted background is too faint.
-const selectedItem =
-  "data-[state=on]:bg-primary/15 data-[state=on]:text-primary"
-
 // InstrumentOption is one Instrument that has a Closed Position on the Account.
 export type InstrumentOption = { ticker: string; name: string }
 
@@ -119,9 +115,8 @@ function YearButtons({
     <div className="max-w-full overflow-x-auto">
       <ToggleGroup
         type="single"
-        variant="outline"
         size="sm"
-        spacing={0}
+        data-pills
         aria-label="Year"
         value={active}
         onValueChange={(value) => {
@@ -135,15 +130,9 @@ function YearButtons({
           })
         }}
       >
-        <ToggleGroupItem value={allYears} className={selectedItem}>
-          All years
-        </ToggleGroupItem>
+        <ToggleGroupItem value={allYears}>All years</ToggleGroupItem>
         {years.map((year) => (
-          <ToggleGroupItem
-            key={year}
-            value={year}
-            className={cn("num", selectedItem)}
-          >
+          <ToggleGroupItem key={year} value={year} className="num">
             {year}
           </ToggleGroupItem>
         ))}
