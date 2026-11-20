@@ -197,10 +197,11 @@ func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]K
 }
 
 const ledgerCashOperations = `-- name: LedgerCashOperations :many
-SELECT xtb_id, type, time, amount, position_id, volume, price
-FROM cash_operations
-WHERE account_id = ?
-ORDER BY time, id
+SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.account_id = ?
+ORDER BY c.time, c.id
 `
 
 type LedgerCashOperationsRow struct {
@@ -208,6 +209,7 @@ type LedgerCashOperationsRow struct {
 	Type       string
 	Time       string
 	Amount     decimal.Decimal
+	Ticker     string
 	PositionID sql.NullString
 	Volume     decimal.NullDecimal
 	Price      decimal.NullDecimal
@@ -227,6 +229,7 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 			&i.Type,
 			&i.Time,
 			&i.Amount,
+			&i.Ticker,
 			&i.PositionID,
 			&i.Volume,
 			&i.Price,

@@ -109,14 +109,17 @@ export type ImportSummary = {
   skippedCashOperations: number
 }
 
-// ApiError holds the error message that the backend returns.
+// ApiError holds the error message that the backend returns. The code is the machine-readable code of the
+// error, when the backend gives one, for example "rate_limited".
 export class ApiError extends Error {
   readonly status: number
+  readonly code: string | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.code = code
   }
 }
 
@@ -128,13 +131,15 @@ export function errorMessage(err: unknown): string {
 async function readJSON<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `HTTP ${response.status}`
+    let code: string | null = null
     try {
-      const body = (await response.json()) as { error?: string }
+      const body = (await response.json()) as { error?: string; code?: string }
       if (body.error) message = body.error
+      if (body.code) code = body.code
     } catch {
       // The body is not JSON. Keep the status message.
     }
-    throw new ApiError(response.status, message)
+    throw new ApiError(response.status, message, code)
   }
   return (await response.json()) as T
 }
@@ -392,6 +397,9 @@ export type InstrumentOverview = NamedPriceSource & {
   holding: Holding | null
   // openLots is empty exactly when holding is null.
   openLots: OverviewLot[]
+  // realizedProfitSum is the sum of the Realized Profit of the closedPositions, in the Account currency.
+  // The backend adds the amounts. It is null exactly when closedPositions is empty.
+  realizedProfitSum: string | null
   // closedPositions are in close time order, oldest first.
   closedPositions: ClosedPosition[]
 }
@@ -735,4 +743,59 @@ export async function fetchAllAccountsAllocation(
 ): Promise<Allocation> {
   const response = await fetch("/api/all-accounts/allocation", { signal })
   return readJSON<Allocation>(response)
+}
+
+// AssistantMessage is one message of a conversation with the Assistant.
+export type AssistantMessage = {
+  role: "user" | "assistant"
+  content: string
+}
+
+// AssistantStep is one call of a function by the model, with its arguments and the result that the model got.
+export type AssistantStep = {
+  function: string
+  arguments: Record<string, unknown>
+  // result is the JSON value that the function gave to the model. An older backend does not send it.
+  result?: unknown
+}
+
+// AssistantContext is the page that the user has open when the user asks. Each field is optional.
+export type AssistantContext = {
+  // accountId is the Account of the page.
+  accountId?: number
+  // instrument is the broker ticker of the open Instrument Overview.
+  instrument?: string
+}
+
+// AssistantAnswer is the answer of the Assistant and the steps that the model used.
+export type AssistantAnswer = {
+  answer: string
+  steps: AssistantStep[]
+}
+
+// fetchAssistantAvailable tells whether the Assistant is on. It is off when the backend has no API key.
+export async function fetchAssistantAvailable(
+  signal?: AbortSignal
+): Promise<boolean> {
+  const response = await fetch("/api/assistant", { signal })
+  const body = await readJSON<{ available: boolean }>(response)
+  return body.available
+}
+
+// askAssistant sends the conversation and the page context to the Assistant. The last message is the new question.
+// A context without a field is left out of the request.
+export async function askAssistant(
+  messages: AssistantMessage[],
+  context: AssistantContext,
+  signal?: AbortSignal
+): Promise<AssistantAnswer> {
+  const hasContext =
+    context.accountId !== undefined || context.instrument !== undefined
+  const response = await fetch("/api/assistant/questions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(hasContext ? { messages, context } : { messages }),
+    signal,
+  })
+  return readJSON<AssistantAnswer>(response)
 }

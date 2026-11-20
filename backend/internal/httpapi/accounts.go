@@ -170,8 +170,13 @@ func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	writeJSON(w, http.StatusOK, a.summaryOf(view))
+}
+
+// summaryOf returns the summary of the Account of the view.
+func (a *api) summaryOf(view accountView) summaryResponse {
 	state := view.state
-	writeJSON(w, http.StatusOK, summaryResponse{
+	return summaryResponse{
 		AccountID:        view.account.ID,
 		Currency:         view.account.Currency,
 		Cash:             formatAmount(state.Cash),
@@ -192,7 +197,7 @@ func (a *api) accountSummary(w http.ResponseWriter, r *http.Request) {
 		SimpleReturnNote: returnNote(state.SimpleReturn),
 		AnnualReturn:     percent(state.AnnualReturn),
 		AnnualReturnNote: returnNote(state.AnnualReturn),
-	})
+	}
 }
 
 // accountHoldings returns the Holdings of the Account with their value, ordered by ticker.
@@ -374,4 +379,27 @@ func formatAmount(d decimal.Decimal) string {
 		return d.String()
 	}
 	return d.StringFixed(2)
+}
+
+// formatRoundedAmount writes an amount rounded to 2 decimal places, for example "6.32".
+// The Assistant uses it, because a language model must not round an amount itself.
+func formatRoundedAmount(d decimal.Decimal) string {
+	return d.StringFixed(2)
+}
+
+// roundAmountText rounds an amount in decimal text to 2 decimal places. It returns text that is not decimal as it is.
+func roundAmountText(s string) string {
+	d, err := decimal.NewFromString(s)
+	if err != nil {
+		return s
+	}
+	return formatRoundedAmount(d)
+}
+
+// roundAmountPointer is roundAmountText for an amount that can be nil.
+func roundAmountPointer(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	return new(roundAmountText(*s))
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/httpapi"
 	"github.com/jrojowski/profit-tracker/backend/internal/price"
@@ -96,6 +97,39 @@ func startServerWithPrices(t *testing.T, provider *fakeProvider) *testServer {
 // The clock starts at testToday.
 func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *testServer {
 	t.Helper()
+	return startServerWithOptions(t, serverOptions{frontend: frontend, provider: provider})
+}
+
+// serverOptions are the parts of the test server that a test can change.
+type serverOptions struct {
+	// frontend is the built frontend. If it is nil, the server uses testFrontend.
+	frontend fs.FS
+	// provider is the price provider. If it is nil, the server uses a new fake provider with no prices.
+	provider price.Provider
+	// model is the model of the Assistant. If it is nil, the Assistant is off.
+	model assistant.Model
+	// logs receives the log lines of the server. If it is nil, the server discards them.
+	logs io.Writer
+	// questionTimeout is the time limit of one question to the Assistant. If it is zero, the server uses its default.
+	questionTimeout time.Duration
+}
+
+// startServerWithOptions starts the backend with the options. The clock starts at testToday.
+func startServerWithOptions(t *testing.T, opts serverOptions) *testServer {
+	t.Helper()
+
+	frontend := opts.frontend
+	if frontend == nil {
+		frontend = testFrontend
+	}
+	var provider price.Provider = newFakeProvider()
+	if opts.provider != nil {
+		provider = opts.provider
+	}
+	logger := slog.New(slog.DiscardHandler)
+	if opts.logs != nil {
+		logger = slog.New(slog.NewTextHandler(opts.logs, nil))
+	}
 
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "profit-tracker.db"))
 	require.NoError(t, err)
@@ -107,12 +141,14 @@ func startServerWith(t *testing.T, frontend fs.FS, provider price.Provider) *tes
 	rateProvider := newFakeRateProvider()
 	rates := exchange.NewService(db, rateProvider, clock.Now)
 	handler := httpapi.NewHandler(httpapi.Options{
-		Store:         db,
-		Frontend:      frontend,
-		Logger:        slog.New(slog.DiscardHandler),
-		Prices:        prices,
-		ExchangeRates: rates,
-		Now:           clock.Now,
+		Store:            db,
+		Frontend:         frontend,
+		Logger:           logger,
+		Prices:           prices,
+		ExchangeRates:    rates,
+		Now:              clock.Now,
+		Assistant:        opts.model,
+		AssistantTimeout: opts.questionTimeout,
 	})
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -388,11 +424,31 @@ func (s *testServer) get(t *testing.T, path string) (status int, contentType, bo
 }
 
 // do sends a request to path and returns the status, the content type and the body.
+// A request with a body has the content type application/json, as the frontend sends it.
 func (s *testServer) do(t *testing.T, method, path string, reqBody io.Reader) (status int, contentType, body string) {
+	t.Helper()
+
+	header := http.Header{}
+	if reqBody != nil {
+		header.Set("Content-Type", "application/json")
+	}
+	return s.doWithHeader(t, method, path, reqBody, header)
+}
+
+// doWithHeader sends a request with the header fields to path and returns the status, the content type and the
+// body. A "Host" field in header sets the Host of the request.
+func (s *testServer) doWithHeader(t *testing.T, method, path string, reqBody io.Reader, header http.Header) (status int, contentType, body string) {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(t.Context(), method, s.URL+path, reqBody)
 	require.NoError(t, err)
+	for name, values := range header {
+		if name == "Host" {
+			req.Host = values[0]
+			continue
+		}
+		req.Header[name] = values
+	}
 	resp, err := s.client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()

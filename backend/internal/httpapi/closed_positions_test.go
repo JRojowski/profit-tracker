@@ -97,6 +97,16 @@ func cents(t *testing.T, text string) string {
 	return d.StringFixed(2)
 }
 
+// centsPointer rounds the decimal text of a pointer to 2 decimal places. A nil pointer stays nil.
+func centsPointer(t *testing.T, text *string) *string {
+	t.Helper()
+
+	if text == nil {
+		return nil
+	}
+	return new(cents(t, *text))
+}
+
 func TestClosedPositions_ADR0001Example1_LotClosedInTwoParts(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)

@@ -18,6 +18,14 @@ Run these commands from the repository root.
 
 The binary reads the flags `-addr` and `-db`, or the variables `PROFIT_TRACKER_ADDR` and `PROFIT_TRACKER_DB`. The default database is `profit-tracker/profit-tracker.db` in the user configuration directory.
 
+The Assistant reads these values:
+
+| Value | Meaning |
+|---|---|
+| `PROFIT_TRACKER_OPENROUTER_KEY` | The OpenRouter API key. Environment only, with no flag, because a flag is visible in the process list. If it is empty, the Assistant is off. Never log or commit the key. |
+| `PROFIT_TRACKER_ASSISTANT_MODEL` or the flag `-assistant-model` | The OpenRouter model ID. The default is a free model that supports function calls: `openrouter.DefaultModel` in `backend/internal/openrouter`. |
+| `PROFIT_TRACKER_OPENROUTER_URL` | The base URL of the provider. Environment only. The default is `https://openrouter.ai/api/v1`. Set it to a local fake provider for a manual check. |
+
 ## Layout
 
 - `backend/`: the Go module.

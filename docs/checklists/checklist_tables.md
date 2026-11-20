@@ -193,6 +193,11 @@ Chart and lists:
 - [ ] The price line continues after the last sell.
 - [ ] Each Closed Position in the list is a card with two columns. The left column shows Open date, Open price, Volume and Cost.
 - [ ] The right column of each card shows Close date, Close price, Sale amount and Realized Profit.
+- [ ] Open an Instrument with a Holding and Closed Positions. A section "Realized Profit" is directly above the Closed Positions list, after the open Lots. It shows one row with the sum, with a sign and the profit colour.
+- [ ] The sum is equal to the sum of the Realized Profit of the cards in the list. The panel shows no sum of the Realized Profit and the Unrealized Profit.
+- [ ] Open INTC.US. The section is between the chart and the Closed Positions list.
+- [ ] Open an Instrument with no Closed Position. The panel shows no "Realized Profit" section.
+- [ ] Open an Instrument with a loss. The sum shows "−" and the loss colour.
 - [ ] Open an Instrument with no price data, for example ZZQX.US. The panel shows a message. The chart still shows the markers.
 
 URL state and the Back button:

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/importer"
 	"github.com/jrojowski/profit-tracker/backend/internal/price"
@@ -32,6 +33,11 @@ type Options struct {
 	// Now is the clock that tells "today" for the stale-price and stale-rate warnings. If it is nil, the API uses
 	// time.Now. Give it the same clock as Prices and ExchangeRates.
 	Now func() time.Time
+	// Assistant is the language model of the Assistant. If it is nil, the Assistant is off.
+	Assistant assistant.Model
+	// AssistantTimeout is the time limit of one question to the Assistant, with all its model calls.
+	// If it is zero, the API uses DefaultAssistantTimeout.
+	AssistantTimeout time.Duration
 }
 
 // NewHandler returns the handler for the API routes and the frontend.
@@ -42,7 +48,10 @@ func NewHandler(opts Options) http.Handler {
 	}
 	a := &api{
 		store: opts.Store, importer: importer.NewService(opts.Store), prices: opts.Prices, rates: opts.ExchangeRates,
-		now: now, logger: opts.Logger,
+		now: now, logger: opts.Logger, model: opts.Assistant, questionTimeout: opts.AssistantTimeout,
+	}
+	if a.questionTimeout <= 0 {
+		a.questionTimeout = DefaultAssistantTimeout
 	}
 
 	mux := http.NewServeMux()
@@ -69,6 +78,8 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("PUT /api/instruments/{ticker}/price-ticker", a.setPriceTicker)
 	mux.HandleFunc("PUT /api/instruments/{ticker}/quote-currency", a.setQuoteCurrency)
 	mux.HandleFunc("PUT /api/instruments/{ticker}/price-confirmation", a.setPriceConfirmation)
+	mux.HandleFunc("GET /api/assistant", a.assistantAvailability)
+	mux.Handle("POST /api/assistant/questions", assistantOriginGuard(http.HandlerFunc(a.askAssistant)))
 	mux.HandleFunc("/api/", notFound)
 	mux.Handle("/", frontendHandler(opts.Frontend))
 	return mux
@@ -82,11 +93,18 @@ type api struct {
 	rates    *exchange.Service
 	now      func() time.Time
 	logger   *slog.Logger
+	// model is the language model of the Assistant, or nil if the Assistant is off.
+	model assistant.Model
+	// questionTimeout is the time limit of one question to the Assistant.
+	questionTimeout time.Duration
 }
 
 // errorResponse is the JSON body of each API error.
 type errorResponse struct {
 	Error string `json:"error"`
+	// Code is a stable name of the case, so that the frontend can tell the cases apart. Only the errors of the
+	// Assistant have a code.
+	Code string `json:"code,omitempty"`
 }
 
 // notFound answers an unknown /api path. It never returns the frontend.

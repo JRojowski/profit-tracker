@@ -3,6 +3,8 @@
 package ikze
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -53,34 +55,50 @@ type Year struct {
 // A contribution after the current year gets no row.
 // limit returns the IKZE Limit of a year, or false if the limit of the year is not known. See BusinessLimit.
 func Years(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bool), today time.Time) []Year {
-	byYear := map[int]decimal.Decimal{}
-	first, current := 0, today.Year()
-	for _, op := range ops {
-		if !isContribution(op) {
-			continue
-		}
-		year := op.Time.In(today.Location()).Year()
-		byYear[year] = byYear[year].Add(op.Amount)
-		if first == 0 || year < first {
-			first = year
-		}
-	}
-	if first == 0 {
+	byYear := contributionsByYear(ops, today.Location())
+	if len(byYear) == 0 {
 		return []Year{}
 	}
+	first, current := slices.Min(slices.Collect(maps.Keys(byYear))), today.Year()
 
 	// If each contribution is after the current year, there is no row.
 	years := make([]Year, 0, max(current-first+1, 0))
 	for year := current; year >= first; year-- {
-		y := Year{Year: year, Contributions: byYear[year]}
-		y.Limit, y.HasLimit = limit(year)
-		if y.HasLimit {
-			y.Unused = decimal.Max(y.Limit.Sub(y.Contributions), decimal.Zero)
-			y.OverLimit = decimal.Max(y.Contributions.Sub(y.Limit), decimal.Zero)
-		}
+		y := yearOf(year, byYear[year], limit)
 		years = append(years, y)
 	}
 	return years
+}
+
+// ForYear returns the Year of one calendar year in the location. Unlike Years, it returns a Year
+// for each year, also for a year with no IKZE Contribution and for a year after the current one.
+func ForYear(ops []ledger.CashOperation, limit func(year int) (decimal.Decimal, bool), year int, loc *time.Location) Year {
+	return yearOf(year, contributionsByYear(ops, loc)[year], limit)
+}
+
+// contributionsByYear returns the sum of the IKZE Contributions of each calendar year in the location.
+// A year with no IKZE Contribution is not in the map. Years and ForYear share it, so that they group the
+// contributions in one way. ADR 0007: one calculation for one number.
+func contributionsByYear(ops []ledger.CashOperation, loc *time.Location) map[int]decimal.Decimal {
+	byYear := map[int]decimal.Decimal{}
+	for _, op := range ops {
+		if isContribution(op) {
+			year := op.Time.In(loc).Year()
+			byYear[year] = byYear[year].Add(op.Amount)
+		}
+	}
+	return byYear
+}
+
+// yearOf returns the Year with the limit of the year, if the limit is known.
+func yearOf(year int, contributions decimal.Decimal, limit func(year int) (decimal.Decimal, bool)) Year {
+	y := Year{Year: year, Contributions: contributions}
+	y.Limit, y.HasLimit = limit(year)
+	if y.HasLimit {
+		y.Unused = decimal.Max(y.Limit.Sub(y.Contributions), decimal.Zero)
+		y.OverLimit = decimal.Max(y.Contributions.Sub(y.Limit), decimal.Zero)
+	}
+	return y
 }
 
 // isContribution tells if op is an IKZE Contribution: a Deposit or a Transfer In.

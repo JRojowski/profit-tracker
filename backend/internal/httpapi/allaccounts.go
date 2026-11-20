@@ -78,16 +78,23 @@ type allAccountsRowResponse struct {
 
 // allAccountsSummary returns all Accounts together in PLN, with one row per Account.
 func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	views, err := a.allAccountViews(ctx)
+	resp, err := a.allAccountsSummaryOf(r.Context())
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// allAccountsSummaryOf calculates the summary of all Accounts in PLN, with one row per Account.
+func (a *api) allAccountsSummaryOf(ctx context.Context) (allAccountsResponse, error) {
+	views, err := a.allAccountViews(ctx)
+	if err != nil {
+		return allAccountsResponse{}, err
+	}
 	hero, err := a.calculateAllAccounts(ctx, views)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return allAccountsResponse{}, err
 	}
 	result, latest, today := hero.result, hero.latest, hero.today
 
@@ -125,7 +132,7 @@ func (a *api) allAccountsSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.Accounts = append(resp.Accounts, dto)
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return resp, nil
 }
 
 // allAccountsHero is the view of all Accounts in PLN, with the Exchange Rates that it comes from.

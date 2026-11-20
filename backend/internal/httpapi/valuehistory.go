@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -33,6 +34,8 @@ type valueHistoryBody struct {
 	// PriceWarnings are the Price Warnings of the Instruments, also of the sold ones. The points do not change
 	// when a warning exists.
 	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
+	// points are the points of Points with the amounts as decimals. The Assistant calculates with them.
+	points []valuehistory.Point
 }
 
 // valuePointResponse is the state of the Account at the end of one calendar day.
@@ -74,36 +77,41 @@ type valuedAtCostResponse struct {
 // accountValueHistory returns the Value History and the Time-Weighted Returns of the Account.
 // It calculates them on each request and stores nothing.
 func (a *api) accountValueHistory(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	id, ok := accountID(w, r)
 	if !ok {
 		return
 	}
-	acc, err := a.store.Account(ctx, id)
+	acc, err := a.store.Account(r.Context(), id)
 	if err != nil {
 		a.writeAccountError(w, r, err)
 		return
 	}
-	in, err := a.readHeroInput(ctx, acc)
+	body, err := a.accountValueHistoryBody(r.Context(), acc)
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
+	}
+	writeJSON(w, http.StatusOK, valueHistoryResponse{AccountID: acc.ID, valueHistoryBody: body})
+}
+
+// accountValueHistoryBody calculates the Value History and the Time-Weighted Returns of the Account.
+func (a *api) accountValueHistoryBody(ctx context.Context, acc store.Account) (valueHistoryBody, error) {
+	in, err := a.readHeroInput(ctx, acc)
+	if err != nil {
+		return valueHistoryBody{}, err
 	}
 	prices, err := a.store.PriceHistory(ctx)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return valueHistoryBody{}, err
 	}
 	rates, err := a.store.ExchangeRateSeries(ctx)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return valueHistoryBody{}, err
 	}
 
 	warnings, err := a.readPriceWarnings(ctx, in.instruments, prices)
 	if err != nil {
-		a.writeInternalError(w, r, err)
-		return
+		return valueHistoryBody{}, err
 	}
 
 	history, err := valuehistory.Calculate(valuehistory.Input{
@@ -112,13 +120,12 @@ func (a *api) accountValueHistory(w http.ResponseWriter, r *http.Request) {
 		ExchangeRates: rateSeries(rates),
 	})
 	if err != nil {
-		a.writeInternalError(w, r, fmt.Errorf("calculate the value history of account %d: %w", acc.ID, err))
-		return
+		return valueHistoryBody{}, fmt.Errorf("calculate the value history of account %d: %w", acc.ID, err)
 	}
 
 	body := newValueHistoryBody(acc.Currency, history.Points, history.ValuedAtCost)
 	body.PriceWarnings = warnings.forLedger(in.ledger)
-	writeJSON(w, http.StatusOK, valueHistoryResponse{AccountID: acc.ID, valueHistoryBody: body})
+	return body, nil
 }
 
 // newValueHistoryBody returns the body of the points, with the Time-Weighted Return of each period.
@@ -128,6 +135,7 @@ func newValueHistoryBody(currency string, points []valuehistory.Point, valuedAtC
 		Points:        make([]valuePointResponse, 0, len(points)),
 		ValuedAtCost:  make([]valuedAtCostResponse, 0, len(valuedAtCost)),
 		PriceWarnings: []priceWarningResponse{},
+		points:        points,
 	}
 	days := make([]returns.DayValue, 0, len(points))
 	for _, p := range points {
