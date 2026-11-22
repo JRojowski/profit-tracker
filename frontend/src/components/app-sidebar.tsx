@@ -56,11 +56,16 @@ export function AppSidebar() {
           icon: BriefcaseIcon,
           label: "Holdings",
         },
-        {
-          to: paths.closedPositions(account.id),
-          icon: ReceiptIcon,
-          label: "Closed Positions",
-        },
+        // An Account with no Lots, as at Kraken, has no Closed Positions. The page is not in the sidebar.
+        ...(account.provider === "kraken"
+          ? []
+          : [
+              {
+                to: paths.closedPositions(account.id),
+                icon: ReceiptIcon,
+                label: "Closed Positions",
+              },
+            ]),
         {
           to: paths.benchmarks(account.id),
           icon: ScaleIcon,

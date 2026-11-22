@@ -31,17 +31,25 @@ function writeStorage(key: string, text: string | null) {
 }
 
 // useTableView owns the column order and the sorting of one table and keeps them in localStorage under the key.
-// It reads the storage once, on mount. It writes the storage only after a change of the user, never on mount.
+// It reads the storage on mount and again when the key changes. It writes the storage only after a change of the user.
 // A stored value that does not agree with the rules gives the default view and stays in the storage until the first change.
 // The default view is not stored: a change that gives the default view removes the key.
 // props goes to the table. isDefault tells if the view is the default view. reset gives the default view.
 export function useTableView(storageKey: string, rules: TableViewRules) {
-  const [view, setView] = useState<TableView>(() =>
-    parseStoredView(readStorage(storageKey), rules)
-  )
+  const [state, setState] = useState<{ key: string; view: TableView }>(() => ({
+    key: storageKey,
+    view: parseStoredView(readStorage(storageKey), rules),
+  }))
+  let view = state.view
+  // A page can stay mounted when the Account changes, and the new Account can use another key.
+  // Then the hook reads the view of the new key during the render.
+  if (state.key !== storageKey) {
+    view = parseStoredView(readStorage(storageKey), rules)
+    setState({ key: storageKey, view })
+  }
 
   function change(next: TableView) {
-    setView(next)
+    setState({ key: storageKey, view: next })
     writeStorage(
       storageKey,
       isDefaultTableView(next, rules) ? null : serializeView(next)

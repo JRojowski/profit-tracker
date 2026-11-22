@@ -11,7 +11,7 @@ import {
 } from "@/components/price-warnings"
 import { Badge } from "@/components/ui/badge"
 import { useIsMobile } from "@/hooks/use-mobile"
-import type { Holding } from "@/lib/api"
+import type { Holding, Provider } from "@/lib/api"
 import { percentOf, sumDecimals } from "@/lib/decimal"
 import {
   amountSign,
@@ -39,6 +39,8 @@ type HoldingsTableProps = {
   // columns come from holdingColumns. The owner builds them once, for the table and for the view rules.
   columns: DataTableColumn<Holding>[]
   currency: string
+  // showAverageCost adds the Average Cost to the rows of the narrow list. It is true for a Kraken Account.
+  showAverageCost: boolean
   // view is the column order and the sorting, which the owner keeps with useTableView.
   view: TableViewProps
   // onOpenOverview opens the Instrument Overview of a Holding. A row of the wide table runs it.
@@ -46,7 +48,15 @@ type HoldingsTableProps = {
 }
 
 // HOLDINGS_VIEW_STORAGE_KEY is the localStorage key of the column order and the sorting of this table.
-export const HOLDINGS_VIEW_STORAGE_KEY = "profit-tracker:table:holdings"
+const HOLDINGS_VIEW_STORAGE_KEY = "profit-tracker:table:holdings"
+
+// holdingsViewStorageKey gives the storage key of the table view for a Provider.
+// A Kraken Account has the extra Average Cost column, so its view has its own key and keeps the XTB view intact.
+export function holdingsViewStorageKey(provider: Provider): string {
+  return provider === "kraken"
+    ? `${HOLDINGS_VIEW_STORAGE_KEY}:kraken`
+    : HOLDINGS_VIEW_STORAGE_KEY
+}
 
 // FIXED_COLUMN_IDS are the leading columns that the user cannot move.
 const FIXED_COLUMN_IDS = ["instrument"]
@@ -66,6 +76,7 @@ export function HoldingsTable({
   holdings,
   columns,
   currency,
+  showAverageCost,
   view,
   onOpenOverview,
 }: HoldingsTableProps) {
@@ -95,6 +106,7 @@ export function HoldingsTable({
           totals={totals}
           sortOptions={columns.filter((column) => column.sortValue)}
           currency={currency}
+          showAverageCost={showAverageCost}
           onOpenOverview={onOpenOverview}
           sorting={sorting}
           onSortingChange={onSortingChange}
@@ -116,10 +128,24 @@ export function HoldingsTable({
 
 // holdingColumns gives the columns of the wide table. Each sortable column has its own sortValue.
 // The select control of the cards reads the sortable columns from here, so a new column needs one edit.
+// An Account with the Provider "kraken" has no Lots. Its table has the Average Cost column after the volume.
 export function holdingColumns(
   currency: string,
+  provider: Provider,
   onPriceSourceChanged: () => void
 ): DataTableColumn<Holding>[] {
+  const averageCost: DataTableColumn<Holding>[] =
+    provider === "kraken"
+      ? [
+          {
+            id: "averageCost",
+            header: "Average Cost",
+            meta: { align: "right" },
+            sortValue: (holding) => decimalSortValue(holding.averageCost),
+            cell: ({ row }) => formatAmount(row.original.averageCost, currency),
+          },
+        ]
+      : []
   return [
     {
       id: "instrument",
@@ -158,6 +184,7 @@ export function holdingColumns(
       sortValue: (holding) => decimalSortValue(holding.volume),
       cell: ({ row }) => formatVolume(row.original.volume),
     },
+    ...averageCost,
     {
       id: "cost",
       header: "Cost",
@@ -344,6 +371,7 @@ function HoldingRows({
   totals,
   sortOptions,
   currency,
+  showAverageCost,
   onOpenOverview,
   sorting,
   onSortingChange,
@@ -352,6 +380,7 @@ function HoldingRows({
   totals: HoldingTotals
   sortOptions: DataTableColumn<Holding>[]
   currency: string
+  showAverageCost: boolean
   onOpenOverview: (ticker: string) => void
 }) {
   return (
@@ -377,15 +406,23 @@ function HoldingRows({
                   )}
                 </span>
                 {holding.priceWarnings.length > 0 && <PriceWarningBadge />}
-                <span className="num text-xs text-muted-foreground">
-                  {formatVolume(holding.volume)} ×{" "}
-                  {holding.price !== null
-                    ? formatAmount(
-                        holding.price,
-                        holding.quoteCurrency ?? currency
-                      )
-                    : "—"}
+                {/* A long crypto volume can push the price to a second line. The line never runs under the value. */}
+                <span className="font-mono text-xs text-muted-foreground">
+                  <span className="num">{formatVolume(holding.volume)} ×</span>{" "}
+                  <span className="num">
+                    {holding.price !== null
+                      ? formatAmount(
+                          holding.price,
+                          holding.quoteCurrency ?? currency
+                        )
+                      : "—"}
+                  </span>
                 </span>
+                {showAverageCost && (
+                  <span className="num text-xs text-muted-foreground">
+                    Average Cost {formatAmount(holding.averageCost, currency)}
+                  </span>
+                )}
                 <span className="sr-only">Open the Instrument Overview.</span>
               </span>
               <span className="flex shrink-0 flex-col items-end gap-1">
