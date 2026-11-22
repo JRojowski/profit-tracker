@@ -48,7 +48,7 @@ const benchmarkStyles: Record<string, LineStyle> = {
   sp500: { color: "var(--chart-4)", ink: "var(--chart-4-foreground)" },
   wig20tr: { color: "var(--chart-5)", ink: "var(--chart-5-foreground)" },
   mwig40tr: { color: "var(--chart-8)", ink: "var(--chart-8-foreground)" },
-  world: { color: "var(--chart-3)", ink: "var(--chart-3-foreground)" },
+  world: { color: "var(--chart-2)", ink: "var(--chart-2-foreground)" },
   gold: { color: "var(--chart-7)", ink: "var(--chart-7-foreground)" },
 }
 const otherStyle = benchmarkStyles.world
