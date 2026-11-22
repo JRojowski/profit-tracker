@@ -11,6 +11,7 @@ import type {
   Allocation,
   BenchmarkReturn,
   AllocationPart,
+  BenchmarkPoint,
   ClosedPosition,
   Holding,
   HistoryPeriod,
@@ -525,8 +526,41 @@ const allHistory: AllAccountsValueHistory = {
   priceWarnings: [priceMismatch],
 }
 
+// returnSeries gives a smooth daily series of cumulative returns from "0" to the final return, one point for each day.
+// The last point has the exact text of the final return. The wave makes the lines differ.
+function returnSeries(
+  from: string,
+  to: string,
+  final: string,
+  wave: number
+): BenchmarkPoint[] {
+  const days: string[] = []
+  const end = Date.parse(to)
+  for (let time = Date.parse(from); time <= end; time += 86_400_000) {
+    days.push(new Date(time).toISOString().slice(0, 10))
+  }
+  const last = days.length - 1
+  return days.map((date, index) => {
+    const t = index / last
+    const value =
+      index === 0
+        ? "0"
+        : index === last
+          ? final
+          : (
+              Number(final) * t ** 1.3 +
+              wave * Math.sin(index / 30) * Math.sin(Math.PI * t)
+            ).toFixed(2)
+    return { date, return: value }
+  })
+}
+
 // benchmarkRows gives the five Benchmarks for a user return. The last Benchmark has no price for the whole period.
-function benchmarkRows(user: number): BenchmarkReturn[] {
+function benchmarkRows(
+  user: number,
+  from: string,
+  to: string
+): BenchmarkReturn[] {
   const rows: [string, string, string, string, string, number | null][] = [
     [
       "sp500",
@@ -562,7 +596,7 @@ function benchmarkRows(user: number): BenchmarkReturn[] {
     ],
     ["gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD", null],
   ]
-  return rows.map(([id, name, fund, ticker, quoteCurrency, value]) => ({
+  return rows.map(([id, name, fund, ticker, quoteCurrency, value], index) => ({
     id,
     name,
     fund,
@@ -571,12 +605,18 @@ function benchmarkRows(user: number): BenchmarkReturn[] {
     status: value === null ? "noFullPeriod" : "available",
     return: value === null ? null : value.toFixed(2),
     difference: value === null ? null : (user - value).toFixed(2),
+    series:
+      value === null
+        ? []
+        : returnSeries(from, to, value.toFixed(2), 2 + index * 1.5),
   }))
 }
 
 // accountBenchmarks gives the Benchmarks of an Account for the period All, from the Time-Weighted Return of its Value History.
 function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
   const user = history.timeWeightedReturn.All
+  const from = history.periodStarts.All ?? ""
+  const to = history.points.at(-1)?.date ?? ""
   return {
     accountId: history.accountId,
     period: "All",
@@ -585,8 +625,11 @@ function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
     warnings: [],
     baseDay: history.periodStarts.All,
     lastDay: history.points.at(-1)?.date ?? null,
-    user: { return: user },
-    benchmarks: benchmarkRows(Number(user)),
+    user: {
+      return: user,
+      series: user === null ? [] : returnSeries(from, to, user, 3),
+    },
+    benchmarks: benchmarkRows(Number(user), from, to),
   }
 }
 
@@ -600,7 +643,7 @@ function emptyBenchmarks(accountId: number): AccountBenchmarks {
     warnings: [],
     baseDay: null,
     lastDay: null,
-    user: { return: null },
+    user: { return: null, series: [] },
     benchmarks: [],
   }
 }

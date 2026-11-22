@@ -60,7 +60,7 @@ const pageCases: PageCase[] = [
     name: "benchmarks",
     url: "/accounts/1/benchmarks",
     empty: "emptyAccounts",
-    charts: false,
+    charts: true,
   },
   {
     name: "ikze",

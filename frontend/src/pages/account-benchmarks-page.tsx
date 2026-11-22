@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { useSearchParams } from "react-router"
 
+import { BenchmarkChart } from "@/components/benchmark-chart"
 import { LoadedView } from "@/components/loaded-view"
 import { PeriodPills } from "@/components/period-pills"
 import { ResultBadge } from "@/components/result-badge"
@@ -64,7 +65,10 @@ export function AccountBenchmarksPage() {
           >
             {(data) =>
               data.available ? (
-                <BenchmarkTable data={data} />
+                <>
+                  <BenchmarkChart data={data} />
+                  <BenchmarkTable data={data} />
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   The Account has no Value History. The tool cannot compare it
