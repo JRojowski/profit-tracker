@@ -560,7 +560,7 @@ function returnSeries(
   })
 }
 
-// benchmarkRows gives the five Benchmarks for a user return. The last Benchmark has no price for the whole period.
+// benchmarkRows gives the six Benchmarks for a user return. Gold has no price for the whole period.
 function benchmarkRows(
   user: number,
   from: string,
@@ -600,6 +600,7 @@ function benchmarkRows(
       38.7,
     ],
     ["gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD", null],
+    ["bitcoin", "Bitcoin", "Bitcoin spot price", "BTC-USD", "USD", 112.4],
   ]
   return rows.map(([id, name, fund, ticker, quoteCurrency, value], index) => ({
     id,

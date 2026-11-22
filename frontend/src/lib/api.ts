@@ -811,7 +811,7 @@ export type BenchmarkPoint = { date: string; return: string }
 export type BenchmarkReturn = {
   id: string
   name: string
-  // fund is the name of the ETF or ETC that represents the Benchmark.
+  // fund names what represents the Benchmark: an ETF or ETC, or the spot price of a crypto asset.
   fund: string
   ticker: string
   quoteCurrency: string
