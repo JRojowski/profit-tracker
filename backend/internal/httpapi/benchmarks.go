@@ -25,7 +25,7 @@ type benchmarksBody struct {
 	// Available is false when the Time-Weighted Return of the period does not exist. Then the days and the return
 	// of the user are nil, and Benchmarks is empty.
 	Available bool `json:"available"`
-	// Warnings are always empty for one Account.
+	// Warnings are empty for one Account. For all Accounts they are the warnings of the Value History.
 	Warnings []string `json:"warnings"`
 	// BaseDay and LastDay are the days of the Time-Weighted Return of the period, as YYYY-MM-DD.
 	BaseDay *string            `json:"baseDay"`
@@ -75,9 +75,8 @@ func (a *api) accountBenchmarks(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	period := r.URL.Query().Get("period")
-	if _, ok := periods[period]; !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown period %q, use 1M, 3M, YTD, 1Y or All", period))
+	period, ok := benchmarkPeriod(w, r)
+	if !ok {
 		return
 	}
 	acc, err := a.store.Account(r.Context(), id)
@@ -96,6 +95,17 @@ func (a *api) accountBenchmarks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, benchmarksResponse{AccountID: acc.ID, benchmarksBody: body})
+}
+
+// benchmarkPeriod returns the query parameter "period". A missing or unknown period is a client error.
+// It writes the error and returns false in that case.
+func benchmarkPeriod(w http.ResponseWriter, r *http.Request) (string, bool) {
+	period := r.URL.Query().Get("period")
+	if _, ok := periods[period]; !ok {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown period %q, use 1M, 3M, YTD, 1Y or All", period))
+		return "", false
+	}
+	return period, true
 }
 
 // benchmarksBody returns the comparison of the Value History points with each Benchmark in the period.
