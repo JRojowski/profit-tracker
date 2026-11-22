@@ -314,7 +314,7 @@ func TestAllAccounts_NoAccounts_ZeroTotalsAndNoRows(t *testing.T) {
 	assert.JSONEq(t, `{
 		"available": true, "value": "0.00", "cash": "0.00", "netDeposits": "0.00", "totalResult": "0.00",
 		"realizedProfit": "0.00", "unrealizedProfit": "0.00", "netDividends": "0.00", "netInterest": "0.00",
-		"fees": "0.00", "currencyResult": "0.00", "priceDate": null, "exchangeRateDate": null,
+		"fees": "0.00", "rewards": "0.00", "currencyResult": "0.00", "priceDate": null, "exchangeRateDate": null,
 		"stalePrices": false, "staleRates": false, "unpricedHoldings": 0, "warnings": [], "accounts": [],
 		"simpleReturn": null, "simpleReturnNote": "The Net Deposits are 0 or less.",
 		"annualReturn": null, "annualReturnNote": "There are no deposits."

@@ -58,6 +58,7 @@ export function AllAccountsPage() {
           summary={data}
           allocation={allocation}
           history={history}
+          hasKraken={accounts.some((a) => a.provider === "kraken")}
         />
       )}
     </LoadedView>
@@ -65,14 +66,17 @@ export function AllAccountsPage() {
 }
 
 // AllAccountsOverview shows the totals of all Accounts in PLN, the Value History, the parts of the Total Result and one row for each Account.
+// When an Account has the Provider "kraken", the parts also have the Rewards part (ADR 0009).
 function AllAccountsOverview({
   summary,
   allocation,
   history,
+  hasKraken,
 }: {
   summary: AllAccountsSummary
   allocation: Loaded<Allocation>
   history: Loaded<AllAccountsValueHistory>
+  hasKraken: boolean
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-6">
@@ -114,6 +118,7 @@ function AllAccountsOverview({
           { label: "Unrealized Profit", amount: summary.unrealizedProfit },
           { label: "Net dividends", amount: summary.netDividends },
           { label: "Net interest", amount: summary.netInterest },
+          ...(hasKraken ? [{ label: "Rewards", amount: summary.rewards }] : []),
           { label: "Fees", amount: summary.fees },
           { label: "Currency Result", amount: summary.currencyResult },
         ]}
