@@ -105,7 +105,7 @@ type api struct {
 type errorResponse struct {
 	Error string `json:"error"`
 	// Code is a stable name of the case, so that the frontend can tell the cases apart. Only the errors of the
-	// Assistant and the error "unsupported-entries" of an Import have a code.
+	// Assistant and the errors "unsupported-entries" and "kraken-currency-not-eur" of an Import have a code.
 	Code string `json:"code,omitempty"`
 	// UnsupportedEntries are the entries of a Kraken export that the tool does not support.
 	// Only the error with the code "unsupported-entries" has them.

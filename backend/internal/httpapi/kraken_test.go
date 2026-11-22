@@ -95,6 +95,25 @@ func TestKrakenImport_NewFile_MakesTheKrakenAccount(t *testing.T) {
 	}}, accounts)
 }
 
+func TestKrakenImport_ConfirmWithCurrencyNotEUR_ReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	preview := srv.previewKraken(t, krakenExport())
+
+	status, body := srv.postJSON(t, fmt.Sprintf("/api/imports/%d/confirm", preview.ID), newAccountBody("Kraken", "regular", "USD"))
+
+	assert.Equal(t, http.StatusBadRequest, status)
+	var got struct {
+		Error string `json:"error"`
+		Code  string `json:"code"`
+	}
+	decode(t, body, &got)
+	assert.Equal(t, "kraken-currency-not-eur", got.Code)
+	assert.Contains(t, got.Error, `"USD"`)
+	assert.Contains(t, got.Error, "EUR")
+	assert.Empty(t, srv.imports(t), "nothing is saved")
+}
+
 func TestKrakenImport_DepositsAndPurchases_GiveCashAndHoldingAtAverageCost(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
