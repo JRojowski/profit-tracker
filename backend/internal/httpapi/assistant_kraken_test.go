@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
+	"github.com/jrojowski/profit-tracker/backend/internal/xtb/xtbtest"
 )
 
 // assistantKrakenHolding is the part of a get_holdings Holding that the Kraken tests read.
@@ -275,4 +276,47 @@ func TestAskAssistant_XTBAndKrakenAccounts_InstructionsNameBothProviders(t *test
 	} {
 		assert.Contains(t, instructions, want)
 	}
+}
+
+// TestAskAssistant_ResultsOfAllAccountsWithKrakenAccount_GivesTheRewardsInPLN checks get_results for all Accounts
+// with an XTB Account in PLN and the Kraken Account, with the values of startXTBAndKrakenServer.
+//
+//	Rewards:      0.0682 EUR × 4.25 = 0.28985 PLN → 0.29
+//	Total Result: 60.440525 + 0.28985 + 10.00 = 70.730375 PLN → 70.73
+func TestAskAssistant_ResultsOfAllAccountsWithKrakenAccount_GivesTheRewardsInPLN(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.setHistory(t, "BTC-EUR", "EUR", "2026-03-10=62000")
+	provider.set(t, "BTC-EUR", "70000", "EUR", "2026-10-22")
+	srv, model := startAssistantServer(t, provider)
+	srv.rateProvider.set(t, "EUR", "2026-02-27", "4.20")
+	srv.rateProvider.set(t, "EUR", "2026-03-02", "4.30")
+	srv.rateProvider.set(t, "EUR", "2026-10-22", "4.25")
+	srv.importAccount(t, xtbtest.Export{AccountNumber: "59000001", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		cashDeposit("9101", "1000.00", krakenTime(2)),
+	}}, "XTB PLN")
+	srv.importKraken(t, krakenExportWithRewards(krakenReward("ERN-0001", krakenTime(10), "0.00000110")))
+	srv.refreshHistory(t)
+
+	_, content := askWithStep(t, srv, model, step("get_results", `{}`))
+
+	var got map[string]json.RawMessage
+	decode(t, content, &got)
+	assert.JSONEq(t, `"0.29"`, string(got["rewards"]))
+	assert.JSONEq(t, `"70.73"`, string(got["totalResult"]))
+	assert.NotContains(t, got, "feeSum", "the sum of the fees stays a value of the Kraken Account in EUR")
+}
+
+// TestAskAssistant_ResultsOfAllAccountsWithNoKrakenAccount_HasNoRewards checks that get_results for all XTB
+// Accounts gives the same result as before.
+func TestAskAssistant_ResultsOfAllAccountsWithNoKrakenAccount_HasNoRewards(t *testing.T) {
+	t.Parallel()
+	srv, model := startAssistantServer(t, newFakeProvider())
+	srv.importAccount(t, pricedExport(), "XTB USD")
+
+	_, content := askWithStep(t, srv, model, step("get_results", `{}`))
+
+	var got map[string]json.RawMessage
+	decode(t, content, &got)
+	assert.NotContains(t, got, "rewards")
 }

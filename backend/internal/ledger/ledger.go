@@ -659,7 +659,7 @@ func SumRewardsAndFees(l Ledger, f IncomeFilter) RewardsAndFees {
 		case TypeCryptoPurchase:
 			sum.FeeSum = sum.FeeSum.Add(l.feeValue(op))
 		case TypeReward:
-			value, ok := l.rewardValue(op)
+			value, ok := l.RewardValue(op)
 			if !ok {
 				sum.Rewards = decimal.NullDecimal{}
 				continue
