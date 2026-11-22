@@ -1,13 +1,17 @@
 # Profit Tracker
 
-A personal tool that tracks investments held at a broker. The user imports broker exports, and the tool shows the state and the results of the investments.
+A personal tool that tracks investments held at a broker or a crypto exchange. The user imports the exports of these providers, and the tool shows the state and the results of the investments.
 
 ## Language
 
 ### Accounts and records
 
+**Provider**:
+The company that holds an Account, for example XTB (a broker) or Kraken (a crypto exchange).
+_Avoid_: Broker (for Kraken), exchange, platform
+
 **Account**:
-One broker account with one base currency, for example the XTB USD account or the XTB IKZE account.
+One account at a Provider with one base currency, for example the XTB USD account, the XTB IKZE account or the Kraken account (base currency EUR).
 _Avoid_: Wallet, portfolio, konto
 
 **Cash Operation**:
@@ -29,8 +33,8 @@ _Avoid_: Contributions, invested capital
 ### Holdings
 
 **Instrument**:
-One security that the broker sells, for example a stock or an ETF, identified by its broker ticker.
-_Avoid_: Asset, symbol, ticker
+One security or crypto asset that a Provider sells, for example a stock, an ETF or Bitcoin, identified by the Provider's ticker or asset code.
+_Avoid_: Asset, symbol, ticker, coin
 
 **Fill**:
 One purchase Cash Operation that executes a part of a buy order. An order for a fractional volume has two or more Fills.
@@ -45,8 +49,12 @@ One closed part of one Lot. The name is the name that the XTB export uses for th
 _Avoid_: Sale, sell transaction, trade
 
 **Holding**:
-All open Lots of one Instrument on one Account, taken together.
+All open units of one Instrument on one Account, taken together. On an XTB Account these units are the open Lots. A Kraken Account has no Lots.
 _Avoid_: Position, pozycja, asset
+
+**Average Cost**:
+The cost of one unit of a Holding on an Account with no Lots: the cost of all units that the user bought, divided by their quantity, weighted by quantity. A sale does not change it.
+_Avoid_: Cost basis, break-even price, średnia
 
 **Quote Currency**:
 The currency in which the price source gives the price of an Instrument. It can be different from the Account currency.
@@ -85,8 +93,12 @@ The current value of the open part of a Lot minus the cost of that part, in the 
 _Avoid_: Paper profit, open P/L
 
 **Total Result**:
-The current value of an Account (cash and Holdings) minus its Net Deposits. It is equal to the sum of Realized Profit, Unrealized Profit, net dividends, net interest and fees. The Total Result of a period is the change of the Total Result from the end of the day before the period to the end of its last day.
+The current value of an Account (cash and Holdings) minus its Net Deposits. It is equal to the sum of Realized Profit, Unrealized Profit, net dividends, net interest, Rewards and fees. The Total Result of a period is the change of the Total Result from the end of the day before the period to the end of its last day.
 _Avoid_: Total P/L, return, wynik
+
+**Reward**:
+An amount of a crypto asset that a Provider pays to the user for a balance that the user holds, for example the weekly Kraken Auto Earn payment in BTC. It is income, like a dividend.
+_Avoid_: Staking, interest, yield, earn
 
 **Simple Return**:
 The Total Result divided by the Net Deposits, as a percentage.
@@ -105,7 +117,7 @@ The rate of return in a period that the Net Deposits flows do not change. It mea
 _Avoid_: TWR, performance
 
 **Benchmark**:
-A market index or commodity whose return in a period the tool compares with the Time-Weighted Return of the user. An accumulating ETF or ETC represents each Benchmark (ADR 0008). A Benchmark is not an Instrument: the user does not hold it, and it has no broker ticker, no Lots and no Price Warning.
+A market index, a commodity or a crypto asset whose return in a period the tool compares with the Time-Weighted Return of the user. An accumulating ETF or ETC represents each market index and each commodity. The price of the asset itself represents a crypto asset (ADR 0008). A Benchmark is not an Instrument, also when the user holds the same asset as an Instrument. A Benchmark has no Provider ticker, no Lots, no Fills and no Price Warning.
 _Avoid_: Index, reference, comparison
 
 **Benchmark Return**:

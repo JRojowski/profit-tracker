@@ -17,6 +17,7 @@ The tool compares the Time-Weighted Return of the user with the Benchmark Return
 4. The tool stores the closes of a Benchmark apart from the prices of the Instruments, with their own record of the stored date range.
 5. The tool does not store a close in a currency that is not the Quote Currency of the Benchmark. It does not guess a conversion.
 6. The list of the Benchmarks is in one place in the backend: `backend/internal/benchmark`.
+7. A crypto asset Benchmark uses the price of the asset itself, not a fund. Rule 1 does not apply to it. See "Amendment: crypto asset Benchmarks".
 
 ## The list
 
@@ -31,6 +32,24 @@ The ticker check on 2026-11-22 used the chart endpoint of Yahoo Finance. Each fu
 | Gold | iShares Physical Gold ETC | `IGLN.L` | USD | 2011-04-08 |
 
 mWIG40TR has the shortest history. For a period that starts before its first close, it has no Benchmark Return. The tool does not shorten the period for one Benchmark.
+
+## Amendment: crypto asset Benchmarks
+
+The user added Bitcoin as a Benchmark on 2026-11-22. The Bitcoin Benchmark shows the result of a plan that puts all deposits into Bitcoin.
+
+A crypto asset pays no dividends. Thus its price is equal to its total return, and the reason for rule 1 does not apply. The price source gives a daily price of the asset itself. A fund adds a yearly cost and has a shorter history. Thus the price of the asset represents a crypto asset Benchmark.
+
+| Benchmark | Price ticker | Quote Currency | First close |
+|---|---|---|---|
+| Bitcoin | `BTC-USD` | USD | 2014-09-17 |
+
+The ticker check on 2026-11-22 used the chart endpoint of Yahoo Finance. The ticker has no dividend events and a currency in a full unit.
+
+The Bitcoin Benchmark is not the Bitcoin Instrument on the Kraken Account. The two have different price tickers and different stored prices.
+
+A crypto asset has a price on each day of the week. Rules 2 to 5 apply with no change.
+
+We rejected a Bitcoin ETP, for example a physical Bitcoin fund on a European exchange. It has a yearly cost and a shorter history, and it gives no advantage.
 
 ## Considered options
 
