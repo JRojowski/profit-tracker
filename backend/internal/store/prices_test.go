@@ -17,7 +17,7 @@ func TestOpen_InstrumentsFromOlderSchema_GetQuoteCurrencyFromTickerSuffix(t *tes
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "profit-tracker.db")
 	// The database of a binary before the prices: migration 5 is the last one, and the Instruments exist.
-	// A later migration changes the accounts table, so the table must exist too.
+	// Later migrations change the accounts table and the cash_operations table, so the tables must exist too.
 	raw, err := sql.Open("sqlite", path)
 	require.NoError(t, err)
 	_, err = raw.ExecContext(t.Context(), `
@@ -33,6 +33,9 @@ func TestOpen_InstrumentsFromOlderSchema_GetQuoteCurrencyFromTickerSuffix(t *tes
 			ticker   TEXT    NOT NULL UNIQUE,
 			name     TEXT    NOT NULL,
 			category TEXT    NOT NULL
+		) STRICT;
+		CREATE TABLE cash_operations (
+			id INTEGER PRIMARY KEY
 		) STRICT;
 		INSERT INTO instruments (ticker, name, category) VALUES
 			('AAPL.US', 'Apple', 'STOCK'), ('VUSA.UK', 'Vanguard', 'ETF'), ('PKO.PL', 'PKO', 'STOCK'),

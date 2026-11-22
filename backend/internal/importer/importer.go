@@ -95,7 +95,14 @@ type Preview struct {
 	AccountNumber string
 	// Account is the known Account of the account number. It is nil for a new account number.
 	Account *store.Account
-	// SuggestedCurrency is the currency prefix of the file name. It is "" if there is no prefix.
+	// Provider is the Provider of the file, for example ProviderKraken.
+	Provider string
+	// SuggestedName and SuggestedType are the proposed name and type of a new Account, for example "Kraken"
+	// and "regular". They are "" if the file does not tell them, as for an XTB export.
+	SuggestedName string
+	SuggestedType string
+	// SuggestedCurrency is the proposed Account currency: the currency prefix of the XTB file name, or EUR for
+	// a Kraken export. It is "" if the file does not tell it.
 	SuggestedCurrency string
 	// NewCashOperations and SkippedCashOperations do not count the Import Conflicts.
 	NewCashOperations     int
@@ -193,6 +200,9 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 		FileName:              fileName,
 		AccountNumber:         export.AccountNumber,
 		Account:               account,
+		Provider:              export.Provider,
+		SuggestedName:         export.SuggestedName,
+		SuggestedType:         export.SuggestedType,
 		SuggestedCurrency:     export.SuggestedCurrency,
 		NewCashOperations:     c.newCount,
 		SkippedCashOperations: c.skipped,

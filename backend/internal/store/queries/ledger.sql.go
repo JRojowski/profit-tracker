@@ -89,8 +89,8 @@ func (q *Queries) FillLot(ctx context.Context, cashOperationID int64) (string, e
 }
 
 const insertCashOperation = `-- name: InsertCashOperation :one
-INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, import_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, import_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (account_id, xtb_id) DO NOTHING
 RETURNING id
 `
@@ -106,6 +106,7 @@ type InsertCashOperationParams struct {
 	PositionID   sql.NullString
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
+	Fee          decimal.NullDecimal
 	ImportID     int64
 }
 
@@ -121,6 +122,7 @@ func (q *Queries) InsertCashOperation(ctx context.Context, arg InsertCashOperati
 		arg.PositionID,
 		arg.Volume,
 		arg.Price,
+		arg.Fee,
 		arg.ImportID,
 	)
 	var id int64
@@ -400,7 +402,7 @@ func (q *Queries) TransfersOfOtherAccounts(ctx context.Context, arg TransfersOfO
 
 const updateCashOperation = `-- name: UpdateCashOperation :exec
 UPDATE cash_operations
-SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, import_id = ?
+SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, import_id = ?
 WHERE id = ?
 `
 
@@ -413,6 +415,7 @@ type UpdateCashOperationParams struct {
 	PositionID   sql.NullString
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
+	Fee          decimal.NullDecimal
 	ImportID     int64
 	ID           int64
 }
@@ -427,6 +430,7 @@ func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperati
 		arg.PositionID,
 		arg.Volume,
 		arg.Price,
+		arg.Fee,
 		arg.ImportID,
 		arg.ID,
 	)
@@ -434,17 +438,19 @@ func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperati
 }
 
 const upsertInstrument = `-- name: UpsertInstrument :one
-INSERT INTO instruments (ticker, name, category, quote_currency)
-VALUES (?, ?, ?, ?)
+INSERT INTO instruments (ticker, name, category, quote_currency, default_price_ticker, default_quote_currency)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (ticker) DO UPDATE SET ticker = excluded.ticker
 RETURNING id
 `
 
 type UpsertInstrumentParams struct {
-	Ticker        string
-	Name          string
-	Category      string
-	QuoteCurrency sql.NullString
+	Ticker               string
+	Name                 string
+	Category             string
+	QuoteCurrency        sql.NullString
+	DefaultPriceTicker   sql.NullString
+	DefaultQuoteCurrency sql.NullString
 }
 
 func (q *Queries) UpsertInstrument(ctx context.Context, arg UpsertInstrumentParams) (int64, error) {
@@ -453,6 +459,8 @@ func (q *Queries) UpsertInstrument(ctx context.Context, arg UpsertInstrumentPara
 		arg.Name,
 		arg.Category,
 		arg.QuoteCurrency,
+		arg.DefaultPriceTicker,
+		arg.DefaultQuoteCurrency,
 	)
 	var id int64
 	err := row.Scan(&id)

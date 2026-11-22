@@ -3,6 +3,7 @@ import type { Page, Route } from "@playwright/test"
 import {
   fixtureFor,
   importPreviews,
+  unsupportedEntriesError,
   type ApiFixture,
   type DataSet,
 } from "./fixtures"
@@ -74,6 +75,7 @@ function answer(
 // An answer with an error status that the case does not expect, a script error and a console error make the page fail too.
 // The option holdAccounts keeps the answer of /api/accounts until the promise resolves, to show the loading state.
 // The option preview answers an upload with a preview.
+// The option unsupportedEntries answers an upload with the HTTP 400 error of a Kraken export with unsupported entries.
 // It returns the list of the failures. The test checks that the list is empty.
 export async function installFakeBackend(
   page: Page,
@@ -82,14 +84,20 @@ export async function installFakeBackend(
     holdAccounts?: Promise<void>
     // preview is the answer of an upload.
     preview?: keyof typeof importPreviews
+    unsupportedEntries?: boolean
   } = {}
 ): Promise<string[]> {
   const fixture = fixtureFor(dataSet)
   const failures: string[] = []
   page.on("pageerror", (error) => failures.push(`page error: ${error.message}`))
   page.on("console", (message) => {
-    if (message.type() === "error")
-      failures.push(`console error: ${message.text()}`)
+    if (message.type() !== "error") return
+    // The browser logs the expected HTTP 400 answer of the upload as an error. That error is part of the case.
+    const expected =
+      options.unsupportedEntries &&
+      new URL(message.location().url, "http://127.0.0.1").pathname ===
+        "/api/imports"
+    if (!expected) failures.push(`console error: ${message.text()}`)
   })
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
@@ -104,6 +112,13 @@ export async function installFakeBackend(
       url.pathname === "/api/imports"
     ) {
       return json(route, importPreviews[options.preview], 201)
+    }
+    if (
+      options.unsupportedEntries &&
+      route.request().method() === "POST" &&
+      url.pathname === "/api/imports"
+    ) {
+      return json(route, unsupportedEntriesError, 400)
     }
     const found = answer(fixture, route.request().method(), url.pathname)
     if (found === undefined) {

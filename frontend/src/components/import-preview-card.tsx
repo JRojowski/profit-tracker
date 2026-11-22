@@ -41,8 +41,11 @@ export function ImportPreviewCard({
   onConfirm,
 }: ImportPreviewCardProps) {
   const isNewAccount = preview.account === null
-  const [name, setName] = useState("")
-  const [type, setType] = useState<AccountType>("regular")
+  // The form starts with the values that the file suggests. An XTB export suggests only the currency.
+  const [name, setName] = useState(preview.suggestedName)
+  const [type, setType] = useState<AccountType>(
+    preview.suggestedType || "regular"
+  )
   const [currency, setCurrency] = useState(preview.suggestedCurrency)
   const [submitted, setSubmitted] = useState(false)
 
@@ -152,7 +155,9 @@ export function ImportPreviewCard({
               <div className="flex flex-col gap-1">
                 <FigureLabel>New Account</FigureLabel>
                 <p className="text-sm text-muted-foreground">
-                  The account number is new. Enter the data of the new Account.
+                  {preview.suggestedName
+                    ? "The account number is new. Check the suggested data of the new Account."
+                    : "The account number is new. Enter the data of the new Account."}
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
@@ -206,7 +211,9 @@ export function ImportPreviewCard({
                   />
                   {preview.suggestedCurrency && (
                     <FieldDescription>
-                      Suggested from the file name: {preview.suggestedCurrency}
+                      {preview.provider === "kraken"
+                        ? `Suggested from the file: ${preview.suggestedCurrency}`
+                        : `Suggested from the file name: ${preview.suggestedCurrency}`}
                     </FieldDescription>
                   )}
                   {submitted && currencyError && (

@@ -93,6 +93,12 @@ export type ImportPreview = {
   fileName: string
   accountNumber: string
   account: Account | null
+  // provider is the Provider of the file, for example "kraken".
+  provider: Provider
+  // suggestedName and suggestedType are the proposed values of a new Account, for example "Kraken" and "regular".
+  // They are "" when the file does not tell them, as for an XTB export.
+  suggestedName: string
+  suggestedType: AccountType | ""
   suggestedCurrency: string
   newCashOperations: number
   skippedCashOperations: number
@@ -112,17 +118,35 @@ export type ImportSummary = {
   skippedCashOperations: number
 }
 
+// UnsupportedEntry is one entry of a Kraken export that the tool does not support. The time is RFC 3339 text in UTC.
+// The reason is for example "sale", "withdrawal" or "unknown entry".
+export type UnsupportedEntry = {
+  type: string
+  subtype: string
+  asset: string
+  time: string
+  reason: string
+}
+
 // ApiError holds the error message that the backend returns. The code is the machine-readable code of the
-// error, when the backend gives one, for example "rate_limited".
+// error, when the backend gives one, for example "rate_limited" or "unsupported-entries".
+// The error with the code "unsupported-entries" lists the unsupported entries of a Kraken export.
 export class ApiError extends Error {
   readonly status: number
   readonly code: string | null
+  readonly unsupportedEntries: UnsupportedEntry[]
 
-  constructor(status: number, message: string, code: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    code: string | null = null,
+    unsupportedEntries: UnsupportedEntry[] = []
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    this.unsupportedEntries = unsupportedEntries
   }
 }
 
@@ -135,14 +159,20 @@ async function readJSON<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `HTTP ${response.status}`
     let code: string | null = null
+    let unsupportedEntries: UnsupportedEntry[] = []
     try {
-      const body = (await response.json()) as { error?: string; code?: string }
+      const body = (await response.json()) as {
+        error?: string
+        code?: string
+        unsupportedEntries?: UnsupportedEntry[]
+      }
       if (body.error) message = body.error
       if (body.code) code = body.code
+      if (body.unsupportedEntries) unsupportedEntries = body.unsupportedEntries
     } catch {
       // The body is not JSON. Keep the status message.
     }
-    throw new ApiError(response.status, message, code)
+    throw new ApiError(response.status, message, code, unsupportedEntries)
   }
   return (await response.json()) as T
 }

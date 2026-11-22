@@ -21,6 +21,7 @@ import type {
   ImportSummary,
   InstrumentOverview,
   PriceWarning,
+  UnsupportedEntry,
   ValueHistoryPoint,
 } from "../src/lib/api"
 
@@ -37,6 +38,7 @@ export type DataSet =
   | "benchmarkUnavailable"
   | "noAccounts"
   | "emptyAccounts"
+  | "kraken"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -55,6 +57,16 @@ export const ikzeAccount: Account = {
   type: "IKZE",
   currency: "PLN",
   provider: "xtb",
+}
+
+// krakenAccount is the Account at Kraken. It has no Lots and uses the Average Cost. Only the data set "kraken" has it.
+export const krakenAccount: Account = {
+  id: 3,
+  accountNumber: "kraken-spot",
+  name: "Kraken",
+  type: "regular",
+  currency: "EUR",
+  provider: "kraken",
 }
 
 const priceMismatch: PriceWarning = {
@@ -159,6 +171,29 @@ const delta: Holding = {
   priceWarnings: [],
   priceTicker: "DLT",
   quoteCurrency: "PLN",
+  ...noSource,
+}
+
+// bitcoin is the crypto Holding of the Kraken Account. The volume has 8 decimal places.
+// The Average Cost has more decimal places than the screen shows. cost = volume × averageCost, rounded.
+const bitcoin: Holding = {
+  ticker: "BTC",
+  name: "BTC",
+  volume: "0.03448875",
+  cost: "1999.74",
+  averageCost: "57982.3311204723",
+  price: "92450.00",
+  priceDate: today,
+  exchangeRate: "4.2600",
+  exchangeRateCurrency: "EUR",
+  exchangeRateDate: today,
+  value: "3188.48",
+  unrealizedProfit: "1188.74",
+  unrealizedProfitPercent: "59.44",
+  note: null,
+  priceWarnings: [],
+  priceTicker: "BTC-EUR",
+  quoteCurrency: "EUR",
   ...noSource,
 }
 
@@ -294,6 +329,31 @@ const ikzeSummary: AccountSummary = {
   simpleReturn: "7.39",
   simpleReturnNote: null,
   annualReturn: "3.10",
+  annualReturnNote: null,
+}
+
+// Totals of the Kraken Account: 2500 EUR of Deposits, one Bitcoin Holding and the rest in cash.
+// The fee is in the cost, so the fees part is zero.
+const krakenSummary: AccountSummary = {
+  accountId: 3,
+  currency: "EUR",
+  cash: "500.26",
+  netDeposits: "2500.00",
+  value: "3688.74",
+  totalResult: "1188.74",
+  realizedProfit: "0.00",
+  unrealizedProfit: "1188.74",
+  netDividends: "0.00",
+  netInterest: "0.00",
+  fees: "0.00",
+  priceDate: today,
+  stalePrices: false,
+  exchangeRateDate: today,
+  staleRates: false,
+  unpricedHoldings: 0,
+  simpleReturn: "47.55",
+  simpleReturnNote: null,
+  annualReturn: "21.40",
   annualReturnNote: null,
 }
 
@@ -490,6 +550,22 @@ const ikzeHistory: AccountValueHistory = {
     YTD: "2.80",
     "1Y": "5.10",
     All: "7.20",
+  },
+  periodStarts,
+  valuedAtCost: [],
+  priceWarnings: [],
+}
+
+const krakenHistory: AccountValueHistory = {
+  accountId: 3,
+  currency: "EUR",
+  points: historyPoints(2500, 3688.74, 500, 140),
+  timeWeightedReturn: {
+    "1M": "3.20",
+    "3M": "11.40",
+    YTD: "24.80",
+    "1Y": "38.10",
+    All: "47.90",
   },
   periodStarts,
   valuedAtCost: [],
@@ -798,6 +874,8 @@ const allAllocation = allocationOf(
   "PLN"
 )
 
+const krakenAllocation = allocationOf([bitcoin], "500.26", "EUR")
+
 const ikzeLimit: IkzeLimit = {
   currentYear: 2026,
   rows: [
@@ -952,6 +1030,25 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
+  if (dataSet === "kraken") {
+    // The data set "kraken" is the populated data set with the Kraken Account in addition.
+    const populated = fixtureFor("populated")
+    return {
+      ...populated,
+      accounts: [...populated.accounts, krakenAccount].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      ),
+      summary: { ...populated.summary, 3: krakenSummary },
+      allocation: { ...populated.allocation, 3: krakenAllocation },
+      history: { ...populated.history, 3: krakenHistory },
+      benchmarks: {
+        ...populated.benchmarks,
+        3: accountBenchmarks(krakenHistory),
+      },
+      holdings: { ...populated.holdings, 3: [bitcoin] },
+      closedPositions: { ...populated.closedPositions, 3: [] },
+    }
+  }
   if (
     dataSet === "populated" ||
     dataSet === "nearEqualEnd" ||
@@ -1023,48 +1120,103 @@ const previewOperation = {
 }
 
 // importPreviews are the answers of an upload. "known" is a file of the Main Account with an Import Conflict and a warning.
-// "new" is a file with a new account number.
-export const importPreviews: Record<"known" | "new", ImportPreview> = {
-  known: {
-    id: 3,
-    fileName: "account_10000001_2026.xlsx",
-    accountNumber: "10000001",
-    account: mainAccount,
-    suggestedCurrency: "PLN",
-    newCashOperations: 12,
-    skippedCashOperations: 148,
-    state: "needs-review",
-    conflicts: [
-      {
-        id: 1,
-        kind: "changed-data",
-        xtbId: "900001",
-        existing: previewOperation,
-        new: { ...previewOperation, amount: "1550.00" },
-        check: null,
-        decision: null,
-      },
-    ],
-    warnings: [
-      {
-        kind: "transfer-without-other-side",
-        direction: "out",
-        xtbId: "900002",
-        time: "2026-05-20T10:00:00Z",
-        amount: "-500.00",
-      },
-    ],
+// "new" is a file with a new account number. "kraken" is the first Kraken ledger export, with the suggested Account values.
+export const importPreviews: Record<"known" | "new" | "kraken", ImportPreview> =
+  {
+    known: {
+      id: 3,
+      fileName: "account_10000001_2026.xlsx",
+      accountNumber: "10000001",
+      account: mainAccount,
+      provider: "xtb",
+      suggestedName: "",
+      suggestedType: "",
+      suggestedCurrency: "PLN",
+      newCashOperations: 12,
+      skippedCashOperations: 148,
+      state: "needs-review",
+      conflicts: [
+        {
+          id: 1,
+          kind: "changed-data",
+          xtbId: "900001",
+          existing: previewOperation,
+          new: { ...previewOperation, amount: "1550.00" },
+          check: null,
+          decision: null,
+        },
+      ],
+      warnings: [
+        {
+          kind: "transfer-without-other-side",
+          direction: "out",
+          xtbId: "900002",
+          time: "2026-05-20T10:00:00Z",
+          amount: "-500.00",
+        },
+      ],
+    },
+    new: {
+      id: 4,
+      fileName: "account_10000003_2026.xlsx",
+      accountNumber: "10000003",
+      account: null,
+      provider: "xtb",
+      suggestedName: "",
+      suggestedType: "",
+      suggestedCurrency: "PLN",
+      newCashOperations: 30,
+      skippedCashOperations: 0,
+      state: "preview",
+      conflicts: [],
+      warnings: [],
+    },
+    kraken: {
+      id: 5,
+      fileName: "kraken_spot_ledgers_2026-01-01-2026-06-01.csv",
+      accountNumber: "kraken-spot",
+      account: null,
+      provider: "kraken",
+      suggestedName: "Kraken",
+      suggestedType: "regular",
+      suggestedCurrency: "EUR",
+      newCashOperations: 7,
+      skippedCashOperations: 0,
+      state: "preview",
+      conflicts: [],
+      warnings: [],
+    },
+  }
+
+// unsupportedEntries are the entries of a Kraken export that stop an Import: a sale, a withdrawal and a staking move.
+const unsupportedEntries: UnsupportedEntry[] = [
+  {
+    type: "trade",
+    subtype: "tradespot",
+    asset: "BTC",
+    time: "2026-04-14T08:21:00Z",
+    reason: "sale",
   },
-  new: {
-    id: 4,
-    fileName: "account_10000003_2026.xlsx",
-    accountNumber: "10000003",
-    account: null,
-    suggestedCurrency: "PLN",
-    newCashOperations: 30,
-    skippedCashOperations: 0,
-    state: "preview",
-    conflicts: [],
-    warnings: [],
+  {
+    type: "withdrawal",
+    subtype: "",
+    asset: "BTC",
+    time: "2026-05-02T17:45:12Z",
+    reason: "withdrawal",
   },
+  {
+    type: "earn",
+    subtype: "allocation",
+    asset: "BTC",
+    time: "2026-05-20T06:00:00Z",
+    reason: "unknown entry",
+  },
+]
+
+// unsupportedEntriesError is the body of the HTTP 400 answer to an upload of a Kraken export with unsupported entries.
+export const unsupportedEntriesError = {
+  error:
+    "the export has entries that the tool does not support: sale at 2026-04-14T08:21:00Z; withdrawal at 2026-05-02T17:45:12Z; unknown entry at 2026-05-20T06:00:00Z",
+  code: "unsupported-entries",
+  unsupportedEntries,
 }

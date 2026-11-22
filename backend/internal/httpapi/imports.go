@@ -12,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/importer"
+	"github.com/jrojowski/profit-tracker/backend/internal/kraken"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
@@ -20,13 +21,19 @@ const maxUploadBytes = 32 << 20
 
 // previewResponse is the body of POST /api/imports.
 type previewResponse struct {
-	ID                    int64            `json:"id"`
-	FileName              string           `json:"fileName"`
-	AccountNumber         string           `json:"accountNumber"`
-	Account               *accountResponse `json:"account"`
-	SuggestedCurrency     string           `json:"suggestedCurrency"`
-	NewCashOperations     int              `json:"newCashOperations"`
-	SkippedCashOperations int              `json:"skippedCashOperations"`
+	ID            int64            `json:"id"`
+	FileName      string           `json:"fileName"`
+	AccountNumber string           `json:"accountNumber"`
+	Account       *accountResponse `json:"account"`
+	// Provider is the Provider of the file: "xtb" or "kraken".
+	Provider string `json:"provider"`
+	// SuggestedName and SuggestedType are the proposed name and type of a new Account.
+	// They are "" if the file does not tell them, as for an XTB export.
+	SuggestedName         string `json:"suggestedName"`
+	SuggestedType         string `json:"suggestedType"`
+	SuggestedCurrency     string `json:"suggestedCurrency"`
+	NewCashOperations     int    `json:"newCashOperations"`
+	SkippedCashOperations int    `json:"skippedCashOperations"`
 	// State is "preview", or "needs-review" if there are Import Conflicts.
 	State string `json:"state"`
 	// Conflicts is an empty array, not null, if there are no Import Conflicts.
@@ -137,6 +144,9 @@ func (a *api) previewImport(w http.ResponseWriter, r *http.Request) {
 		ID:                    preview.ID,
 		FileName:              preview.FileName,
 		AccountNumber:         preview.AccountNumber,
+		Provider:              preview.Provider,
+		SuggestedName:         preview.SuggestedName,
+		SuggestedType:         preview.SuggestedType,
 		SuggestedCurrency:     preview.SuggestedCurrency,
 		NewCashOperations:     preview.NewCashOperations,
 		SkippedCashOperations: preview.SkippedCashOperations,
@@ -306,8 +316,16 @@ func nullDecimalText(d decimal.NullDecimal) *string {
 	return &text
 }
 
+// codeUnsupportedEntries is the code of the error for a Kraken export with unsupported entries.
+const codeUnsupportedEntries = "unsupported-entries"
+
 // writeImportError maps an error of the import service to a status.
 func (a *api) writeImportError(w http.ResponseWriter, r *http.Request, err error) {
+	var unsupported *kraken.UnsupportedError
+	if errors.As(err, &unsupported) {
+		writeUnsupportedEntries(w, err.Error(), unsupported.Entries)
+		return
+	}
 	switch {
 	case errors.Is(err, importer.ErrRejected), errors.Is(err, importer.ErrInvalidAccount), errors.Is(err, importer.ErrInvalidDecision):
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -318,6 +336,17 @@ func (a *api) writeImportError(w http.ResponseWriter, r *http.Request, err error
 	default:
 		a.writeInternalError(w, r, err)
 	}
+}
+
+// writeUnsupportedEntries writes the error for a Kraken export with unsupported entries, with the list of the entries.
+func writeUnsupportedEntries(w http.ResponseWriter, message string, entries []kraken.Entry) {
+	resp := errorResponse{Error: message, Code: codeUnsupportedEntries, UnsupportedEntries: make([]unsupportedEntryResponse, 0, len(entries))}
+	for _, e := range entries {
+		resp.UnsupportedEntries = append(resp.UnsupportedEntries, unsupportedEntryResponse{
+			Type: e.Type, Subtype: e.Subtype, Asset: e.Asset, Time: e.Time.UTC().Format(time.RFC3339), Reason: e.Reason,
+		})
+	}
+	writeJSON(w, http.StatusBadRequest, resp)
 }
 
 // writeInternalError logs err and sends a 500 error with no internal detail.

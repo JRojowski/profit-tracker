@@ -60,10 +60,12 @@ export function signColour(sign: Sign): string {
   return ""
 }
 
-// formatVolume shows a decimal volume with all its digits.
+// formatVolume shows a decimal volume with up to 8 decimal places, enough for a crypto quantity such as 0.00000110 BTC.
+// A share volume of an XTB export has fewer decimal places, so it shows with all its digits.
+// The conversion to a float is for display only. Never calculate with the result.
 export function formatVolume(volume: string): string {
   return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 10,
+    maximumFractionDigits: 8,
   }).format(Number(volume))
 }
 
