@@ -63,6 +63,12 @@ const pageCases: PageCase[] = [
     charts: false,
   },
   {
+    name: "all-benchmarks",
+    url: "/accounts/all/benchmarks",
+    empty: "emptyAccounts",
+    charts: false,
+  },
+  {
     name: "ikze",
     url: "/accounts/2/ikze",
     empty: "emptyAccounts",

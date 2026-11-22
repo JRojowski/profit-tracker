@@ -10,6 +10,7 @@ import type {
   AllAccountsValueHistory,
   Allocation,
   BenchmarkReturn,
+  Benchmarks,
   AllocationPart,
   ClosedPosition,
   Holding,
@@ -605,6 +606,30 @@ function emptyBenchmarks(accountId: number): AccountBenchmarks {
   }
 }
 
+// allAccountsBenchmarks gives the Benchmarks of all Accounts in PLN for the period All.
+const allAccountsBenchmarks: Benchmarks = {
+  period: "All",
+  currency: "PLN",
+  available: true,
+  warnings: [],
+  baseDay: allHistory.periodStarts.All,
+  lastDay: allHistory.points.at(-1)?.date ?? null,
+  user: { return: allHistory.timeWeightedReturn.All },
+  benchmarks: benchmarkRows(Number(allHistory.timeWeightedReturn.All)),
+}
+
+// emptyAllBenchmarks is the answer for all Accounts when they have no Value History.
+const emptyAllBenchmarks: Benchmarks = {
+  period: "All",
+  currency: "PLN",
+  available: false,
+  warnings: [],
+  baseDay: null,
+  lastDay: null,
+  user: { return: null },
+  benchmarks: [],
+}
+
 // accountRow is the row of one Account in the summary of all Accounts.
 function accountRow(account: Account, summary: AccountSummary): AllAccountsRow {
   return {
@@ -831,6 +856,7 @@ export type ApiFixture = {
   allocation: Record<number, Allocation>
   history: Record<number, AccountValueHistory>
   benchmarks: Record<number, AccountBenchmarks>
+  allBenchmarks: Benchmarks
   holdings: Record<number, Holding[]>
   closedPositions: Record<number, ClosedPosition[]>
   ikzeLimit: Record<number, IkzeLimit>
@@ -858,6 +884,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
         1: accountBenchmarks(mainHistory),
         2: accountBenchmarks(ikzeHistory),
       },
+      allBenchmarks: allAccountsBenchmarks,
       holdings: { 1: mainHoldings, 2: ikzeHoldings },
       closedPositions: { 1: mainClosed, 2: [] },
       ikzeLimit: { 2: ikzeLimit },
@@ -884,6 +911,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     allocation: { 1: emptyAllocation("PLN"), 2: emptyAllocation("PLN") },
     history: { 1: emptyHistory(1), 2: emptyHistory(2) },
     benchmarks: { 1: emptyBenchmarks(1), 2: emptyBenchmarks(2) },
+    allBenchmarks: emptyAllBenchmarks,
     holdings: { 1: [], 2: [] },
     closedPositions: { 1: [], 2: [] },
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },

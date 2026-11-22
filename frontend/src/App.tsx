@@ -9,6 +9,7 @@ import { AccountIkzePage } from "@/pages/account-ikze-page"
 import { AccountLayout } from "@/pages/account-layout"
 import { AccountOverviewPage } from "@/pages/account-overview-page"
 import { AccountClosedPositionsPage } from "@/pages/account-closed-positions-page"
+import { AllAccountsBenchmarksPage } from "@/pages/all-accounts-benchmarks-page"
 import { AllAccountsPage } from "@/pages/all-accounts-page"
 import { ImportPage } from "@/pages/import-page"
 import { ImportsPage } from "@/pages/imports-page"
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
     children: [
       { path: paths.root, element: <AllAccountsPage /> },
       { path: paths.allAccounts, element: <AllAccountsPage /> },
+      { path: paths.allBenchmarks, element: <AllAccountsBenchmarksPage /> },
       {
         path: accountPattern,
         element: <AccountLayout />,

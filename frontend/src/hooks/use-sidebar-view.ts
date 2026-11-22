@@ -23,7 +23,11 @@ export function useSidebarView(accounts: Account[] | null): SidebarView {
   if (accounts === null) return { state: "loading" }
 
   const path = pathname.replace(/\/+$/, "")
-  if (path === "" || path === paths.allAccounts) {
+  if (
+    path === "" ||
+    path === paths.allAccounts ||
+    path === paths.allBenchmarks
+  ) {
     if (lastId !== null) setLastId(null)
     return { state: "view", account: null }
   }
