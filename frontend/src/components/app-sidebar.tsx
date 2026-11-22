@@ -6,6 +6,7 @@ import {
   MessageSquareIcon,
   PiggyBankIcon,
   ReceiptIcon,
+  ScaleIcon,
   UploadIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -59,6 +60,11 @@ export function AppSidebar() {
           to: paths.closedPositions(account.id),
           icon: ReceiptIcon,
           label: "Closed Positions",
+        },
+        {
+          to: paths.benchmarks(account.id),
+          icon: ScaleIcon,
+          label: "Benchmarks",
         },
         ...(account.type === "IKZE"
           ? [{ to: paths.ikze(account.id), icon: PiggyBankIcon, label: "IKZE" }]

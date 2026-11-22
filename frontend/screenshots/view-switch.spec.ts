@@ -25,6 +25,18 @@ const cases: { from: string; to: ViewTarget; expected: string }[] = [
     to: standard,
     expected: "/accounts/1/closed-positions",
   },
+  // The Benchmarks page stays the Benchmarks page between Accounts.
+  {
+    from: "/accounts/1/benchmarks",
+    to: ikze,
+    expected: "/accounts/2/benchmarks",
+  },
+  {
+    from: "/accounts/2/benchmarks",
+    to: standard,
+    expected: "/accounts/1/benchmarks",
+  },
+  { from: "/accounts/1/benchmarks", to: all, expected: "/accounts/all" },
   // The IKZE page exists only in an IKZE Account.
   { from: "/accounts/2/ikze", to: standard, expected: "/accounts/1" },
   { from: "/accounts/1/", to: ikze, expected: "/accounts/2" },

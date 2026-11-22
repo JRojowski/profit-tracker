@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell"
 import { useAppState } from "@/lib/app-state"
 import { accountPattern, paths } from "@/lib/routes"
 import { AccountHoldingsPage } from "@/pages/account-holdings-page"
+import { AccountBenchmarksPage } from "@/pages/account-benchmarks-page"
 import { AccountIkzePage } from "@/pages/account-ikze-page"
 import { AccountLayout } from "@/pages/account-layout"
 import { AccountOverviewPage } from "@/pages/account-overview-page"
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
           { index: true, element: <AccountOverviewPage /> },
           { path: "holdings", element: <AccountHoldingsPage /> },
           { path: "closed-positions", element: <AccountClosedPositionsPage /> },
+          { path: "benchmarks", element: <AccountBenchmarksPage /> },
           { path: "ikze", element: <AccountIkzePage /> },
         ],
       },

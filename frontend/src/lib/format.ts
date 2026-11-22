@@ -103,6 +103,20 @@ export function formatPercent(
   )
 }
 
+// formatPoints shows a decimal difference of two percentages with 2 decimal places and the unit "pp", for example "+7.24 pp".
+// The backend sends 7.24 for 7.24 percentage points.
+export function formatPoints(
+  points: string,
+  { signed = false }: FormatOptions = {}
+): string {
+  const text = new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: signed ? "exceptZero" : "auto",
+  }).format(Number(points))
+  return `${withMinusSign(text)} pp`
+}
+
 // withMinusSign replaces the hyphen of a formatted negative number with the minus sign U+2212.
 function withMinusSign(formatted: string): string {
   return formatted.replace("-", "\u2212")

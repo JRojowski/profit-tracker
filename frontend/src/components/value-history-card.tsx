@@ -16,6 +16,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { FigureLabel } from "@/components/figure-label"
 import { InsetSurface } from "@/components/inset-surface"
+import { PeriodPills } from "@/components/period-pills"
 import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ResultBadge } from "@/components/result-badge"
@@ -25,10 +26,8 @@ import {
   ChartTooltip,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
-  historyPeriods,
   type HistoryPeriod,
   type PriceWarning,
   type ValueHistory,
@@ -100,26 +99,7 @@ export function ValueHistoryCard({
               )}
             </div>
           }
-          action={
-            <ToggleGroup
-              type="single"
-              size="sm"
-              data-pills
-              aria-label="Period"
-              value={period}
-              onValueChange={(value) => {
-                // An empty value means that the user clicked the selected item again.
-                if (value) setPeriod(value as HistoryPeriod)
-              }}
-              className="shrink-0"
-            >
-              {historyPeriods.map((item) => (
-                <ToggleGroupItem key={item} value={item} className="num">
-                  {item}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          }
+          action={<PeriodPills value={period} onChange={setPeriod} />}
         />
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">

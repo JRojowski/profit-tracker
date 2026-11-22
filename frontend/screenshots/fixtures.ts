@@ -2,12 +2,14 @@
 // The shapes follow the types in src/lib/api.ts. Amounts and percentages are decimal text.
 import type {
   Account,
+  AccountBenchmarks,
   AccountSummary,
   AccountValueHistory,
   AllAccountsRow,
   AllAccountsSummary,
   AllAccountsValueHistory,
   Allocation,
+  BenchmarkReturn,
   AllocationPart,
   ClosedPosition,
   Holding,
@@ -523,6 +525,86 @@ const allHistory: AllAccountsValueHistory = {
   priceWarnings: [priceMismatch],
 }
 
+// benchmarkRows gives the five Benchmarks for a user return. The last Benchmark has no price for the whole period.
+function benchmarkRows(user: number): BenchmarkReturn[] {
+  const rows: [string, string, string, string, string, number | null][] = [
+    [
+      "sp500",
+      "S&P 500",
+      "iShares Core S&P 500 UCITS ETF USD (Acc)",
+      "CSPX.L",
+      "USD",
+      45.1,
+    ],
+    [
+      "wig20tr",
+      "WIG20TR",
+      "Beta ETF WIG20TR Portfelowy FIZ",
+      "ETFBW20TR.WA",
+      "PLN",
+      22.35,
+    ],
+    [
+      "mwig40tr",
+      "mWIG40TR",
+      "Beta ETF mWIG40TR Portfelowy FIZ",
+      "ETFBM40TR.WA",
+      "PLN",
+      18.9,
+    ],
+    [
+      "world",
+      "World equities",
+      "iShares Core MSCI World UCITS ETF USD (Acc)",
+      "IWDA.L",
+      "USD",
+      38.7,
+    ],
+    ["gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD", null],
+  ]
+  return rows.map(([id, name, fund, ticker, quoteCurrency, value]) => ({
+    id,
+    name,
+    fund,
+    ticker,
+    quoteCurrency,
+    status: value === null ? "noFullPeriod" : "available",
+    return: value === null ? null : value.toFixed(2),
+    difference: value === null ? null : (user - value).toFixed(2),
+  }))
+}
+
+// accountBenchmarks gives the Benchmarks of an Account for the period All, from the Time-Weighted Return of its Value History.
+function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
+  const user = history.timeWeightedReturn.All
+  return {
+    accountId: history.accountId,
+    period: "All",
+    currency: history.currency,
+    available: true,
+    warnings: [],
+    baseDay: history.periodStarts.All,
+    lastDay: history.points.at(-1)?.date ?? null,
+    user: { return: user },
+    benchmarks: benchmarkRows(Number(user)),
+  }
+}
+
+// emptyBenchmarks is the answer for an Account with no Value History.
+function emptyBenchmarks(accountId: number): AccountBenchmarks {
+  return {
+    accountId,
+    period: "All",
+    currency: "PLN",
+    available: false,
+    warnings: [],
+    baseDay: null,
+    lastDay: null,
+    user: { return: null },
+    benchmarks: [],
+  }
+}
+
 // accountRow is the row of one Account in the summary of all Accounts.
 function accountRow(account: Account, summary: AccountSummary): AllAccountsRow {
   return {
@@ -748,6 +830,7 @@ export type ApiFixture = {
   summary: Record<number, AccountSummary>
   allocation: Record<number, Allocation>
   history: Record<number, AccountValueHistory>
+  benchmarks: Record<number, AccountBenchmarks>
   holdings: Record<number, Holding[]>
   closedPositions: Record<number, ClosedPosition[]>
   ikzeLimit: Record<number, IkzeLimit>
@@ -770,6 +853,10 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       history: {
         1: dataSet === "nearEqualEnd" ? nearEqualHistory : mainHistory,
         2: ikzeHistory,
+      },
+      benchmarks: {
+        1: accountBenchmarks(mainHistory),
+        2: accountBenchmarks(ikzeHistory),
       },
       holdings: { 1: mainHoldings, 2: ikzeHoldings },
       closedPositions: { 1: mainClosed, 2: [] },
@@ -796,6 +883,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     summary: { 1: emptySummary(1), 2: emptySummary(2) },
     allocation: { 1: emptyAllocation("PLN"), 2: emptyAllocation("PLN") },
     history: { 1: emptyHistory(1), 2: emptyHistory(2) },
+    benchmarks: { 1: emptyBenchmarks(1), 2: emptyBenchmarks(2) },
     holdings: { 1: [], 2: [] },
     closedPositions: { 1: [], 2: [] },
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },
