@@ -255,6 +255,39 @@ func TestListAccounts_TwoAccounts_OrderedByName(t *testing.T) {
 	}, got)
 }
 
+func TestAccounts_XTBImport_ReturnsProviderXTB(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	id := srv.importAccount(t, depositOnlyExport("56000001", "USD"), "XTB USD")
+
+	var listed []struct {
+		Provider string `json:"provider"`
+	}
+	status := srv.getJSON(t, "/api/accounts", &listed)
+	require.Equal(t, http.StatusOK, status)
+	require.Len(t, listed, 1)
+	assert.Equal(t, "xtb", listed[0].Provider)
+
+	var renamed struct {
+		Provider string `json:"provider"`
+	}
+	status, body := srv.patchJSON(t, fmt.Sprintf("/api/accounts/%d", id), map[string]string{"name": "Main USD"})
+	require.Equal(t, http.StatusOK, status, "body %q", body)
+	decode(t, body, &renamed)
+	assert.Equal(t, "xtb", renamed.Provider, "the rename returns the Provider")
+
+	var again struct {
+		Account struct {
+			Provider string `json:"provider"`
+		} `json:"account"`
+	}
+	export := depositOnlyExport("56000001", "USD")
+	status, body = srv.upload(t, export.FileName(), xtbtest.Build(t, export))
+	require.Equal(t, http.StatusOK, status, "body %q", body)
+	decode(t, body, &again)
+	assert.Equal(t, "xtb", again.Account.Provider, "the preview of a known account number returns the Provider")
+}
+
 func TestRenameAccount_NewName_ReturnsAndKeepsTrimmedName(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)

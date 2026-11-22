@@ -24,6 +24,8 @@ type accountResponse struct {
 	Name          string `json:"name"`
 	Type          string `json:"type"`
 	Currency      string `json:"currency"`
+	// Provider is "xtb" or "kraken".
+	Provider string `json:"provider"`
 }
 
 // renameRequest is the body of PATCH /api/accounts/{id}.
@@ -367,6 +369,7 @@ func toAccountResponse(acc store.Account) accountResponse {
 		Name:          acc.Name,
 		Type:          acc.Type,
 		Currency:      acc.Currency,
+		Provider:      acc.Provider,
 	}
 }
 
