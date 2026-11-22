@@ -27,7 +27,7 @@ type plnAmountsResponse struct {
 	NetInterest      *string `json:"netInterest"`
 	Fees             *string `json:"fees"`
 	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). It is "0.00" for no Rewards.
-	// A Reward with no known value adds nothing, as in the Total Result of the Account.
+	// Rewards and UnrealizedProfit are nil if a Reward has no known value, as in the summary of the Account.
 	Rewards        *string `json:"rewards"`
 	CurrencyResult *string `json:"currencyResult"`
 }
@@ -181,13 +181,17 @@ func (a *api) calculateAllAccounts(ctx context.Context, views []accountView) (al
 
 // toPLNAmounts returns the amounts as decimal text.
 func toPLNAmounts(a allaccounts.Amounts) plnAmountsResponse {
-	return plnAmountsResponse{
+	resp := plnAmountsResponse{
 		Value: new(formatAmount(a.Value)), Cash: new(formatAmount(a.Cash)), NetDeposits: new(formatAmount(a.NetDeposits)),
 		TotalResult: new(formatAmount(a.TotalResult)), RealizedProfit: new(formatAmount(a.RealizedProfit)),
 		UnrealizedProfit: new(formatAmount(a.UnrealizedProfit)), NetDividends: new(formatAmount(a.NetDividends)),
 		NetInterest: new(formatAmount(a.NetInterest)), Fees: new(formatAmount(a.Fees)), Rewards: new(formatAmount(a.Rewards)),
 		CurrencyResult: new(formatAmount(a.CurrencyResult)),
 	}
+	if a.SplitUnknown {
+		resp.UnrealizedProfit, resp.Rewards = nil, nil
+	}
+	return resp
 }
 
 // rowNote returns the sentence that tells why the row is not available.

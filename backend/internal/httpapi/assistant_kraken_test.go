@@ -66,11 +66,16 @@ func TestAskAssistant_HoldingsOfXTBAccount_HasNoAverageCost(t *testing.T) {
 }
 
 // TestAskAssistant_HoldingsOfKrakenAccountWithUnknownRewardValue_GivesNullAverageCost checks a Reward with no
-// stored close on or before its day. The cost and the Average Cost have no known value, so both are null.
+// stored close on or before its day. The cost, the Average Cost and the Unrealized Profit have no known value, so
+// they are null. ADR 0009, rule 3: the price is known, so the value is 0.00448985 × 70000 = 314.2895 → 314.29.
 func TestAskAssistant_HoldingsOfKrakenAccountWithUnknownRewardValue_GivesNullAverageCost(t *testing.T) {
 	t.Parallel()
-	srv, model := startAssistantServer(t, newFakeProvider())
+	provider := newFakeProvider()
+	provider.setHistory(t, "BTC-EUR", "EUR", "2026-03-11=65000")
+	provider.set(t, "BTC-EUR", "70000", "EUR", "2026-10-22")
+	srv, model := startAssistantServer(t, provider)
 	id := srv.importKraken(t, krakenExportWithRewards(krakenReward("ERN-0001", krakenTime(10), "0.00000110")))
+	srv.refreshHistory(t)
 
 	_, content := askWithStep(t, srv, model, step("get_holdings", fmt.Sprintf(`{"accountId": %d}`, id)))
 
@@ -86,6 +91,8 @@ func TestAskAssistant_HoldingsOfKrakenAccountWithUnknownRewardValue_GivesNullAve
 	assert.JSONEq(t, "null", string(holding["cost"]))
 	require.Contains(t, holding, "averageCost", "a Kraken Holding always names its Average Cost")
 	assert.JSONEq(t, "null", string(holding["averageCost"]))
+	assert.JSONEq(t, `"314.29"`, string(holding["value"]))
+	assert.JSONEq(t, "null", string(holding["unrealizedProfit"]))
 }
 
 // assistantKrakenResults is the part of a get_results result that the Kraken tests read.
@@ -125,7 +132,8 @@ func TestAskAssistant_ResultsOfKrakenAccount_GivesTheRewardsAndTheFeeSum(t *test
 }
 
 // TestAskAssistant_ResultsOfKrakenAccountWithUnknownRewardValue_GivesNullRewards checks that the Rewards part
-// with no known value is null, and that the result still names it.
+// with no known value is null, and that the result still names it. The Unrealized Profit is null too, because the
+// tool cannot split the result into these two parts (ADR 0009, rule 3).
 func TestAskAssistant_ResultsOfKrakenAccountWithUnknownRewardValue_GivesNullRewards(t *testing.T) {
 	t.Parallel()
 	srv, model := startAssistantServer(t, newFakeProvider())
@@ -137,6 +145,7 @@ func TestAskAssistant_ResultsOfKrakenAccountWithUnknownRewardValue_GivesNullRewa
 	decode(t, content, &got)
 	require.Contains(t, got, "rewards")
 	assert.JSONEq(t, "null", string(got["rewards"]))
+	assert.JSONEq(t, "null", string(got["unrealizedProfit"]))
 	assert.JSONEq(t, `"0.75"`, string(got["feeSum"]))
 }
 

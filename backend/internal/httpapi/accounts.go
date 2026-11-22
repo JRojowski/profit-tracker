@@ -50,9 +50,10 @@ type summaryResponse struct {
 	// FeeSum is the sum of the crypto fees in the Account currency: for each crypto purchase, the fee × the
 	// purchase price. It is information only and not a part of TotalResult. It is "0.00" for an XTB Account.
 	FeeSum string `json:"feeSum"`
-	// UnrealizedProfit is the sum over the Holdings with a price. It is a part of TotalResult.
-	UnrealizedProfit string `json:"unrealizedProfit"`
-	TotalResult      string `json:"totalResult"`
+	// UnrealizedProfit is the sum over the Holdings with a value. It is a part of TotalResult.
+	// It is nil when Rewards is nil, because then the tool cannot split the result into these two parts (ADR 0009).
+	UnrealizedProfit *string `json:"unrealizedProfit"`
+	TotalResult      string  `json:"totalResult"`
 	// Value is the cash balance plus the value of the Holdings with a price.
 	Value string `json:"value"`
 	// PriceDate is the oldest price date of the Holdings with a value, as YYYY-MM-DD. It is nil if no Holding has a value.
@@ -86,7 +87,8 @@ type holdingResponse struct {
 	Name   string `json:"name"`
 	Volume string `json:"volume"`
 	// Cost and AverageCost are nil if the cost is not known: a Reward of the Holding has no stored close
-	// on or before its day (ADR 0009). Then the Holding has no value, and Note tells the reason.
+	// on or before its day (ADR 0009). Then UnrealizedProfit is nil too, and Note tells the reason.
+	// The Holding still has a value if it has a price.
 	Cost        *string `json:"cost"`
 	AverageCost *string `json:"averageCost"`
 	priceSourceResponse
@@ -101,11 +103,11 @@ type holdingResponse struct {
 	ExchangeRateDate     *string `json:"exchangeRateDate"`
 	// Value is in the Account currency.
 	Value *string `json:"value"`
-	// UnrealizedProfit is Value minus Cost.
+	// UnrealizedProfit is Value minus Cost. It is nil if the Holding has no value or no known cost.
 	UnrealizedProfit *string `json:"unrealizedProfit"`
 	// UnrealizedProfitPercent is UnrealizedProfit × 100 / Cost, exact. The frontend rounds for display.
 	UnrealizedProfitPercent *string `json:"unrealizedProfitPercent"`
-	// Note is a sentence for the user when the Holding has no value.
+	// Note is a sentence for the user when the Holding has no value or no known cost.
 	Note *string `json:"note"`
 	// PriceWarnings are the Price Warnings of the Instrument.
 	PriceWarnings []priceWarningResponse `json:"priceWarnings"`
@@ -198,7 +200,7 @@ func (a *api) summaryOf(view accountView) summaryResponse {
 		Fees:             formatAmount(state.Fees),
 		Rewards:          nullAmount(state.Rewards),
 		FeeSum:           formatAmount(state.FeeSum),
-		UnrealizedProfit: formatAmount(state.UnrealizedProfit),
+		UnrealizedProfit: unrealizedProfitOf(state),
 		TotalResult:      formatAmount(state.TotalResult),
 		Value:            formatAmount(state.Value),
 		PriceDate:        view.priceDate(),
@@ -428,6 +430,14 @@ func formatAmount(d decimal.Decimal) string {
 }
 
 // nullAmount writes the amount with formatAmount, or returns nil if the amount is not valid.
+// unrealizedProfitOf returns the Unrealized Profit of the Account, or nil if it is not known (ADR 0009).
+func unrealizedProfitOf(state ledger.State) *string {
+	if !state.UnrealizedProfitKnown() {
+		return nil
+	}
+	return new(formatAmount(state.UnrealizedProfit))
+}
+
 func nullAmount(d decimal.NullDecimal) *string {
 	if !d.Valid {
 		return nil

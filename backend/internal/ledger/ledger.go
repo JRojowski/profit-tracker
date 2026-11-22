@@ -106,9 +106,6 @@ const (
 	ReasonNoPrice
 	// ReasonNoExchangeRate tells that the Ledger has no Exchange Rate for the conversion to the Account currency.
 	ReasonNoExchangeRate
-	// ReasonNoRewardClose tells that a Reward of the Holding has no known value, so the cost is not known.
-	// The Ledger has no close in the Account currency on or before the day of the Reward.
-	ReasonNoRewardClose
 )
 
 // RateCurrency returns the currency whose Exchange Rate converts an amount in the Quote Currency quote
@@ -204,18 +201,20 @@ type State struct {
 	NetInterest decimal.Decimal
 	// Fees is the sum of the SEC fees and the corrections, with the sign of the export. It is usually negative.
 	Fees decimal.Decimal
-	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). It is not valid if a Reward
-	// has no known value. It is zero for an Account with no Rewards.
+	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). It is zero for an Account with
+	// no Rewards. It is not valid if a Reward has no known value. Then its Decimal is the sum of the known values.
 	Rewards decimal.NullDecimal
 	// FeeSum is the sum of the crypto fees in the Account currency: for each crypto purchase, the fee × the price.
 	// It is information only. The fee is in the cost of the Holding, so FeeSum is not a part of TotalResult.
 	FeeSum decimal.Decimal
-	// UnrealizedProfit is the sum of the Unrealized Profit of the Holdings that have a price.
+	// UnrealizedProfit is the sum of the Unrealized Profit of the Holdings that have a value.
+	// If Rewards is not valid, it also holds the values of the Rewards with no known value, because the tool
+	// cannot split these two parts. Then the Unrealized Profit is not known. See UnrealizedProfitKnown.
 	UnrealizedProfit decimal.Decimal
 	// Value is the cash balance plus the value of the Holdings that have a price.
 	Value decimal.Decimal
 	// TotalResult is RealizedProfit + UnrealizedProfit + NetDividends + NetInterest + Rewards + Fees.
-	// A Rewards part with no known value adds nothing.
+	// A Rewards part with no known value adds its known values. The rest of it is in UnrealizedProfit.
 	TotalResult decimal.Decimal
 	// SimpleReturn is TotalResult × 100 / NetDeposits.
 	SimpleReturn returns.Rate
@@ -275,7 +274,7 @@ type Holding struct {
 	// it is only the cost of the parts with a known cost.
 	Cost decimal.Decimal
 	// UnknownCost tells that a Reward of the Holding has no known value, so the cost is not known.
-	// Then the Holding has no value.
+	// ADR 0009: the Holding can have a value, but it has no known Average Cost and no known Unrealized Profit.
 	UnknownCost bool
 	// NoValueReason tells why the Holding has no value in the Account currency. It is ReasonNone for a Holding
 	// with a value. For a Holding with no value, Price, ExchangeRate, Value and UnrealizedProfit are zero.
@@ -290,8 +289,14 @@ type Holding struct {
 	ExchangeRate ExchangeRate
 	// Value is the open volume × the price in the Account currency.
 	Value decimal.Decimal
-	// UnrealizedProfit is Value minus Cost. It can be negative.
+	// UnrealizedProfit is Value minus Cost. It can be negative. If UnknownCost is true, it is not the
+	// Unrealized Profit: it also holds the values of the Rewards with no known value. See HasUnrealizedProfit.
 	UnrealizedProfit decimal.Decimal
+}
+
+// HasUnrealizedProfit tells if the Holding has a value and a known cost, so UnrealizedProfit is known.
+func (h Holding) HasUnrealizedProfit() bool {
+	return h.HasValue() && !h.UnknownCost
 }
 
 // HasValue tells if the Holding has a value in the Account currency.
@@ -312,9 +317,9 @@ func (h Holding) AverageCost() decimal.Decimal {
 
 // UnrealizedProfitPercent returns the Unrealized Profit × 100 / the open cost. The multiplication comes first,
 // so an exact result stays exact. The division keeps decimal.DivisionPrecision (16) decimal places.
-// It returns false if the Holding has no value or no cost.
+// It returns false if the Holding has no known Unrealized Profit or no cost.
 func (h Holding) UnrealizedProfitPercent() (decimal.Decimal, bool) {
-	if !h.HasValue() || h.Cost.IsZero() {
+	if !h.HasUnrealizedProfit() || h.Cost.IsZero() {
 		return decimal.Zero, false
 	}
 	return h.UnrealizedProfit.Mul(decimal.NewFromInt(100)).Div(h.Cost), true
@@ -359,6 +364,12 @@ func Calculate(l Ledger) (State, error) {
 	s.SimpleReturn = returns.Simple(s.TotalResult, s.NetDeposits)
 	s.AnnualReturn = returns.Annual(s.Flows, s.Value, s.AllHoldingsHaveValue(), l.Today)
 	return s, nil
+}
+
+// UnrealizedProfitKnown tells if UnrealizedProfit is the Unrealized Profit. It is false if a Reward has
+// no known value, because then UnrealizedProfit also holds the value of that Reward.
+func (s *State) UnrealizedProfitKnown() bool {
+	return s.Rewards.Valid
 }
 
 // AllHoldingsHaveValue tells if each Holding has a price and, if necessary, an Exchange Rate.
@@ -641,6 +652,7 @@ func averageCostHoldings(l Ledger) map[string]*Holding {
 // RewardsAndFees are the sums of an Account at the Average Cost (ADR 0009), in the Account currency.
 type RewardsAndFees struct {
 	// Rewards is the sum of the values of the Rewards on their days. It is not valid if a Reward has no known value.
+	// Then its Decimal is the sum of the known values.
 	Rewards decimal.NullDecimal
 	// FeeSum is the sum of the fees of the crypto purchases.
 	FeeSum decimal.Decimal
@@ -661,12 +673,11 @@ func SumRewardsAndFees(l Ledger, f IncomeFilter) RewardsAndFees {
 		case TypeReward:
 			value, ok := l.RewardValue(op)
 			if !ok {
-				sum.Rewards = decimal.NullDecimal{}
+				// The sum keeps the known values, so that the Total Result stays correct.
+				sum.Rewards.Valid = false
 				continue
 			}
-			if sum.Rewards.Valid {
-				sum.Rewards.Decimal = sum.Rewards.Decimal.Add(value)
-			}
+			sum.Rewards.Decimal = sum.Rewards.Decimal.Add(value)
 		}
 	}
 	return sum
@@ -706,6 +717,7 @@ func (l Ledger) RewardValue(op CashOperation) (decimal.Decimal, bool) {
 
 // setValue sets the value of the Holding in the Account currency from its price and, if necessary,
 // the Exchange Rate. Otherwise it sets the reason why the Holding has no value.
+// ADR 0009: the value does not need the cost, so a Holding with an unknown cost can have a value.
 func (h *Holding) setValue(l Ledger) {
 	quote, ok := l.QuoteCurrencies[h.Instrument.Ticker]
 	if !ok || quote == "" {
@@ -717,10 +729,6 @@ func (h *Holding) setValue(l Ledger) {
 		h.NoValueReason = ReasonCrossRate
 		return
 	}
-	if h.UnknownCost {
-		h.NoValueReason = ReasonNoRewardClose
-		return
-	}
 	h.ExchangeRateCurrency = currency
 	m := l.marketValue(h.Instrument.Ticker, quote, currency, h.Volume)
 	if m.reason != ReasonNone {
@@ -729,22 +737,6 @@ func (h *Holding) setValue(l Ledger) {
 	}
 	h.Price, h.Value, h.ExchangeRate = m.price, m.value, m.rate
 	h.UnrealizedProfit = m.value.Sub(h.Cost)
-}
-
-// MarketValue returns the value of the volume of the Instrument in the Account currency, from the current price
-// and, if necessary, the latest Exchange Rate. It uses the same arithmetic as the value of a Holding, but it does not
-// need the cost. It returns false if the Instrument has no such value.
-func (l Ledger) MarketValue(ticker string, volume decimal.Decimal) (decimal.Decimal, bool) {
-	quote, ok := l.QuoteCurrencies[ticker]
-	if !ok || quote == "" {
-		return decimal.Zero, false
-	}
-	currency, ok := RateCurrency(quote, l.Currency)
-	if !ok {
-		return decimal.Zero, false
-	}
-	m := l.marketValue(ticker, quote, currency, volume)
-	return m.value, m.reason == ReasonNone
 }
 
 // market is the result of marketValue.

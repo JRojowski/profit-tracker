@@ -16,6 +16,7 @@ The Kraken export has no Lots and no position IDs. Thus the tool cannot use the 
    - A purchase with a fee on both rows, or with a fee in a different currency, stops the Import.
 2. The fee is part of the cost. The Total Result of a Kraken Account has no separate fee part. The tool shows the sum of the fees in EUR as information. A fee in EUR adds its amount. A fee in the crypto asset adds the fee times the purchase price.
 3. A Reward adds its quantity to the Holding. Its cost is its value in EUR on the day that the user got it. The tool uses the `<ASSET>-EUR` close of that day.
+   - If the tool has no close on or before that day, the Holding still has its value from the price, but the cost, the Average Cost, the Unrealized Profit and the Rewards part have no known value.
 4. The value of each Reward on its day is the Rewards part of the Total Result. A later change of the price of these units is part of the Unrealized Profit.
 5. The Average Cost is the sum of the costs divided by the sum of the quantities.
 6. The tool does not calculate a sale yet. An Import with a sale, a withdrawal or another unknown entry stops with a list of these entries. The user made the decision to design a sale when a real export contains one.

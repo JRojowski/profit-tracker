@@ -347,14 +347,6 @@ func (c *calculator) todayPoint(today time.Time, state ledger.State, rest []ledg
 		if h.HasValue() {
 			continue
 		}
-		// ADR 0009: a Holding with an unknown cost has no value in the hero. Its value does not need the cost,
-		// and its known cost is only a part of the cost. Thus it counts at the current price, as on a past day.
-		if h.UnknownCost {
-			if v, ok := c.in.Ledger.MarketValue(h.Instrument.Ticker, h.Volume); ok {
-				value = value.Add(v)
-				continue
-			}
-		}
 		c.atCost[h.Instrument.Ticker] = true
 		atCost = append(atCost, h.Instrument.Ticker)
 		value = value.Add(h.Cost)

@@ -235,6 +235,9 @@ func (v accountView) holdingRow(h ledger.Holding, warnings priceWarnings) holdin
 		row.Note = new(v.noValueNote(h))
 		return row
 	}
+	if h.UnknownCost {
+		row.Note = new(noRewardCloseNote)
+	}
 	row.Price = new(h.Price.String())
 	row.PriceDate = new(v.prices[ticker].Date.Format(time.DateOnly))
 	if h.UsesExchangeRate() {
@@ -243,12 +246,17 @@ func (v accountView) holdingRow(h ledger.Holding, warnings priceWarnings) holdin
 		row.ExchangeRateDate = new(h.ExchangeRate.Date.Format(time.DateOnly))
 	}
 	row.Value = new(formatAmount(h.Value))
-	row.UnrealizedProfit = new(formatAmount(h.UnrealizedProfit))
+	if h.HasUnrealizedProfit() {
+		row.UnrealizedProfit = new(formatAmount(h.UnrealizedProfit))
+	}
 	if percent, ok := h.UnrealizedProfitPercent(); ok {
 		row.UnrealizedProfitPercent = new(percent.String())
 	}
 	return row
 }
+
+// noRewardCloseNote tells the user why a Holding has no known cost. ADR 0009, rule 3.
+const noRewardCloseNote = "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history."
 
 // noValueNote returns the sentence that tells the user why the Holding has no value.
 func (v accountView) noValueNote(h ledger.Holding) string {
@@ -260,8 +268,6 @@ func (v accountView) noValueNote(h ledger.Holding) string {
 		return fmt.Sprintf("The Instrument is quoted in %s. The tool has no Exchange Rate between %s and %s.", qc, qc, account)
 	case ledger.ReasonNoExchangeRate:
 		return fmt.Sprintf("There is no Exchange Rate for %s. Refresh the prices.", h.ExchangeRateCurrency)
-	case ledger.ReasonNoRewardClose:
-		return "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history."
 	default:
 		return "There is no price for the Instrument. Refresh the prices."
 	}

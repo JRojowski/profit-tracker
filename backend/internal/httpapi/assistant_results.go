@@ -143,7 +143,7 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 		Scope: scope, AccountID: &acc.ID, AccountName: acc.Name, Currency: acc.Currency, Available: true, Warnings: []string{},
 		Value: new(roundAmountText(s.Value)), Cash: new(roundAmountText(s.Cash)), NetDeposits: new(roundAmountText(s.NetDeposits)),
 		TotalResult: new(roundAmountText(s.TotalResult)), RealizedProfit: new(roundAmountText(s.RealizedProfit)),
-		UnrealizedProfit: new(roundAmountText(s.UnrealizedProfit)), NetDividends: new(roundAmountText(s.NetDividends)),
+		UnrealizedProfit: roundAmountPointer(s.UnrealizedProfit), NetDividends: new(roundAmountText(s.NetDividends)),
 		NetInterest: new(roundAmountText(s.NetInterest)), Fees: new(roundAmountText(s.Fees)), PriceDate: s.PriceDate, UnpricedHoldings: s.UnpricedHoldings,
 		SimpleReturn:       returnResult{Percent: s.SimpleReturn, Reason: s.SimpleReturnNote},
 		AnnualReturn:       returnResult{Percent: s.AnnualReturn, Reason: s.AnnualReturnNote},

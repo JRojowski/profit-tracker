@@ -64,9 +64,9 @@ func TestKrakenValueHistory_EachDay_UsesTheAverageCostPathAndTheCloseOnOrBeforeT
 }
 
 // TestKrakenValueHistory_RewardWithNoClose_ValuesAtTheKnownCostAndTodayAtThePrice checks a Reward before the
-// first stored close. The past days with no close value the Holding at the known part of its cost. The hero has
-// no value for the Holding, because its cost is not known (ADR 0009). Its value does not need the cost, so today
-// uses the current price.
+// first stored close. The past days with no close value the Holding at the known part of its cost. ADR 0009,
+// rule 3: the value does not need the cost, so a past day with a close and today use the price. The value of
+// today is the value in the hero.
 //
 //	2026-03-04 (no close):         500.00 + cost 300.00                   = 800.00
 //	2026-03-10 (Reward, no close): 500.00 + cost 300.00 (Reward unknown)  = 800.00
@@ -90,4 +90,5 @@ func TestKrakenValueHistory_RewardWithNoClose_ValuesAtTheKnownCostAndTodayAtTheP
 		{Date: "2026-10-23", Value: "814.2895", NetDeposits: "800.00"},
 	}, pointsOn(t, got.Points, "2026-03-04", "2026-03-10", "2026-03-11", "2026-10-23"))
 	assert.Equal(t, []valuedAtCostDTO{{Ticker: "BTC", Name: "BTC"}}, got.ValuedAtCost)
+	assert.Equal(t, "814.2895", srv.rewardsSummary(t, id).Value, "the value of today is the value in the hero")
 }
