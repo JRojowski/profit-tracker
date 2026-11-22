@@ -5,6 +5,7 @@ package nbp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,17 +30,29 @@ const maxDays = 367
 // maxBody is the largest response body that the provider reads. A range of 367 days is about 20 kilobytes.
 const maxBody = 1 << 20
 
+// noDataText is the text of the NBP answer for a range with no table: "404 NotFound - Not Found - Brak danych".
+const noDataText = "Brak danych"
+
+// maxAttempts is the largest number of requests for one part when the NBP answers with errFalseNotFound.
+const maxAttempts = 4
+
+// errFalseNotFound tells that the NBP answered 404 without the text "Brak danych".
+// The NBP sends this answer from time to time for a range that has tables.
+var errFalseNotFound = errors.New("status 404 without the text \"" + noDataText + "\"")
+
 // Provider gets the Exchange Rates of NBP table A.
 type Provider struct {
 	// Client sends the requests. It must have a timeout.
 	Client *http.Client
 	// BaseURL is the address of the API, with no final slash.
 	BaseURL string
+	// RetryDelay is the time between two requests for the same part after errFalseNotFound.
+	RetryDelay time.Duration
 }
 
 // New returns a Provider for the NBP API with an HTTP client that stops a request after 15 seconds.
 func New() *Provider {
-	return &Provider{Client: &http.Client{Timeout: 15 * time.Second}, BaseURL: DefaultBaseURL}
+	return &Provider{Client: &http.Client{Timeout: 15 * time.Second}, BaseURL: DefaultBaseURL, RetryDelay: time.Second}
 }
 
 // ratesResponse is the part of the answer that the provider reads.
@@ -65,7 +78,7 @@ func (p *Provider) Rates(ctx context.Context, currency string, from, to time.Tim
 		if end.After(to) {
 			end = to
 		}
-		part, err := p.rates(ctx, currency, start, end)
+		part, err := p.ratesWithRetry(ctx, currency, start, end)
 		if err != nil {
 			return nil, fmt.Errorf("nbp rates of %s from %s to %s: %w",
 				currency, start.Format(time.DateOnly), end.Format(time.DateOnly), err)
@@ -74,6 +87,21 @@ func (p *Provider) Rates(ctx context.Context, currency string, from, to time.Tim
 		start = end.AddDate(0, 0, 1)
 	}
 	return rates, nil
+}
+
+// ratesWithRetry gets the rates of one part. It asks again after errFalseNotFound, at most maxAttempts times.
+func (p *Provider) ratesWithRetry(ctx context.Context, currency string, from, to time.Time) ([]exchange.Rate, error) {
+	for attempt := 1; ; attempt++ {
+		rates, err := p.rates(ctx, currency, from, to)
+		if !errors.Is(err, errFalseNotFound) || attempt == maxAttempts {
+			return rates, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("wait to ask again: %w", ctx.Err())
+		case <-time.After(p.RetryDelay):
+		}
+	}
 }
 
 // rates sends one request for a range of at most 367 days and reads the rates.
@@ -93,9 +121,15 @@ func (p *Provider) rates(ctx context.Context, currency string, from, to time.Tim
 	}
 	defer resp.Body.Close()
 
-	// The API answers 404 for a range with no table, for example a weekend.
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+		text := errorText(resp.Body)
+		// The API answers 404 with the text "Brak danych" for a range with no table, for example a weekend.
+		// The NBP also sends an HTML page with status 404 for a range that has tables, from time to time.
+		// That answer is an error, so that the tool does not record the range as a range with no table.
+		if strings.Contains(text, noDataText) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("%w: %s", errFalseNotFound, text)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, errorText(resp.Body))

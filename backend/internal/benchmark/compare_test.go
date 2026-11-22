@@ -23,6 +23,23 @@ func sp500(t *testing.T, results []benchmark.Result) benchmark.Result {
 	return results[0]
 }
 
+// TestCompare_FailedRefresh_WinsOverTheOtherStatuses checks that a Benchmark whose last refresh failed has no
+// return, also when its stored closes would give one.
+func TestCompare_FailedRefresh_WinsOverTheOtherStatuses(t *testing.T) {
+	t.Parallel()
+	in := benchmark.Input{
+		Currency: "USD", BaseDay: day(1), LastDay: day(10), UserReturn: dec("5"),
+		Closes: map[string][]benchmark.Close{"sp500": {{Date: day(1), Price: dec("100")}, {Date: day(10), Price: dec("110")}}},
+		Failed: map[string]bool{"sp500": true},
+	}
+
+	got := sp500(t, benchmark.Compare(in))
+
+	assert.Equal(t, benchmark.StatusSourceFailure, got.Status)
+	assert.True(t, got.Return.IsZero())
+	assert.True(t, got.Difference.IsZero())
+}
+
 // TestCompare_EdgeCases checks the cases of the USD Benchmark S&P 500 that the HTTP tests do not reach.
 // The base day is 2026-10-01 and the last day is 2026-10-10. The return of the user is 5 %.
 func TestCompare_EdgeCases(t *testing.T) {

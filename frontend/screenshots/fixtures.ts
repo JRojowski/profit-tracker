@@ -10,6 +10,7 @@ import type {
   AllAccountsValueHistory,
   Allocation,
   BenchmarkReturn,
+  Benchmarks,
   AllocationPart,
   BenchmarkPoint,
   ClosedPosition,
@@ -31,7 +32,11 @@ const today = "2026-06-15"
 
 // DataSet selects which data the fake backend answers with.
 export type DataSet =
-  "populated" | "nearEqualEnd" | "noAccounts" | "emptyAccounts"
+  | "populated"
+  | "nearEqualEnd"
+  | "benchmarkUnavailable"
+  | "noAccounts"
+  | "emptyAccounts"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -613,7 +618,10 @@ function benchmarkRows(
 }
 
 // accountBenchmarks gives the Benchmarks of an Account for the period All, from the Time-Weighted Return of its Value History.
-function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
+function accountBenchmarks(
+  history: AccountValueHistory,
+  failed = false
+): AccountBenchmarks {
   const user = history.timeWeightedReturn.All
   const from = history.periodStarts.All ?? ""
   const to = history.points.at(-1)?.date ?? ""
@@ -629,8 +637,29 @@ function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
       return: user,
       series: user === null ? [] : returnSeries(from, to, user, 3),
     },
-    benchmarks: benchmarkRows(Number(user), from, to),
+    benchmarks: failed
+      ? failedBenchmarkRows(Number(user), from, to)
+      : benchmarkRows(Number(user), from, to),
   }
+}
+
+// failedBenchmarkRows is benchmarkRows with a failed price source for WIG20TR. Gold has no price for the whole period.
+function failedBenchmarkRows(
+  user: number,
+  from: string,
+  to: string
+): BenchmarkReturn[] {
+  return benchmarkRows(user, from, to).map((row) =>
+    row.id === "wig20tr"
+      ? {
+          ...row,
+          status: "sourceFailure",
+          return: null,
+          difference: null,
+          series: [],
+        }
+      : row
+  )
 }
 
 // emptyBenchmarks is the answer for an Account with no Value History.
@@ -646,6 +675,42 @@ function emptyBenchmarks(accountId: number): AccountBenchmarks {
     user: { return: null, series: [] },
     benchmarks: [],
   }
+}
+
+// allAccountsBenchmarks gives the Benchmarks of all Accounts in PLN for the period All.
+const allAccountsBenchmarks: Benchmarks = {
+  period: "All",
+  currency: "PLN",
+  available: true,
+  warnings: [],
+  baseDay: allHistory.periodStarts.All,
+  lastDay: allHistory.points.at(-1)?.date ?? null,
+  user: {
+    return: allHistory.timeWeightedReturn.All,
+    series: returnSeries(
+      allHistory.periodStarts.All ?? "",
+      allHistory.points.at(-1)?.date ?? "",
+      allHistory.timeWeightedReturn.All ?? "0",
+      3
+    ),
+  },
+  benchmarks: benchmarkRows(
+    Number(allHistory.timeWeightedReturn.All),
+    allHistory.periodStarts.All ?? "",
+    allHistory.points.at(-1)?.date ?? ""
+  ),
+}
+
+// emptyAllBenchmarks is the answer for all Accounts when they have no Value History.
+const emptyAllBenchmarks: Benchmarks = {
+  period: "All",
+  currency: "PLN",
+  available: false,
+  warnings: [],
+  baseDay: null,
+  lastDay: null,
+  user: { return: null, series: [] },
+  benchmarks: [],
 }
 
 // accountRow is the row of one Account in the summary of all Accounts.
@@ -874,6 +939,7 @@ export type ApiFixture = {
   allocation: Record<number, Allocation>
   history: Record<number, AccountValueHistory>
   benchmarks: Record<number, AccountBenchmarks>
+  allBenchmarks: Benchmarks
   holdings: Record<number, Holding[]>
   closedPositions: Record<number, ClosedPosition[]>
   ikzeLimit: Record<number, IkzeLimit>
@@ -883,7 +949,11 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
-  if (dataSet === "populated" || dataSet === "nearEqualEnd") {
+  if (
+    dataSet === "populated" ||
+    dataSet === "nearEqualEnd" ||
+    dataSet === "benchmarkUnavailable"
+  ) {
     return {
       accounts: [ikzeAccount, mainAccount].sort((a, b) =>
         a.name.localeCompare(b.name)
@@ -898,9 +968,10 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
         2: ikzeHistory,
       },
       benchmarks: {
-        1: accountBenchmarks(mainHistory),
+        1: accountBenchmarks(mainHistory, dataSet === "benchmarkUnavailable"),
         2: accountBenchmarks(ikzeHistory),
       },
+      allBenchmarks: allAccountsBenchmarks,
       holdings: { 1: mainHoldings, 2: ikzeHoldings },
       closedPositions: { 1: mainClosed, 2: [] },
       ikzeLimit: { 2: ikzeLimit },
@@ -927,6 +998,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     allocation: { 1: emptyAllocation("PLN"), 2: emptyAllocation("PLN") },
     history: { 1: emptyHistory(1), 2: emptyHistory(2) },
     benchmarks: { 1: emptyBenchmarks(1), 2: emptyBenchmarks(2) },
+    allBenchmarks: emptyAllBenchmarks,
     holdings: { 1: [], 2: [] },
     closedPositions: { 1: [], 2: [] },
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },

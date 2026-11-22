@@ -30,6 +30,7 @@ function answer(
     "/api/all-accounts/summary": fixture.allSummary,
     "/api/all-accounts/allocation": fixture.allAllocation,
     "/api/all-accounts/value-history": fixture.allHistory,
+    "/api/all-accounts/benchmarks": fixture.allBenchmarks,
     "/api/imports": fixture.imports,
     "/api/prices/refresh/progress": {
       running: false,
