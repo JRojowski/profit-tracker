@@ -27,7 +27,7 @@ func TestSaveImport_KeepExistingWithOtherTicker_AddsNoInstrument(t *testing.T) {
 		Time: at, Amount: decimal.RequireFromString("-109.40"), Comment: "OPEN BUY 10 @ 10.94", PositionID: "2000000001", LotID: "2000000001",
 		Volume: decimal.NewNullDecimal(decimal.RequireFromString("10")), Price: decimal.NewNullDecimal(decimal.RequireFromString("10.94")), IsFill: true,
 	}
-	account := store.Account{AccountNumber: "56000001", Name: "XTB USD", Type: "regular", Currency: "USD"}
+	account := store.Account{AccountNumber: "56000001", Name: "XTB USD", Type: "regular", Currency: "USD", Provider: "xtb"}
 	firstID, err := db.CreatePreview(ctx, store.NewPreview{AccountNumber: account.AccountNumber, FileName: "first.xlsx", CreatedAt: at})
 	require.NoError(t, err)
 	_, err = db.SaveImport(ctx, store.SaveImport{ImportID: firstID, Account: account, ImportedAt: at, CashOperations: []store.CashOperation{stored}})

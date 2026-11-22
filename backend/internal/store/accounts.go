@@ -111,5 +111,5 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 }
 
 func toAccount(row queries.Account) Account {
-	return Account{ID: row.ID, AccountNumber: row.AccountNumber, Name: row.Name, Type: row.Type, Currency: row.Currency}
+	return Account{ID: row.ID, AccountNumber: row.AccountNumber, Name: row.Name, Type: row.Type, Currency: row.Currency, Provider: row.Provider}
 }

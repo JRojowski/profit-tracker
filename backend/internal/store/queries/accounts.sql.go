@@ -10,7 +10,7 @@ import (
 )
 
 const accountByID = `-- name: AccountByID :one
-SELECT id, account_number, name, type, currency
+SELECT id, account_number, name, type, currency, provider
 FROM accounts
 WHERE id = ?
 `
@@ -24,12 +24,13 @@ func (q *Queries) AccountByID(ctx context.Context, id int64) (Account, error) {
 		&i.Name,
 		&i.Type,
 		&i.Currency,
+		&i.Provider,
 	)
 	return i, err
 }
 
 const accountByNumber = `-- name: AccountByNumber :one
-SELECT id, account_number, name, type, currency
+SELECT id, account_number, name, type, currency, provider
 FROM accounts
 WHERE account_number = ?
 `
@@ -43,12 +44,13 @@ func (q *Queries) AccountByNumber(ctx context.Context, accountNumber string) (Ac
 		&i.Name,
 		&i.Type,
 		&i.Currency,
+		&i.Provider,
 	)
 	return i, err
 }
 
 const accounts = `-- name: Accounts :many
-SELECT id, account_number, name, type, currency
+SELECT id, account_number, name, type, currency, provider
 FROM accounts
 ORDER BY name, id
 `
@@ -68,6 +70,7 @@ func (q *Queries) Accounts(ctx context.Context) ([]Account, error) {
 			&i.Name,
 			&i.Type,
 			&i.Currency,
+			&i.Provider,
 		); err != nil {
 			return nil, err
 		}
@@ -83,8 +86,8 @@ func (q *Queries) Accounts(ctx context.Context) ([]Account, error) {
 }
 
 const createAccount = `-- name: CreateAccount :one
-INSERT INTO accounts (account_number, name, type, currency)
-VALUES (?, ?, ?, ?)
+INSERT INTO accounts (account_number, name, type, currency, provider)
+VALUES (?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -93,6 +96,7 @@ type CreateAccountParams struct {
 	Name          string
 	Type          string
 	Currency      string
+	Provider      string
 }
 
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (int64, error) {
@@ -101,6 +105,7 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (i
 		arg.Name,
 		arg.Type,
 		arg.Currency,
+		arg.Provider,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -111,7 +116,7 @@ const renameAccount = `-- name: RenameAccount :one
 UPDATE accounts
 SET name = ?
 WHERE id = ?
-RETURNING id, account_number, name, type, currency
+RETURNING id, account_number, name, type, currency, provider
 `
 
 type RenameAccountParams struct {
@@ -128,6 +133,7 @@ func (q *Queries) RenameAccount(ctx context.Context, arg RenameAccountParams) (A
 		&i.Name,
 		&i.Type,
 		&i.Currency,
+		&i.Provider,
 	)
 	return i, err
 }

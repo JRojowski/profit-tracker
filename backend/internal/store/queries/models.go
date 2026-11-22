@@ -16,6 +16,7 @@ type Account struct {
 	Name          string
 	Type          string
 	Currency      string
+	Provider      string
 }
 
 type BenchmarkPrice struct {

@@ -45,6 +45,7 @@ export const mainAccount: Account = {
   name: "Main Account",
   type: "regular",
   currency: "PLN",
+  provider: "xtb",
 }
 
 export const ikzeAccount: Account = {
@@ -53,6 +54,7 @@ export const ikzeAccount: Account = {
   name: "Retirement",
   type: "IKZE",
   currency: "PLN",
+  provider: "xtb",
 }
 
 const priceMismatch: PriceWarning = {

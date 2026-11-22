@@ -1,4 +1,4 @@
-// Package importer makes an Import preview from an XTB export and saves the Import when the user confirms it.
+// Package importer makes an Import preview from the export of a Provider and saves the Import when the user confirms it.
 package importer
 
 import (
@@ -9,13 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
-	"github.com/jrojowski/profit-tracker/backend/internal/lot"
-	"github.com/jrojowski/profit-tracker/backend/internal/price"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
-	"github.com/jrojowski/profit-tracker/backend/internal/xtb"
 )
 
 // Errors of the Service.
@@ -79,11 +74,6 @@ const (
 	TypeIKZE    = "IKZE"
 )
 
-// totalTolerance is half a cent. The Total row check accepts a difference that is smaller than totalTolerance.
-// Excel stores the Total row as a float sum, so the Total can have float noise, for example 983.029999999997.
-// A difference of one cent is a real difference and the check rejects it.
-var totalTolerance = decimal.New(5, -3)
-
 // currencyCode matches a currency code, for example "USD".
 var currencyCode = regexp.MustCompile(`^[A-Z]{3}$`)
 
@@ -129,7 +119,7 @@ type NewAccount struct {
 // It looks for the other side of each Transfer of the file by ADR 0003. The tool does not store the warnings.
 // An error in the file is a *RejectedError.
 func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Preview, error) {
-	export, err := read(data)
+	export, err := parse(fileName, data)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -150,10 +140,7 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 			return Preview{}, err
 		}
 	}
-	ops, err := cashOperations(export)
-	if err != nil {
-		return Preview{}, err
-	}
+	ops := export.CashOperations
 	c := compare(ops, known)
 
 	newOps := map[string]store.CashOperation{}
@@ -173,8 +160,10 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 	if err != nil {
 		return Preview{}, &RejectedError{Err: fmt.Errorf("%w: %w", errLedgerNotValid, err)}
 	}
-	c.conflicts = append(c.conflicts, checkRealizedProfit(after.ClosedPositions, export.ClosedPositions, ops, newOps)...)
-	warnings, err := s.transferWarnings(ctx, account, export.CashOperations)
+	for _, check := range export.Checks {
+		c.conflicts = append(c.conflicts, check(after.ClosedPositions, ops, newOps)...)
+	}
+	warnings, err := s.transferWarnings(ctx, account, export.Transfers)
 	if err != nil {
 		return Preview{}, err
 	}
@@ -204,7 +193,7 @@ func (s *Service) Preview(ctx context.Context, fileName string, data []byte) (Pr
 		FileName:              fileName,
 		AccountNumber:         export.AccountNumber,
 		Account:               account,
-		SuggestedCurrency:     xtb.CurrencyFromFileName(fileName),
+		SuggestedCurrency:     export.SuggestedCurrency,
 		NewCashOperations:     c.newCount,
 		SkippedCashOperations: c.skipped,
 		State:                 state,
@@ -258,7 +247,7 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 		return store.Import{}, openImportError(id, &store.ImportClosedError{ImportID: id, State: pending.State})
 	}
 
-	export, err := read(pending.File)
+	export, err := parse(pending.FileName, pending.File)
 	if err != nil {
 		return store.Import{}, err
 	}
@@ -275,18 +264,15 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 			Name:          strings.TrimSpace(newAccount.Name),
 			Type:          newAccount.Type,
 			Currency:      newAccount.Currency,
+			Provider:      export.Provider,
 		}
 	}
 
-	ops, err := cashOperations(export)
-	if err != nil {
-		return store.Import{}, err
-	}
 	saved, err := s.store.SaveImport(ctx, store.SaveImport{
 		ImportID:       id,
 		Account:        *account,
 		ImportedAt:     s.now(),
-		CashOperations: ops,
+		CashOperations: export.CashOperations,
 		CheckLedger:    checkLedger,
 	})
 	var invalid *invalidLedgerError
@@ -359,62 +345,6 @@ func (s *Service) account(ctx context.Context, number string) (*store.Account, e
 		return nil, err
 	}
 	return &account, nil
-}
-
-// read reads the export and runs the checks of the file.
-func read(data []byte) (xtb.Export, error) {
-	export, err := xtb.Read(data)
-	if err != nil {
-		return xtb.Export{}, &RejectedError{Err: err}
-	}
-
-	sum := decimal.Zero
-	for _, op := range export.CashOperations {
-		sum = sum.Add(op.Amount)
-	}
-	// The Total row check: a difference means that the reader lost rows.
-	if sum.Sub(export.Total).Abs().GreaterThanOrEqual(totalTolerance) {
-		return xtb.Export{}, &RejectedError{Err: fmt.Errorf("%w: the sum is %s, the Total row is %s", ErrTotalMismatch, sum, export.Total)}
-	}
-	return export, nil
-}
-
-// cashOperations converts the Cash Operations of the export for the store.
-// It builds the Lots of the Fills with the rule of ADR 0002. An order that does not fit the rule is a *RejectedError.
-func cashOperations(export xtb.Export) ([]store.CashOperation, error) {
-	lots, err := lot.Build(export.CashOperations, export.ClosedPositions, export.OpenLots)
-	if err != nil {
-		return nil, &RejectedError{Err: err}
-	}
-	ops := make([]store.CashOperation, 0, len(export.CashOperations))
-	for _, op := range export.CashOperations {
-		saved := store.CashOperation{
-			XTBID:          op.ID,
-			Type:           string(op.Type),
-			Ticker:         op.Ticker,
-			InstrumentName: op.Instrument,
-			Category:       op.Category,
-			QuoteCurrency:  price.QuoteCurrency(op.Ticker),
-			Time:           op.Time,
-			Amount:         op.Amount,
-			Comment:        op.Comment,
-			PositionID:     op.PositionID,
-		}
-		switch {
-		case op.Purchase != nil:
-			// ADR 0002: the Lot of a Fill can have the position ID of a different Fill of the same order.
-			saved.LotID = lots[op.ID]
-			saved.Volume = decimal.NewNullDecimal(op.Purchase.Volume)
-			saved.Price = decimal.NewNullDecimal(op.Purchase.Price)
-			saved.IsFill = true
-		case op.Sale != nil:
-			// ADR 0001: the volume of a Closed Position is the closed volume of its Lot.
-			saved.Volume = decimal.NewNullDecimal(op.Sale.Volume)
-			saved.Price = decimal.NewNullDecimal(op.Sale.Price)
-		}
-		ops = append(ops, saved)
-	}
-	return ops, nil
 }
 
 // validate checks the data of a new Account.

@@ -42,6 +42,8 @@ type Account struct {
 	// Type is "regular", "IKE" or "IKZE".
 	Type     string
 	Currency string
+	// Provider is the Provider of the Account: "xtb" or "kraken".
+	Provider string
 }
 
 // PendingImport is an Import with the file that the user uploaded. The file is nil after the save or the cancel.
@@ -150,7 +152,7 @@ func (s *Store) AccountByNumber(ctx context.Context, number string) (Account, er
 	if err != nil {
 		return Account{}, fmt.Errorf("read account %s: %w", number, err)
 	}
-	return Account{ID: row.ID, AccountNumber: row.AccountNumber, Name: row.Name, Type: row.Type, Currency: row.Currency}, nil
+	return toAccount(row), nil
 }
 
 // CreatePreview saves a new Import and its Import Conflicts, and returns the ID of the Import.
@@ -301,6 +303,7 @@ func saveAccount(ctx context.Context, q *queries.Queries, a Account) (int64, err
 		Name:          a.Name,
 		Type:          a.Type,
 		Currency:      a.Currency,
+		Provider:      a.Provider,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("create account %s: %w", a.AccountNumber, err)
