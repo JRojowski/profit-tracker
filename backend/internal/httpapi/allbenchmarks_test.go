@@ -48,6 +48,13 @@ func allBenchmarksServer(t *testing.T) *testServer {
 	provider := newFakeProvider()
 	provider.setHistory(t, "CSPX.L", "USD", "2026-10-01=500", "2026-10-15=520", "2026-10-22=540")
 	provider.setHistory(t, "ETFBW20TR.WA", "PLN", "2026-10-01=104", "2026-10-22=117")
+	return allBenchmarksServerWith(t, provider)
+}
+
+// allBenchmarksServerWith is allBenchmarksServer with the given price provider.
+func allBenchmarksServerWith(t *testing.T, provider *fakeProvider) *testServer {
+	t.Helper()
+
 	srv := startServerWithPrices(t, provider)
 	srv.rateProvider.set(t, "USD", "2026-10-01", "4.00")
 	srv.rateProvider.set(t, "USD", "2026-10-15", "3.90")
@@ -158,4 +165,24 @@ func TestAllBenchmarks_NoAccounts_NotAvailable(t *testing.T) {
 		Period: "All", Currency: "PLN", Warnings: got.Warnings, Benchmarks: []benchmarkDTO{},
 	}, got)
 	assert.NotNil(t, got.Warnings, "the list is empty, not null")
+}
+
+// TestAllBenchmarks_OneBenchmarkFails_OthersAreAvailable checks that a failure of the price source for one Benchmark
+// does not hide the others. WIG20TR: 117 / 104 − 1 = 12.5 %, difference −2 − 12.5 = −14.5 pp.
+func TestAllBenchmarks_OneBenchmarkFails_OthersAreAvailable(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.failHistory("CSPX.L", errors.New("connection reset"))
+	provider.setHistory(t, "ETFBW20TR.WA", "PLN", "2026-10-01=104", "2026-10-22=117")
+	srv := allBenchmarksServerWith(t, provider)
+
+	got := srv.allBenchmarks(t, "All")
+
+	assert.True(t, got.Available)
+	assert.Equal(t, sourceFailure("sp500", "S&P 500", "iShares Core S&P 500 UCITS ETF USD (Acc)", "CSPX.L", "USD"),
+		benchmarkByID(t, benchmarksResponse{Benchmarks: got.Benchmarks}, "sp500"))
+	wig := benchmarkByID(t, benchmarksResponse{Benchmarks: got.Benchmarks}, "wig20tr")
+	assert.Equal(t, "available", wig.Status)
+	assert.Equal(t, ptr("12.5"), wig.Return)
+	assert.Equal(t, ptr("-14.5"), wig.Difference)
 }
