@@ -145,6 +145,7 @@ func TestBenchmarks_BenchmarkInAccountCurrency_ReturnAndDifference(t *testing.T)
 			noFullPeriod("mwig40tr", "mWIG40TR", "Beta ETF mWIG40TR Portfelowy FIZ", "ETFBM40TR.WA", "PLN"),
 			noFullPeriod("world", "World equities", "iShares Core MSCI World UCITS ETF USD (Acc)", "IWDA.L", "USD"),
 			noFullPeriod("gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD"),
+			noFullPeriod("bitcoin", "Bitcoin", "Bitcoin spot price", "BTC-USD", "USD"),
 		},
 	}, got)
 }
@@ -230,6 +231,86 @@ func TestBenchmarks_WeekendAndHoliday_UseTheLastEarlierClose(t *testing.T) {
 	wig := benchmarkByID(t, got, "wig20tr")
 	assert.Equal(t, ptr("10"), wig.Return)
 	assert.Equal(t, ptr("-9"), wig.Difference)
+}
+
+// dailyCloses returns one "YYYY-MM-DD=close" entry for each calendar day from the day from to the day to, inclusive,
+// weekends included. Each day has the close of the last change on or before it. changes maps a date to a close.
+func dailyCloses(t *testing.T, from, to string, changes map[string]string) []string {
+	t.Helper()
+
+	first, err := time.Parse(time.DateOnly, from)
+	require.NoError(t, err)
+	last, err := time.Parse(time.DateOnly, to)
+	require.NoError(t, err)
+	var closes []string
+	current := ""
+	for day := first; !day.After(last); day = day.AddDate(0, 0, 1) {
+		date := day.Format(time.DateOnly)
+		if c, ok := changes[date]; ok {
+			current = c
+		}
+		require.NotEmpty(t, current, "no close on or before %s", date)
+		closes = append(closes, date+"="+current)
+	}
+	return closes
+}
+
+// seriesByDate returns the return of each point of the series, by date.
+func seriesByDate(series []seriesPointDTO) map[string]string {
+	byDate := make(map[string]string, len(series))
+	for _, p := range series {
+		byDate[p.Date] = p.Return
+	}
+	return byDate
+}
+
+// TestBenchmarks_Bitcoin_UsesTheCloseOfEachDayIncludingWeekends checks the Bitcoin Benchmark (ADR 0008, amendment)
+// on a PLN Account. Bitcoin has a close on each day of the week. The NBP rate stays at the rate of Friday on a weekend.
+//
+//	User:     1000 PLN on Saturday 2026-10-03, 10 PLN of interest on 2026-10-20: 1 %
+//	Bitcoin:  closes in USD on each day from 2026-09-26 to 2026-10-22
+//	          50000 until Friday 2026-10-02, 60000 on Saturday 2026-10-03, 63000 from Sunday 2026-10-04,
+//	          66000 on 2026-10-22
+//	USD rate: 4.00 on Friday 2026-10-02, 4.10 from Monday 2026-10-05, 3.80 on today 2026-10-23
+//
+//	Day                  close × rate          value     Benchmark Return
+//	Saturday 2026-10-03  60000 × 4.00 (Fri)    240000    0 % (base day: the close of Saturday, not of Friday)
+//	Sunday 2026-10-04    63000 × 4.00 (Fri)    252000    252000 / 240000 − 1 = 5 %
+//	Monday 2026-10-05    63000 × 4.10          258300    7.625 %
+//	2026-10-22           66000 × 4.10          270600    12.75 %
+//	today 2026-10-23     66000 (10-22) × 3.80  250800    4.5 %, difference 1 − 4.5 = −3.5 pp
+func TestBenchmarks_Bitcoin_UsesTheCloseOfEachDayIncludingWeekends(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.setHistory(t, "BTC-USD", "USD", dailyCloses(t, "2026-09-26", "2026-10-22", map[string]string{
+		"2026-09-26": "50000", "2026-10-03": "60000", "2026-10-04": "63000", "2026-10-22": "66000",
+	})...)
+	srv := startServerWithPrices(t, provider)
+	srv.rateProvider.set(t, "USD", "2026-10-02", "4.00")
+	srv.rateProvider.set(t, "USD", "2026-10-05", "4.10")
+	srv.rateProvider.set(t, "USD", "2026-10-23", "3.80")
+	id := srv.importAccount(t, xtbtest.Export{AccountNumber: "61000010", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		interest("6A02", "10.00", octoberAt(20)),
+		cashDeposit("6A01", "1000.00", octoberAt(3)),
+	}}, "XTB PLN")
+	srv.refreshHistory(t)
+
+	got := srv.benchmarks(t, id, "All")
+
+	assert.Equal(t, ptr("2026-10-03"), got.BaseDay)
+	bitcoin := benchmarkByID(t, got, "bitcoin")
+	assert.Equal(t, "Bitcoin", bitcoin.Name)
+	assert.Equal(t, "BTC-USD", bitcoin.Ticker)
+	assert.Equal(t, "USD", bitcoin.QuoteCurrency)
+	assert.Equal(t, "available", bitcoin.Status)
+	assert.Equal(t, ptr("4.5"), bitcoin.Return)
+	assert.Equal(t, ptr("-3.5"), bitcoin.Difference)
+	series := seriesByDate(bitcoin.Series)
+	assert.Equal(t, "0", series["2026-10-03"])
+	assert.Equal(t, "5", series["2026-10-04"])
+	assert.Equal(t, "7.625", series["2026-10-05"])
+	assert.Equal(t, "12.75", series["2026-10-22"])
+	assert.Equal(t, "4.5", series["2026-10-23"])
 }
 
 // TestBenchmarks_EachPeriod_UsesTheDaysAndTheReturnOfTheTimeWeightedReturn checks the five periods.
@@ -505,7 +586,7 @@ func TestBenchmarks_CloseInOtherCurrency_NotStoredAndAskedAgain(t *testing.T) {
 }
 
 // benchmarkTickers are the price tickers of the Benchmarks, in the order of the list.
-var benchmarkTickers = []string{"CSPX.L", "ETFBW20TR.WA", "ETFBM40TR.WA", "IWDA.L", "IGLN.L"}
+var benchmarkTickers = []string{"CSPX.L", "ETFBW20TR.WA", "ETFBM40TR.WA", "IWDA.L", "IGLN.L", "BTC-USD"}
 
 // benchmarkRequests returns the request of each Benchmark from the day from to the day to, in the order of the list.
 func benchmarkRequests(from, to string) []historyRequest {
@@ -529,7 +610,7 @@ func TestRefreshPrices_Benchmarks_RequestsEachBenchmarkFromSevenDaysBeforeFirstC
 
 	assert.Equal(t, benchmarkRequests("2026-09-24", "2026-10-22"), provider.adjustedRequests())
 	assert.Len(t, provider.historyRequests(), 2, "the Instruments get their history as before")
-	assert.Equal(t, 7, srv.pauses.count(), "the tool pauses before each history request, also of a Benchmark")
+	assert.Equal(t, 8, srv.pauses.count(), "the tool pauses before each history request, also of a Benchmark")
 }
 
 func TestRefreshPrices_SecondRefresh_AsksNoBenchmarkDaysAgain(t *testing.T) {
