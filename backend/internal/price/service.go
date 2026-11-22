@@ -44,7 +44,7 @@ type Result struct {
 	Refreshed int
 	// Failures are the Instruments that got no current price, in broker ticker order.
 	Failures []Failure
-	// HistoryStored is the number of stored daily closes.
+	// HistoryStored is the number of stored daily closes of the Instruments and of the Benchmarks.
 	HistoryStored int
 	// HistoryFailures are the Instruments that got no history, in broker ticker order.
 	HistoryFailures []Failure
@@ -60,7 +60,8 @@ type Progress struct {
 	// Done is the number of history requests that the refresh completed. Total is the number of history
 	// requests of the refresh. Both are 0 before the history step.
 	Done, Total int
-	// Ticker is the broker ticker of the Instrument of the running history request, or empty.
+	// Ticker is the broker ticker of the Instrument or the price ticker of the Benchmark of the running history
+	// request, or empty.
 	Ticker string
 }
 
@@ -97,7 +98,8 @@ func (e *CurrencyError) Error() string {
 
 // Refresh gets a current price for each Instrument that is in a Holding of an Account and has a Quote Currency.
 // Then it gets the missing daily closes of each Instrument that an Account ever held and that has
-// a Quote Currency. A failure of one Instrument does not stop the others. "Too Many Requests" from the price
+// a Quote Currency. It also gets the missing closes of each Benchmark.
+// A failure of one Instrument does not stop the others. "Too Many Requests" from the price
 // source stops the refresh, and the result tells it.
 // Refresh returns an error if it cannot read or store data, or if ctx ends. Then the result holds the prices
 // that it stored before the error.

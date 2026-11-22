@@ -799,3 +799,71 @@ export async function askAssistant(
   })
   return readJSON<AssistantAnswer>(response)
 }
+
+// BenchmarkStatus tells if the tool can compare a Benchmark with the user for a period.
+// noFullPeriod means that the tool has no price of the Benchmark for the whole period.
+export type BenchmarkStatus = "available" | "noFullPeriod" | "sourceFailure"
+
+// BenchmarkPoint is the cumulative return of one day, as a percentage in decimal text. The first day of a series is "0".
+export type BenchmarkPoint = { date: string; return: string }
+
+// BenchmarkReturn is the Benchmark Return of one Benchmark for a period, and its difference to the user.
+export type BenchmarkReturn = {
+  id: string
+  name: string
+  // fund is the name of the ETF or ETC that represents the Benchmark.
+  fund: string
+  ticker: string
+  quoteCurrency: string
+  status: BenchmarkStatus
+  // return is a percentage as decimal text. It is null unless the status is "available".
+  return: string | null
+  // difference is the return of the user minus the Benchmark Return, in percentage points as decimal text.
+  difference: string | null
+  // series has one point for each day from the base day to the last day. It is empty unless the status is "available".
+  series: BenchmarkPoint[]
+}
+
+// Benchmarks is the comparison of the user with the Benchmarks for one period.
+// When available is false, the days, the return of the user and the Benchmarks are empty.
+export type Benchmarks = {
+  period: HistoryPeriod
+  // currency is the currency of the comparison.
+  currency: string
+  available: boolean
+  warnings: string[]
+  baseDay: string | null
+  lastDay: string | null
+  user: { return: string | null; series: BenchmarkPoint[] }
+  benchmarks: BenchmarkReturn[]
+}
+
+// AccountBenchmarks is the comparison of one Account with the Benchmarks, in the Account currency.
+export type AccountBenchmarks = Benchmarks & { accountId: number }
+
+// fetchAccountBenchmarks gets the Benchmark Returns of one Account for one period.
+export async function fetchAccountBenchmarks(
+  id: number,
+  period: HistoryPeriod,
+  signal?: AbortSignal
+): Promise<AccountBenchmarks> {
+  const response = await fetch(
+    `/api/accounts/${id}/benchmarks?period=${period}`,
+    { signal }
+  )
+  return readJSON<AccountBenchmarks>(response)
+}
+
+// fetchAllAccountsBenchmarks gets the Benchmark Returns of all Accounts in PLN for one period.
+export async function fetchAllAccountsBenchmarks(
+  period: HistoryPeriod,
+  signal?: AbortSignal
+): Promise<Benchmarks> {
+  const response = await fetch(
+    `/api/all-accounts/benchmarks?period=${period}`,
+    {
+      signal,
+    }
+  )
+  return readJSON<Benchmarks>(response)
+}

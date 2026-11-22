@@ -122,6 +122,46 @@ func TestRates_NotFound_ReturnsEmptyListAndNoError(t *testing.T) {
 	assert.Empty(t, got)
 }
 
+// notFoundPage is the start of the HTML page that the NBP sometimes sends with status 404 for a range that has
+// tables. The next request for the same range can get the rates.
+const notFoundPage = `<!DOCTYPE html><html><head><title>404 - File or directory not found.</title></head>` +
+	`<body><h3>The resource you are looking for might have been removed, had its name changed, ` +
+	`or is temporarily unavailable.</h3></body></html>`
+
+func TestRates_NotFoundPageWithoutNoDataText_ReturnsErrorThatNamesTheCurrency(t *testing.T) {
+	t.Parallel()
+	provider, _ := startNBP(t, fixed(http.StatusNotFound, notFoundPage))
+
+	got, err := provider.Rates(t.Context(), "USD", day(t, "2024-05-27"), day(t, "2025-05-27"))
+
+	require.Error(t, err, "a 404 without the text \"Brak danych\" is not a range with no table")
+	assert.Contains(t, err.Error(), "USD")
+	assert.Empty(t, got)
+}
+
+func TestRates_NotFoundPageThenRates_AsksAgainAndReturnsRates(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	answers := 0
+	provider, requests := startNBP(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		answers++
+		n := answers
+		mu.Unlock()
+		if n == 1 {
+			fixed(http.StatusNotFound, notFoundPage)(w, r)
+			return
+		}
+		fixed(http.StatusOK, usdAnswer)(w, r)
+	})
+
+	got, err := provider.Rates(t.Context(), "USD", day(t, "2026-10-20"), day(t, "2026-10-21"))
+
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+	assert.Len(t, requests.all(), 2)
+}
+
 func TestRates_EmptyRange_SendsNoRequest(t *testing.T) {
 	t.Parallel()
 	provider, requests := startNBP(t, fixed(http.StatusOK, usdAnswer))

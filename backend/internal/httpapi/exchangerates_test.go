@@ -168,7 +168,10 @@ func TestRefreshPrices_ExchangeRates_AsksOnlyForMissingDays(t *testing.T) {
 	}, srv.rateProvider.requestedRanges())
 }
 
-func TestRefreshPrices_ExchangeRates_NoHoldingInOtherCurrency_AsksForNothing(t *testing.T) {
+// TestRefreshPrices_ExchangeRates_NoHoldingInOtherCurrency_AsksOnlyForBenchmarkQuoteCurrency checks that
+// a PLN Account with only PLN Holdings needs the USD rates of the USD Benchmarks.
+// The series starts 7 days before the first Cash Operation. The Cash Operations have the default time 2026-01-02.
+func TestRefreshPrices_ExchangeRates_NoHoldingInOtherCurrency_AsksOnlyForBenchmarkQuoteCurrency(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
 	srv.importAccount(t, xtbtest.Export{AccountNumber: "56000033", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
@@ -181,8 +184,9 @@ func TestRefreshPrices_ExchangeRates_NoHoldingInOtherCurrency_AsksForNothing(t *
 
 	require.NoError(t, err)
 	assert.Empty(t, refresh.RateFailures)
-	assert.False(t, ran, "the tool needs no rate for a Holding in PLN")
-	assert.Empty(t, srv.rateProvider.requestedRanges())
+	assert.False(t, ran, "the refresh got the rates of today")
+	assert.Equal(t, []rateRequest{{Currency: "USD", From: "2025-12-26", To: "2026-10-23"}}, srv.rateProvider.requestedRanges(),
+		"a Holding in PLN needs no rate, but the USD Benchmarks need the USD rates")
 }
 
 func TestRefreshAtStart_ExchangeRates_RunsOnlyWhenTheLastFetchIsBeforeTodayInPolishTime(t *testing.T) {
@@ -315,6 +319,9 @@ func TestRefreshPrices_CurrencyWithNoTable_NamesTheCurrencyInEachRefresh(t *test
 
 	assert.Equal(t, noRate, first.RateFailures)
 	assert.Equal(t, noRate, second.RateFailures, "a second refresh on the same day asks for nothing, but still names CHF")
-	assert.Len(t, srv.rateProvider.requestedRanges(), 1)
+	assert.Equal(t, []rateRequest{
+		{Currency: "CHF", From: "2025-12-26", To: "2026-10-23"},
+		{Currency: "USD", From: "2025-12-26", To: "2026-10-23"},
+	}, srv.rateProvider.requestedRanges(), "CHF of the Holding and USD of the Benchmarks, each one time")
 	assert.True(t, srv.summaryPrices(t, id).StaleRates)
 }

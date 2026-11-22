@@ -196,8 +196,13 @@ type fakeProvider struct {
 	// histories are the daily closes by price ticker.
 	histories map[string]price.History
 	// historyFailures are the errors of the price tickers whose history requests must fail.
-	historyFailures  map[string]error
+	historyFailures map[string]error
+	// dailyFailures are the errors of the price tickers whose DailyCloses requests must fail. The Benchmarks
+	// use AdjustedDailyCloses, so they do not see these errors.
+	dailyFailures    map[string]error
 	historyRequested []historyRequest
+	// adjustedRequested are the requests of AdjustedDailyCloses. The Benchmarks send them.
+	adjustedRequested []historyRequest
 	// onHistory runs for each DailyCloses request, before the fake answers. It can block.
 	onHistory func(ticker string)
 }
@@ -210,6 +215,7 @@ type historyRequest struct {
 func newFakeProvider() *fakeProvider {
 	return &fakeProvider{
 		quotes: map[string]price.Quote{}, histories: map[string]price.History{}, historyFailures: map[string]error{},
+		dailyFailures: map[string]error{},
 	}
 }
 
@@ -228,6 +234,33 @@ func (f *fakeProvider) DailyCloses(_ context.Context, ticker string, from, to ti
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.dailyFailures[ticker]; err != nil {
+		return price.History{}, err
+	}
+	return f.closesOf(ticker, from, to)
+}
+
+// AdjustedDailyCloses returns the daily closes of the price ticker from from to to, or the error of the price ticker.
+// The fake has one set of closes for each price ticker, so the closes are the same as those of DailyCloses.
+func (f *fakeProvider) AdjustedDailyCloses(_ context.Context, ticker string, from, to time.Time) (price.History, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.adjustedRequested = append(f.adjustedRequested, historyRequest{
+		Ticker: ticker, From: from.Format(time.DateOnly), To: to.Format(time.DateOnly),
+	})
+	return f.closesOf(ticker, from, to)
+}
+
+// adjustedRequests returns the requests of AdjustedDailyCloses, in request order.
+func (f *fakeProvider) adjustedRequests() []historyRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]historyRequest(nil), f.adjustedRequested...)
+}
+
+// closesOf returns the closes of the price ticker from from to to, or the error of the price ticker.
+// The caller holds the lock.
+func (f *fakeProvider) closesOf(ticker string, from, to time.Time) (price.History, error) {
 	if err := f.historyFailures[ticker]; err != nil {
 		return price.History{}, err
 	}
@@ -263,6 +296,13 @@ func (f *fakeProvider) failHistory(ticker string, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.historyFailures[ticker] = err
+}
+
+// failDailyCloses makes the DailyCloses requests of the price ticker fail. AdjustedDailyCloses still answers.
+func (f *fakeProvider) failDailyCloses(ticker string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dailyFailures[ticker] = err
 }
 
 // setOnHistory sets the hook that runs for each later history request.

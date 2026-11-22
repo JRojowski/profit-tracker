@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useLocation, useMatch } from "react-router"
 
 import type { Account } from "@/lib/api"
-import { accountPattern, paths } from "@/lib/routes"
+import { accountPattern, isAllAccountsPath } from "@/lib/routes"
 
 // SidebarView is the view that the sidebar shows. The sidebar has three states.
 // "loading": the Accounts load. "view": All Accounts (account is null) or one Account.
@@ -23,7 +23,7 @@ export function useSidebarView(accounts: Account[] | null): SidebarView {
   if (accounts === null) return { state: "loading" }
 
   const path = pathname.replace(/\/+$/, "")
-  if (path === "" || path === paths.allAccounts) {
+  if (path === "" || isAllAccountsPath(path)) {
     if (lastId !== null) setLastId(null)
     return { state: "view", account: null }
   }

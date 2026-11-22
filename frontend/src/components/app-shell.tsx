@@ -27,7 +27,7 @@ import {
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { useAssistant } from "@/lib/assistant-state"
-import { accountPattern, paths } from "@/lib/routes"
+import { accountPattern, isAllAccountsPath, paths } from "@/lib/routes"
 
 // AppShell holds the sidebar and the top bar. Each page renders only its content in the Outlet.
 export function AppShell() {
@@ -118,7 +118,7 @@ function ViewTitle({ account }: { account: Account | null }) {
   let title = "All Accounts"
   if (pathname === paths.import) title = "Import"
   else if (pathname === paths.imports) title = "Import history"
-  else if (accountRoute && pathname !== paths.allAccounts)
+  else if (accountRoute && !isAllAccountsPath(pathname))
     title = "Unknown Account"
   return (
     <h1 className="truncate text-xl font-semibold tracking-title">{title}</h1>

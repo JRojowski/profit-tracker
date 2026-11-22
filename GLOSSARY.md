@@ -104,6 +104,14 @@ _Avoid_: Chart, timeline, equity curve
 The rate of return in a period that the Net Deposits flows do not change. It measures the result of the investments, not the effect of the time of each deposit.
 _Avoid_: TWR, performance
 
+**Benchmark**:
+A market index or commodity whose return in a period the tool compares with the Time-Weighted Return of the user. An accumulating ETF or ETC represents each Benchmark (ADR 0008). A Benchmark is not an Instrument: the user does not hold it, and it has no broker ticker, no Lots and no Price Warning.
+_Avoid_: Index, reference, comparison
+
+**Benchmark Return**:
+The change of the value of a Benchmark in a period, in the currency of the comparison, as a percentage.
+_Avoid_: Index return, market return
+
 ### IKZE
 
 **IKZE Contribution**:

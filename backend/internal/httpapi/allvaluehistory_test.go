@@ -317,7 +317,8 @@ func TestAllValueHistory_FlowWithNoRateOnItsDay_NotAvailable(t *testing.T) {
 func TestAllValueHistory_DayBeforeTheFirstStoredRate_NotAvailable(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)
-	srv.rateProvider.set(t, "USD", "2026-10-01", "3.90")
+	// The first stored rate is on 2026-10-02, the day after the first Cash Operation.
+	srv.rateProvider.set(t, "USD", "2026-10-02", "3.90")
 	srv.rateProvider.set(t, "USD", "2026-10-20", "4.00")
 	srv.importAccount(t, xtbtest.Export{AccountNumber: "59000010", Currency: "USD", CashOperations: []xtbtest.CashOperation{
 		cashDeposit("6202", "1000.00", octoberAt(20)),

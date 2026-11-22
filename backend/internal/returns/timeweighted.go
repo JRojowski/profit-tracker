@@ -107,16 +107,30 @@ func periodReturn(days []DayValue, base time.Time) Rate {
 	one := decimal.NewFromInt(1)
 	product, rated := one, false
 	for t := start; t < len(days); t++ {
-		previous := days[t-1].Value
-		if !previous.IsPositive() {
+		factor, ok := dailyFactor(days, t)
+		if !ok {
 			continue
 		}
-		factor := days[t].Value.Sub(days[t].Flow).DivRound(previous, twrPrecision)
 		product = product.Mul(factor).Round(twrPrecision)
 		rated = true
 	}
 	if !rated {
 		return Rate{Reason: ReasonNoValueHistory}
 	}
-	return Rate{Percent: product.Sub(one).Mul(hundred).Round(8)}
+	return Rate{Percent: CumulativePercent(product)}
+}
+
+// dailyFactor returns 1 + the rate of day t: (V_t − F_t) / V_(t−1). It returns false if day t has no rate,
+// because the value of the day before is 0 or less. t must be 1 or more.
+func dailyFactor(days []DayValue, t int) (decimal.Decimal, bool) {
+	previous := days[t-1].Value
+	if !previous.IsPositive() {
+		return decimal.Zero, false
+	}
+	return days[t].Value.Sub(days[t].Flow).DivRound(previous, twrPrecision), true
+}
+
+// CumulativePercent returns the growth factor minus 1, as a percentage with 8 decimal places.
+func CumulativePercent(product decimal.Decimal) decimal.Decimal {
+	return product.Sub(decimal.NewFromInt(1)).Mul(hundred).Round(8)
 }

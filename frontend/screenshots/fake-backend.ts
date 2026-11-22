@@ -30,6 +30,7 @@ function answer(
     "/api/all-accounts/summary": fixture.allSummary,
     "/api/all-accounts/allocation": fixture.allAllocation,
     "/api/all-accounts/value-history": fixture.allHistory,
+    "/api/all-accounts/benchmarks": fixture.allBenchmarks,
     "/api/imports": fixture.imports,
     "/api/prices/refresh/progress": {
       running: false,
@@ -47,6 +48,7 @@ function answer(
       summary: fixture.summary,
       allocation: fixture.allocation,
       "value-history": fixture.history,
+      benchmarks: fixture.benchmarks,
       holdings: fixture.holdings,
       "closed-positions": fixture.closedPositions,
       "ikze-limit": fixture.ikzeLimit,

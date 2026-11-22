@@ -8,6 +8,7 @@ import {
   chartLineWidth,
   chartTooltipClass,
 } from "@/lib/chart-style"
+import { axisDate, dateTime, dayMs, monthTicks } from "@/lib/chart-time"
 import { tagWidth } from "@/lib/end-tags"
 import { SectionHeading } from "@/components/section-heading"
 import { TriangleAlertIcon } from "lucide-react"
@@ -16,6 +17,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import { FigureLabel } from "@/components/figure-label"
 import { InsetSurface } from "@/components/inset-surface"
+import { PeriodPills } from "@/components/period-pills"
 import { PriceWarningList } from "@/components/price-warnings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ResultBadge } from "@/components/result-badge"
@@ -25,10 +27,8 @@ import {
   ChartTooltip,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useIsMobile } from "@/hooks/use-mobile"
 import {
-  historyPeriods,
   type HistoryPeriod,
   type PriceWarning,
   type ValueHistory,
@@ -100,26 +100,7 @@ export function ValueHistoryCard({
               )}
             </div>
           }
-          action={
-            <ToggleGroup
-              type="single"
-              size="sm"
-              data-pills
-              aria-label="Period"
-              value={period}
-              onValueChange={(value) => {
-                // An empty value means that the user clicked the selected item again.
-                if (value) setPeriod(value as HistoryPeriod)
-              }}
-              className="shrink-0"
-            >
-              {historyPeriods.map((item) => (
-                <ToggleGroupItem key={item} value={item} className="num">
-                  {item}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          }
+          action={<PeriodPills value={period} onChange={setPeriod} />}
         />
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-4">
@@ -444,9 +425,6 @@ function AmountBox({ label, colour, dashed, children }: AmountBoxProps) {
   )
 }
 
-// dayMs is the length of one day in milliseconds.
-const dayMs = 24 * 60 * 60 * 1000
-
 // chartPoint gives the geometry of one day. The floats are for the chart only. The texts use the exact amounts.
 function chartPoint(point: ValueHistoryPoint): ChartPoint {
   return {
@@ -466,34 +444,4 @@ function periodPoints(
 ): ValueHistoryPoint[] {
   if (start === null) return []
   return points.filter((point) => point.date >= start)
-}
-
-// dateTime reads a YYYY-MM-DD date as milliseconds since 1970 at midnight UTC.
-function dateTime(date: string): number {
-  const [year, month, day] = date.split("-").map(Number)
-  return Date.UTC(year, month - 1, day)
-}
-
-// monthTicks gives the first day of each month in the range, as milliseconds since 1970 in UTC.
-// It keeps every nth month, so that the axis has at most max ticks.
-function monthTicks(first: number, last: number, max: number): number[] {
-  const start = new Date(first)
-  const months: number[] = []
-  for (let month = start.getUTCMonth() + 1; ; month++) {
-    const time = Date.UTC(start.getUTCFullYear(), month, 1)
-    if (time > last) break
-    months.push(time)
-  }
-  const step = Math.max(1, Math.ceil(months.length / max))
-  return months.filter((_, index) => index % step === 0)
-}
-
-// axisDate shows a day of the time axis: the month and the year for a long period, else the day and the month.
-function axisDate(time: number, long: boolean): string {
-  return new Date(time).toLocaleDateString(undefined, {
-    timeZone: "UTC",
-    ...(long
-      ? { month: "short", year: "2-digit" }
-      : { day: "numeric", month: "short" }),
-  })
 }

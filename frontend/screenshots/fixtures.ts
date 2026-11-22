@@ -2,13 +2,17 @@
 // The shapes follow the types in src/lib/api.ts. Amounts and percentages are decimal text.
 import type {
   Account,
+  AccountBenchmarks,
   AccountSummary,
   AccountValueHistory,
   AllAccountsRow,
   AllAccountsSummary,
   AllAccountsValueHistory,
   Allocation,
+  BenchmarkReturn,
+  Benchmarks,
   AllocationPart,
+  BenchmarkPoint,
   ClosedPosition,
   Holding,
   HistoryPeriod,
@@ -28,7 +32,11 @@ const today = "2026-06-15"
 
 // DataSet selects which data the fake backend answers with.
 export type DataSet =
-  "populated" | "nearEqualEnd" | "noAccounts" | "emptyAccounts"
+  | "populated"
+  | "nearEqualEnd"
+  | "benchmarkUnavailable"
+  | "noAccounts"
+  | "emptyAccounts"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -523,6 +531,188 @@ const allHistory: AllAccountsValueHistory = {
   priceWarnings: [priceMismatch],
 }
 
+// returnSeries gives a smooth daily series of cumulative returns from "0" to the final return, one point for each day.
+// The last point has the exact text of the final return. The wave makes the lines differ.
+function returnSeries(
+  from: string,
+  to: string,
+  final: string,
+  wave: number
+): BenchmarkPoint[] {
+  const days: string[] = []
+  const end = Date.parse(to)
+  for (let time = Date.parse(from); time <= end; time += 86_400_000) {
+    days.push(new Date(time).toISOString().slice(0, 10))
+  }
+  const last = days.length - 1
+  return days.map((date, index) => {
+    const t = index / last
+    const value =
+      index === 0
+        ? "0"
+        : index === last
+          ? final
+          : (
+              Number(final) * t ** 1.3 +
+              wave * Math.sin(index / 30) * Math.sin(Math.PI * t)
+            ).toFixed(2)
+    return { date, return: value }
+  })
+}
+
+// benchmarkRows gives the five Benchmarks for a user return. The last Benchmark has no price for the whole period.
+function benchmarkRows(
+  user: number,
+  from: string,
+  to: string
+): BenchmarkReturn[] {
+  const rows: [string, string, string, string, string, number | null][] = [
+    [
+      "sp500",
+      "S&P 500",
+      "iShares Core S&P 500 UCITS ETF USD (Acc)",
+      "CSPX.L",
+      "USD",
+      45.1,
+    ],
+    [
+      "wig20tr",
+      "WIG20TR",
+      "Beta ETF WIG20TR Portfelowy FIZ",
+      "ETFBW20TR.WA",
+      "PLN",
+      22.35,
+    ],
+    [
+      "mwig40tr",
+      "mWIG40TR",
+      "Beta ETF mWIG40TR Portfelowy FIZ",
+      "ETFBM40TR.WA",
+      "PLN",
+      18.9,
+    ],
+    [
+      "world",
+      "World equities",
+      "iShares Core MSCI World UCITS ETF USD (Acc)",
+      "IWDA.L",
+      "USD",
+      38.7,
+    ],
+    ["gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD", null],
+  ]
+  return rows.map(([id, name, fund, ticker, quoteCurrency, value], index) => ({
+    id,
+    name,
+    fund,
+    ticker,
+    quoteCurrency,
+    status: value === null ? "noFullPeriod" : "available",
+    return: value === null ? null : value.toFixed(2),
+    difference: value === null ? null : (user - value).toFixed(2),
+    series:
+      value === null
+        ? []
+        : returnSeries(from, to, value.toFixed(2), 2 + index * 1.5),
+  }))
+}
+
+// accountBenchmarks gives the Benchmarks of an Account for the period All, from the Time-Weighted Return of its Value History.
+function accountBenchmarks(
+  history: AccountValueHistory,
+  failed = false
+): AccountBenchmarks {
+  const user = history.timeWeightedReturn.All
+  const from = history.periodStarts.All ?? ""
+  const to = history.points.at(-1)?.date ?? ""
+  return {
+    accountId: history.accountId,
+    period: "All",
+    currency: history.currency,
+    available: true,
+    warnings: [],
+    baseDay: history.periodStarts.All,
+    lastDay: history.points.at(-1)?.date ?? null,
+    user: {
+      return: user,
+      series: user === null ? [] : returnSeries(from, to, user, 3),
+    },
+    benchmarks: failed
+      ? failedBenchmarkRows(Number(user), from, to)
+      : benchmarkRows(Number(user), from, to),
+  }
+}
+
+// failedBenchmarkRows is benchmarkRows with a failed price source for WIG20TR. Gold has no price for the whole period.
+function failedBenchmarkRows(
+  user: number,
+  from: string,
+  to: string
+): BenchmarkReturn[] {
+  return benchmarkRows(user, from, to).map((row) =>
+    row.id === "wig20tr"
+      ? {
+          ...row,
+          status: "sourceFailure",
+          return: null,
+          difference: null,
+          series: [],
+        }
+      : row
+  )
+}
+
+// emptyBenchmarks is the answer for an Account with no Value History.
+function emptyBenchmarks(accountId: number): AccountBenchmarks {
+  return {
+    accountId,
+    period: "All",
+    currency: "PLN",
+    available: false,
+    warnings: [],
+    baseDay: null,
+    lastDay: null,
+    user: { return: null, series: [] },
+    benchmarks: [],
+  }
+}
+
+// allAccountsBenchmarks gives the Benchmarks of all Accounts in PLN for the period All.
+const allAccountsBenchmarks: Benchmarks = {
+  period: "All",
+  currency: "PLN",
+  available: true,
+  warnings: [],
+  baseDay: allHistory.periodStarts.All,
+  lastDay: allHistory.points.at(-1)?.date ?? null,
+  user: {
+    return: allHistory.timeWeightedReturn.All,
+    series: returnSeries(
+      allHistory.periodStarts.All ?? "",
+      allHistory.points.at(-1)?.date ?? "",
+      allHistory.timeWeightedReturn.All ?? "0",
+      3
+    ),
+  },
+  benchmarks: benchmarkRows(
+    Number(allHistory.timeWeightedReturn.All),
+    allHistory.periodStarts.All ?? "",
+    allHistory.points.at(-1)?.date ?? ""
+  ),
+}
+
+// emptyAllBenchmarks is the answer for all Accounts when they have no Value History.
+const emptyAllBenchmarks: Benchmarks = {
+  period: "All",
+  currency: "PLN",
+  available: false,
+  warnings: [],
+  baseDay: null,
+  lastDay: null,
+  user: { return: null, series: [] },
+  benchmarks: [],
+}
+
 // accountRow is the row of one Account in the summary of all Accounts.
 function accountRow(account: Account, summary: AccountSummary): AllAccountsRow {
   return {
@@ -748,6 +938,8 @@ export type ApiFixture = {
   summary: Record<number, AccountSummary>
   allocation: Record<number, Allocation>
   history: Record<number, AccountValueHistory>
+  benchmarks: Record<number, AccountBenchmarks>
+  allBenchmarks: Benchmarks
   holdings: Record<number, Holding[]>
   closedPositions: Record<number, ClosedPosition[]>
   ikzeLimit: Record<number, IkzeLimit>
@@ -757,7 +949,11 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
-  if (dataSet === "populated" || dataSet === "nearEqualEnd") {
+  if (
+    dataSet === "populated" ||
+    dataSet === "nearEqualEnd" ||
+    dataSet === "benchmarkUnavailable"
+  ) {
     return {
       accounts: [ikzeAccount, mainAccount].sort((a, b) =>
         a.name.localeCompare(b.name)
@@ -771,6 +967,11 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
         1: dataSet === "nearEqualEnd" ? nearEqualHistory : mainHistory,
         2: ikzeHistory,
       },
+      benchmarks: {
+        1: accountBenchmarks(mainHistory, dataSet === "benchmarkUnavailable"),
+        2: accountBenchmarks(ikzeHistory),
+      },
+      allBenchmarks: allAccountsBenchmarks,
       holdings: { 1: mainHoldings, 2: ikzeHoldings },
       closedPositions: { 1: mainClosed, 2: [] },
       ikzeLimit: { 2: ikzeLimit },
@@ -796,6 +997,8 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     summary: { 1: emptySummary(1), 2: emptySummary(2) },
     allocation: { 1: emptyAllocation("PLN"), 2: emptyAllocation("PLN") },
     history: { 1: emptyHistory(1), 2: emptyHistory(2) },
+    benchmarks: { 1: emptyBenchmarks(1), 2: emptyBenchmarks(2) },
+    allBenchmarks: emptyAllBenchmarks,
     holdings: { 1: [], 2: [] },
     closedPositions: { 1: [], 2: [] },
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },

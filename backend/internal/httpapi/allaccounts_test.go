@@ -186,7 +186,11 @@ func TestAllAccounts_EarlierFlowAfterRefresh_RateMissingUntilTheSeriesExtends(t 
 	srv.rateProvider.set(t, "USD", "2026-06-01", "4.10")
 	srv.rateProvider.set(t, "USD", "2026-10-05", "4.00")
 	srv.rateProvider.set(t, "USD", "2026-10-22", "3.60")
-	plnID := srv.importAccount(t, depositOnlyExport("58000003", "PLN"), "XTB PLN")
+	// The PLN deposit is on the day of the USD deposit. Thus the USD rates of the Benchmarks, which start 7 days
+	// before the first Cash Operation, do not start earlier than the rates of the USD flows.
+	plnID := srv.importAccount(t, xtbtest.Export{AccountNumber: "58000003", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		cashDeposit("901", "250.00", time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)),
+	}}, "XTB PLN")
 	usdID := srv.importAccount(t, adr0004Export(), "XTB USD")
 	srv.refreshPrices(t)
 	require.True(t, srv.allAccounts(t).Available)
