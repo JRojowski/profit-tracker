@@ -147,8 +147,12 @@ type CashOperation struct {
 	Volume decimal.Decimal
 	// Price is the stored price of one unit. It is not valid for an operation with no price.
 	Price decimal.NullDecimal
-	// Fee is the fee of a crypto purchase in the crypto asset. It is zero for each other operation.
+	// Fee is the fee of a crypto purchase in FeeCurrency. It is zero for each other operation.
 	Fee decimal.Decimal
+	// FeeCurrency is the currency of Fee: the Account currency or the crypto asset. An empty value with a fee
+	// tells the crypto asset. ADR 0009: a fee in the Account currency is a part of Amount, so it is in the cost.
+	// A fee in the crypto asset decreases Volume.
+	FeeCurrency string
 }
 
 // Instrument is one security, identified by its broker ticker.
@@ -634,7 +638,7 @@ func averageCostHoldings(l Ledger) averageCost {
 		h.Volume = h.Volume.Add(op.Volume)
 		if op.Type == TypeCryptoPurchase {
 			h.Cost = h.Cost.Sub(op.Amount)
-			result.feeSum = result.feeSum.Add(op.Fee.Mul(op.Price.Decimal))
+			result.feeSum = result.feeSum.Add(l.feeValue(op))
 			continue
 		}
 		value, ok := l.rewardValue(op)
@@ -649,6 +653,15 @@ func averageCostHoldings(l Ledger) averageCost {
 		}
 	}
 	return result
+}
+
+// feeValue returns the fee of the crypto purchase in the Account currency. ADR 0009, rule 2.
+// A fee in the Account currency counts as it is. A fee in the crypto asset counts at the purchase price.
+func (l Ledger) feeValue(op CashOperation) decimal.Decimal {
+	if op.FeeCurrency == l.Currency {
+		return op.Fee
+	}
+	return op.Fee.Mul(op.Price.Decimal)
 }
 
 // rewardValue returns the value of the Reward in the Account currency: the volume × the close on or before

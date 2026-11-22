@@ -240,19 +240,29 @@ func TestKrakenImport_UnsupportedEntry_StopsTheImportAndListsTheEntry(t *testing
 			want:    []unsupportedEntry{{Type: "withdrawal", Subtype: "", Asset: "BTC", Time: atText, Reason: "withdrawal"}},
 		},
 		{
-			name:    "fee in EUR on a purchase",
+			name:    "fee on both rows of a purchase",
 			entries: purchase(func(eur, _ *krakentest.Entry) { eur.Fee = "0.40" }),
 			want: []unsupportedEntry{
-				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that is not in the crypto asset"},
-				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that is not in the crypto asset"},
+				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that the tool does not support"},
+				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that the tool does not support"},
 			},
 		},
 		{
-			name:    "fee currency that is not the crypto asset",
+			name: "fee on the EUR row in a third currency",
+			entries: purchase(func(eur, crypto *krakentest.Entry) {
+				eur.Fee, eur.FeeCurrency, crypto.Fee = "0.40", "USD", "0"
+			}),
+			want: []unsupportedEntry{
+				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that the tool does not support"},
+				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that the tool does not support"},
+			},
+		},
+		{
+			name:    "fee on the crypto row that is not in the crypto asset",
 			entries: purchase(func(_, crypto *krakentest.Entry) { crypto.FeeCurrency = "EUR" }),
 			want: []unsupportedEntry{
-				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that is not in the crypto asset"},
-				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that is not in the crypto asset"},
+				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that the tool does not support"},
+				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that the tool does not support"},
 			},
 		},
 		{

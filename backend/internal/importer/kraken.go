@@ -40,6 +40,7 @@ func parseKraken(data []byte) (export, error) {
 			saved.Volume = decimal.NewNullDecimal(op.Volume)
 			saved.Price = decimal.NewNullDecimal(op.Price)
 			saved.Fee = decimal.NewNullDecimal(op.Fee)
+			saved.FeeCurrency = op.FeeCurrency
 		case kraken.KindReward:
 			// The cost of a Reward is not in the export. The Ledger calculation takes it from the stored closes (ADR 0009).
 			saved.Type = ledger.TypeReward

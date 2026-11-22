@@ -88,7 +88,8 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 			Volume: row.Volume.Decimal,
 			Price:  row.Price,
 			// A missing fee gives zero. Only a crypto purchase has a fee.
-			Fee: row.Fee.Decimal,
+			Fee:         row.Fee.Decimal,
+			FeeCurrency: row.FeeCurrency,
 		})
 	}
 	// The rows are ordered by position ID, so the Fills of one Lot are next to each other.

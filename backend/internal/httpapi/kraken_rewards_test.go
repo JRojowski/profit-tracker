@@ -107,6 +107,53 @@ func TestKrakenFeeSum_Purchases_GivesTheSumOfTheFeesInEUR(t *testing.T) {
 	assert.Equal(t, "0.00", got.TotalResult, "no price, so no Unrealized Profit, and the Rewards part is not known")
 }
 
+// TestKrakenFeeSum_FeeInEUR_GoesIntoCashCostAndFeeSum checks a purchase with the fee on the EUR row. ADR 0009, rules 1 and 2.
+//
+//	TRD-0003: EUR -100.00 with the fee 0.40 EUR, BTC 0.00200000 with no fee
+//	Cash:         500.00 - 100.00 - 0.40 = 399.60
+//	BTC:          volume 0.00448875 + 0.00200000 = 0.00648875 (no fee deduction)
+//	              cost 300.00 + 100.40 = 400.40, Average Cost 400.40 / 0.00648875 = 61706.8002311693315353
+//	Sum of the fees: 0.25 + 0.50 (fees in BTC × price) + 0.40 (fee in EUR) = 1.15
+func TestKrakenFeeSum_FeeInEUR_GoesIntoCashCostAndFeeSum(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	export := krakenExport()
+	export.Entries = append(export.Entries,
+		krakentest.Entry{RefID: "TRD-0003", Time: krakenTime(5), Type: "trade", Subtype: "tradespot", Asset: "EUR", Amount: "-100.00", Fee: "0.40"},
+		krakentest.Entry{RefID: "TRD-0003", Time: krakenTime(5), Type: "trade", Subtype: "tradespot", Asset: "BTC", Amount: "0.00200000"},
+	)
+	id := srv.importKraken(t, export)
+
+	summary := srv.summary(t, id)
+	assert.Equal(t, "399.60", summary.Cash)
+	assert.Equal(t, "0.00", summary.Fees, "ADR 0009: the fee is in the cost, not in the fees part")
+	assert.Equal(t, "1.15", srv.rewardsSummary(t, id).FeeSum)
+	assert.Equal(t, []holdingResponse{{
+		Ticker: "BTC", Name: "BTC", Volume: "0.00648875", Cost: "400.40", AverageCost: "61706.8002311693315353",
+	}}, srv.holdings(t, id))
+}
+
+func TestKrakenFeeSum_KnownPurchaseWithChangedEURFee_GivesImportConflict(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	withFee := func(fee string) krakentest.Export {
+		return krakentest.Export{Entries: []krakentest.Entry{
+			krakentest.Deposit("DEP-0001", krakenTime(1), "500.00"),
+			{RefID: "TRD-0001", Time: krakenTime(2), Type: "trade", Subtype: "tradespot", Asset: "EUR", Amount: "-100.00", Fee: fee},
+			{RefID: "TRD-0001", Time: krakenTime(2), Type: "trade", Subtype: "tradespot", Asset: "BTC", Amount: "0.00200000"},
+		}}
+	}
+	srv.importKraken(t, withFee("0.40"))
+
+	preview := srv.previewKraken(t, withFee("0.50"))
+
+	require.Len(t, preview.Conflicts, 1)
+	assert.Equal(t, "changed-data", preview.Conflicts[0].Kind)
+	assert.Equal(t, "TRD-0001", preview.Conflicts[0].XTBID)
+	assert.Equal(t, "-100.40", preview.Conflicts[0].Existing.Amount, "the EUR fee is a part of the amount")
+	assert.Equal(t, "-100.50", preview.Conflicts[0].New.Amount)
+}
+
 func TestKrakenFeeSum_XTBAccount_GivesZeroRewardsAndZeroFeeSum(t *testing.T) {
 	t.Parallel()
 	srv := startServer(t)

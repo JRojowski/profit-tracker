@@ -55,6 +55,7 @@ type CashOperation struct {
 	Price        decimal.NullDecimal
 	ImportID     int64
 	Fee          decimal.NullDecimal
+	FeeCurrency  sql.NullString
 }
 
 type ExchangeRate struct {

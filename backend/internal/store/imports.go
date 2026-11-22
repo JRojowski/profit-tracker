@@ -104,9 +104,13 @@ type CashOperation struct {
 	// Volume and Price are the parsed volume and price. They are not valid for an operation with no volume.
 	Volume decimal.NullDecimal
 	Price  decimal.NullDecimal
-	// Fee is the fee of a crypto purchase in the crypto asset. It is not valid for an operation with no such fee.
-	// It is not a part of Data: the volume of a purchase is the amount after the fee, so a changed fee changes the volume.
+	// Fee is the fee of a crypto purchase in FeeCurrency. It is not valid for an operation with no such fee.
+	// It is not a part of Data: a fee in the crypto asset decreases the volume, and a fee in EUR is a part of the
+	// amount. Thus a changed fee changes the volume or the amount, and the Import comparison finds it.
 	Fee decimal.NullDecimal
+	// FeeCurrency is the currency of Fee: the Account currency or the crypto asset (ADR 0009).
+	// It is empty for an operation with no fee.
+	FeeCurrency string
 	// IsFill tells that the operation is a Fill of the Lot LotID.
 	IsFill bool
 	// LotID is the ID of the Lot of a Fill. ADR 0002: it can be the position ID of a different Fill
@@ -420,6 +424,7 @@ func (w *ledgerWriter) insert(ctx context.Context, op CashOperation) error {
 		Volume:       op.Volume,
 		Price:        op.Price,
 		Fee:          op.Fee,
+		FeeCurrency:  sql.NullString{String: op.FeeCurrency, Valid: op.FeeCurrency != ""},
 		ImportID:     w.importID,
 	})
 	if err != nil {
@@ -444,6 +449,7 @@ func (w *ledgerWriter) replace(ctx context.Context, opID int64, op CashOperation
 		Volume:       op.Volume,
 		Price:        op.Price,
 		Fee:          op.Fee,
+		FeeCurrency:  sql.NullString{String: op.FeeCurrency, Valid: op.FeeCurrency != ""},
 		ImportID:     w.importID,
 		ID:           opID,
 	})

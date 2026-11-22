@@ -14,7 +14,7 @@ WHERE c.account_id = ? AND c.xtb_id = ?;
 
 -- name: UpdateCashOperation :exec
 UPDATE cash_operations
-SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, import_id = ?
+SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, fee_currency = ?, import_id = ?
 WHERE id = ?;
 
 -- name: DeleteLotFill :exec
@@ -38,8 +38,8 @@ ON CONFLICT (ticker) DO UPDATE SET ticker = excluded.ticker
 RETURNING id;
 
 -- name: InsertCashOperation :one
-INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, import_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, fee_currency, import_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (account_id, xtb_id) DO NOTHING
 RETURNING id;
 
@@ -54,7 +54,7 @@ INSERT INTO lot_fills (lot_id, cash_operation_id)
 VALUES (?, ?);
 
 -- name: LedgerCashOperations :many
-SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price, c.fee
+SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price, c.fee, COALESCE(c.fee_currency, '') AS fee_currency
 FROM cash_operations c
 LEFT JOIN instruments i ON i.id = c.instrument_id
 WHERE c.account_id = ?

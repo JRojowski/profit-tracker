@@ -89,8 +89,8 @@ func (q *Queries) FillLot(ctx context.Context, cashOperationID int64) (string, e
 }
 
 const insertCashOperation = `-- name: InsertCashOperation :one
-INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, import_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, fee_currency, import_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (account_id, xtb_id) DO NOTHING
 RETURNING id
 `
@@ -107,6 +107,7 @@ type InsertCashOperationParams struct {
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
 	Fee          decimal.NullDecimal
+	FeeCurrency  sql.NullString
 	ImportID     int64
 }
 
@@ -123,6 +124,7 @@ func (q *Queries) InsertCashOperation(ctx context.Context, arg InsertCashOperati
 		arg.Volume,
 		arg.Price,
 		arg.Fee,
+		arg.FeeCurrency,
 		arg.ImportID,
 	)
 	var id int64
@@ -199,7 +201,7 @@ func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]K
 }
 
 const ledgerCashOperations = `-- name: LedgerCashOperations :many
-SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price, c.fee
+SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price, c.fee, COALESCE(c.fee_currency, '') AS fee_currency
 FROM cash_operations c
 LEFT JOIN instruments i ON i.id = c.instrument_id
 WHERE c.account_id = ?
@@ -207,15 +209,16 @@ ORDER BY c.time, c.id
 `
 
 type LedgerCashOperationsRow struct {
-	XtbID      string
-	Type       string
-	Time       string
-	Amount     decimal.Decimal
-	Ticker     string
-	PositionID sql.NullString
-	Volume     decimal.NullDecimal
-	Price      decimal.NullDecimal
-	Fee        decimal.NullDecimal
+	XtbID       string
+	Type        string
+	Time        string
+	Amount      decimal.Decimal
+	Ticker      string
+	PositionID  sql.NullString
+	Volume      decimal.NullDecimal
+	Price       decimal.NullDecimal
+	Fee         decimal.NullDecimal
+	FeeCurrency string
 }
 
 func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]LedgerCashOperationsRow, error) {
@@ -237,6 +240,7 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 			&i.Volume,
 			&i.Price,
 			&i.Fee,
+			&i.FeeCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -404,7 +408,7 @@ func (q *Queries) TransfersOfOtherAccounts(ctx context.Context, arg TransfersOfO
 
 const updateCashOperation = `-- name: UpdateCashOperation :exec
 UPDATE cash_operations
-SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, import_id = ?
+SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, fee_currency = ?, import_id = ?
 WHERE id = ?
 `
 
@@ -418,6 +422,7 @@ type UpdateCashOperationParams struct {
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
 	Fee          decimal.NullDecimal
+	FeeCurrency  sql.NullString
 	ImportID     int64
 	ID           int64
 }
@@ -433,6 +438,7 @@ func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperati
 		arg.Volume,
 		arg.Price,
 		arg.Fee,
+		arg.FeeCurrency,
 		arg.ImportID,
 		arg.ID,
 	)
