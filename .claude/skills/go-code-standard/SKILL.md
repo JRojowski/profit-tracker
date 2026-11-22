@@ -50,6 +50,8 @@ backend/
 ```
 
 - Name packages after the domain concept, with the `GLOSSARY.md` term. The packages now are `xtb`, `lot`, `ledger`, `importer`, `price`, `pricecheck`, `exchange`, `returns`, `valuehistory`, `ikze`, `allaccounts`, `allocation`, `benchmark`, `store`, `httpapi`, `web` and `demo`.
+  - `kraken` reads the Kraken ledger CSV and returns its Cash Operations.
+  - `kraken/krakentest` builds synthetic Kraken ledger CSV files for the tests.
 - Give a package a name that tells what it holds. `util`, `common`, `models` and `helpers` tell nothing.
 - Use names that do not repeat the package: `ledger.Calculate`, `price.Provider`.
 - Keep the domain packages free of HTTP and SQL. `httpapi` and `store` are the adapters.

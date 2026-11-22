@@ -28,7 +28,8 @@ const sizeFormat = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 0,
 })
 
-// ImportFileDrop is the first step of an Import: the user drops an XTB export or selects it, and asks for the preview.
+// ImportFileDrop is the first step of an Import: the user drops an export file or selects it, and asks for the preview.
+// The file is an XTB export (.xlsx) or a Kraken ledger export (.csv). The backend finds the Provider from the content.
 export function ImportFileDrop({
   file,
   inputKey,
@@ -61,7 +62,7 @@ export function ImportFileDrop({
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <SectionHeading title="Broker export" />
+        <SectionHeading title="Export file" />
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -82,8 +83,9 @@ export function ImportFileDrop({
               <UploadIcon className="size-5" />
             </span>
             <span className="text-sm font-medium">
-              Drop an XTB export (<span className="font-mono">.xlsx</span>) here
-              or choose a file
+              Drop an XTB export (<span className="font-mono">.xlsx</span>) or a
+              Kraken ledger export (<span className="font-mono">.csv</span>)
+              here, or choose a file
             </span>
             <span className="text-xs text-muted-foreground">
               The export of one Account. The tool saves nothing before you
@@ -93,7 +95,7 @@ export function ImportFileDrop({
               key={inputKey}
               id="import-file"
               type="file"
-              accept=".xlsx"
+              accept=".xlsx,.csv"
               className="sr-only"
               disabled={locked}
               onChange={(event) =>

@@ -3,10 +3,10 @@ import { useMemo } from "react"
 
 import { AllocationChart } from "@/components/allocation-donut"
 import {
-  HOLDINGS_VIEW_STORAGE_KEY,
   holdingColumns,
   HoldingsTable,
   holdingsViewRules,
+  holdingsViewStorageKey,
 } from "@/components/holdings-table"
 import { ResetColumnsButton } from "@/components/reset-columns-button"
 import { InstrumentOverviewPanel } from "@/components/instrument-overview-panel"
@@ -31,11 +31,11 @@ export function AccountHoldingsPage() {
   const { valuesVersion, refreshAllPrices } = useAppState()
   // The columns are built once. The table and the rules of the stored view use them.
   const columns = useMemo(
-    () => holdingColumns(account.currency, refreshAllPrices),
-    [account.currency, refreshAllPrices]
+    () => holdingColumns(account.currency, account.provider, refreshAllPrices),
+    [account.currency, account.provider, refreshAllPrices]
   )
   const view = useTableView(
-    HOLDINGS_VIEW_STORAGE_KEY,
+    holdingsViewStorageKey(account.provider),
     useMemo(() => holdingsViewRules(columns), [columns])
   )
   const holdings = useLoad(String(account.id), valuesVersion, (signal) =>

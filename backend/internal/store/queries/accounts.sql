@@ -1,20 +1,20 @@
 -- name: AccountByNumber :one
-SELECT id, account_number, name, type, currency
+SELECT id, account_number, name, type, currency, provider
 FROM accounts
 WHERE account_number = ?;
 
 -- name: CreateAccount :one
-INSERT INTO accounts (account_number, name, type, currency)
-VALUES (?, ?, ?, ?)
+INSERT INTO accounts (account_number, name, type, currency, provider)
+VALUES (?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: Accounts :many
-SELECT id, account_number, name, type, currency
+SELECT id, account_number, name, type, currency, provider
 FROM accounts
 ORDER BY name, id;
 
 -- name: AccountByID :one
-SELECT id, account_number, name, type, currency
+SELECT id, account_number, name, type, currency, provider
 FROM accounts
 WHERE id = ?;
 
@@ -22,4 +22,4 @@ WHERE id = ?;
 UPDATE accounts
 SET name = ?
 WHERE id = ?
-RETURNING id, account_number, name, type, currency;
+RETURNING id, account_number, name, type, currency, provider;

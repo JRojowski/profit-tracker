@@ -11,7 +11,7 @@ import (
 )
 
 const instrumentPriceSource = `-- name: InstrumentPriceSource :one
-SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed, default_price_ticker, default_quote_currency
 FROM instruments
 WHERE ticker = ?
 `
@@ -30,12 +30,14 @@ func (q *Queries) InstrumentPriceSource(ctx context.Context, ticker string) (Ins
 		&i.SourceCurrency,
 		&i.PriceNoData,
 		&i.PriceConfirmed,
+		&i.DefaultPriceTicker,
+		&i.DefaultQuoteCurrency,
 	)
 	return i, err
 }
 
 const instrumentPriceSources = `-- name: InstrumentPriceSources :many
-SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+SELECT id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed, default_price_ticker, default_quote_currency
 FROM instruments
 ORDER BY ticker
 `
@@ -60,6 +62,8 @@ func (q *Queries) InstrumentPriceSources(ctx context.Context) ([]Instrument, err
 			&i.SourceCurrency,
 			&i.PriceNoData,
 			&i.PriceConfirmed,
+			&i.DefaultPriceTicker,
+			&i.DefaultQuoteCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -78,7 +82,7 @@ const resetPriceCheck = `-- name: ResetPriceCheck :one
 UPDATE instruments
 SET source_currency = NULL, price_no_data = 0, price_confirmed = 0
 WHERE ticker = ?
-RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed, default_price_ticker, default_quote_currency
 `
 
 // A new price ticker needs a new price check. The answers and the confirmation of the old price ticker do not apply.
@@ -96,6 +100,8 @@ func (q *Queries) ResetPriceCheck(ctx context.Context, ticker string) (Instrumen
 		&i.SourceCurrency,
 		&i.PriceNoData,
 		&i.PriceConfirmed,
+		&i.DefaultPriceTicker,
+		&i.DefaultQuoteCurrency,
 	)
 	return i, err
 }
@@ -104,7 +110,7 @@ const setPriceConfirmed = `-- name: SetPriceConfirmed :one
 UPDATE instruments
 SET price_confirmed = ?
 WHERE ticker = ?
-RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed, default_price_ticker, default_quote_currency
 `
 
 type SetPriceConfirmedParams struct {
@@ -126,6 +132,8 @@ func (q *Queries) SetPriceConfirmed(ctx context.Context, arg SetPriceConfirmedPa
 		&i.SourceCurrency,
 		&i.PriceNoData,
 		&i.PriceConfirmed,
+		&i.DefaultPriceTicker,
+		&i.DefaultQuoteCurrency,
 	)
 	return i, err
 }
@@ -145,7 +153,7 @@ const setPriceTicker = `-- name: SetPriceTicker :one
 UPDATE instruments
 SET price_ticker = ?1
 WHERE ticker = ?2
-RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed, default_price_ticker, default_quote_currency
 `
 
 type SetPriceTickerParams struct {
@@ -167,6 +175,8 @@ func (q *Queries) SetPriceTicker(ctx context.Context, arg SetPriceTickerParams) 
 		&i.SourceCurrency,
 		&i.PriceNoData,
 		&i.PriceConfirmed,
+		&i.DefaultPriceTicker,
+		&i.DefaultQuoteCurrency,
 	)
 	return i, err
 }
@@ -177,7 +187,7 @@ SET quote_currency        = ?1,
     quote_currency_manual = ?2,
     price_confirmed       = CASE WHEN quote_currency IS ?1 THEN price_confirmed ELSE 0 END
 WHERE ticker = ?3
-RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed
+RETURNING id, ticker, name, category, quote_currency, price_ticker, quote_currency_manual, source_currency, price_no_data, price_confirmed, default_price_ticker, default_quote_currency
 `
 
 type SetQuoteCurrencyParams struct {
@@ -201,6 +211,8 @@ func (q *Queries) SetQuoteCurrency(ctx context.Context, arg SetQuoteCurrencyPara
 		&i.SourceCurrency,
 		&i.PriceNoData,
 		&i.PriceConfirmed,
+		&i.DefaultPriceTicker,
+		&i.DefaultQuoteCurrency,
 	)
 	return i, err
 }

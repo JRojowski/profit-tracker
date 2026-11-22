@@ -1,4 +1,4 @@
-// Command demo-exports writes the synthetic demo XTB exports to a directory.
+// Command demo-exports writes the synthetic demo exports to a directory: the XTB xlsx files and the Kraken CSV file.
 package main
 
 import (
@@ -9,11 +9,12 @@ import (
 	"path/filepath"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/demo"
+	"github.com/jrojowski/profit-tracker/backend/internal/kraken/krakentest"
 	"github.com/jrojowski/profit-tracker/backend/internal/xtb/xtbtest"
 )
 
 func main() {
-	out := flag.String("out", "", "directory for the demo xlsx files")
+	out := flag.String("out", "", "directory for the demo export files")
 	flag.Parse()
 
 	if err := run(*out); err != nil {
@@ -40,5 +41,15 @@ func run(out string) error {
 		}
 		fmt.Println(path)
 	}
+	kraken := demo.Kraken()
+	data, err := krakentest.BuildFile(kraken)
+	if err != nil {
+		return fmt.Errorf("build kraken export: %w", err)
+	}
+	path := filepath.Join(out, kraken.Name())
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	fmt.Println(path)
 	return nil
 }

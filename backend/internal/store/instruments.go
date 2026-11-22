@@ -20,8 +20,12 @@ type Instrument struct {
 	QuoteCurrency string
 	// QuoteCurrencyManual tells that the user set QuoteCurrency. Otherwise it comes from the ticker suffix.
 	QuoteCurrencyManual bool
-	// PriceTicker is the manual price ticker, or empty if the tool uses the default mapping.
+	// PriceTicker is the manual price ticker, or empty if the tool uses the default.
 	PriceTicker string
+	// DefaultPriceTicker and DefaultQuoteCurrency are the defaults that the parser of the Provider gave, for example
+	// "BTC-EUR" and "EUR". They are empty if the tool uses the mapping from the suffix of the XTB ticker.
+	DefaultPriceTicker   string
+	DefaultQuoteCurrency string
 	// SourceCurrency is the currency that the price source gave in its last answer with a price,
 	// or empty if it is not known.
 	SourceCurrency string
@@ -158,13 +162,15 @@ func instrumentError(ticker, action string, err error) error {
 
 func toInstrument(row queries.Instrument) Instrument {
 	return Instrument{
-		Ticker:              row.Ticker,
-		Name:                row.Name,
-		QuoteCurrency:       row.QuoteCurrency.String,
-		QuoteCurrencyManual: row.QuoteCurrencyManual == 1,
-		PriceTicker:         row.PriceTicker.String,
-		SourceCurrency:      row.SourceCurrency.String,
-		NoData:              row.PriceNoData == 1,
-		PriceConfirmed:      row.PriceConfirmed == 1,
+		Ticker:               row.Ticker,
+		Name:                 row.Name,
+		QuoteCurrency:        row.QuoteCurrency.String,
+		QuoteCurrencyManual:  row.QuoteCurrencyManual == 1,
+		PriceTicker:          row.PriceTicker.String,
+		DefaultPriceTicker:   row.DefaultPriceTicker.String,
+		DefaultQuoteCurrency: row.DefaultQuoteCurrency.String,
+		SourceCurrency:       row.SourceCurrency.String,
+		NoData:               row.PriceNoData == 1,
+		PriceConfirmed:       row.PriceConfirmed == 1,
 	}
 }

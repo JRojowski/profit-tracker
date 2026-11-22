@@ -30,6 +30,12 @@ type Rates struct {
 type Amounts struct {
 	Value, Cash, NetDeposits, TotalResult                             decimal.Decimal
 	RealizedProfit, UnrealizedProfit, NetDividends, NetInterest, Fees decimal.Decimal
+	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). A Rewards part with no known value
+	// adds its known values, as in ledger.State.TotalResult.
+	Rewards decimal.Decimal
+	// SplitUnknown tells that a Reward has no known value. Then UnrealizedProfit also holds the rest of the Rewards,
+	// so UnrealizedProfit and Rewards are not known. TotalResult stays correct. See ledger.State.UnrealizedProfitKnown.
+	SplitUnknown bool
 	// CurrencyResult is the part of TotalResult that comes from the change of the Exchange Rate between the day
 	// of each Net Deposits flow and today. See GLOSSARY.md, "Currency Result".
 	CurrencyResult decimal.Decimal
@@ -41,8 +47,8 @@ func (a Amounts) add(b Amounts) Amounts {
 		Value: a.Value.Add(b.Value), Cash: a.Cash.Add(b.Cash), NetDeposits: a.NetDeposits.Add(b.NetDeposits),
 		TotalResult: a.TotalResult.Add(b.TotalResult), RealizedProfit: a.RealizedProfit.Add(b.RealizedProfit),
 		UnrealizedProfit: a.UnrealizedProfit.Add(b.UnrealizedProfit), NetDividends: a.NetDividends.Add(b.NetDividends),
-		NetInterest: a.NetInterest.Add(b.NetInterest), Fees: a.Fees.Add(b.Fees),
-		CurrencyResult: a.CurrencyResult.Add(b.CurrencyResult),
+		NetInterest: a.NetInterest.Add(b.NetInterest), Fees: a.Fees.Add(b.Fees), Rewards: a.Rewards.Add(b.Rewards),
+		CurrencyResult: a.CurrencyResult.Add(b.CurrencyResult), SplitUnknown: a.SplitUnknown || b.SplitUnknown,
 	}
 }
 
@@ -89,6 +95,7 @@ type Result struct {
 //
 // A PLN row has the amounts of its Account, and its Currency Result is 0.
 // A row in another currency multiplies the value, the cash and each part of the Total Result by the latest rate.
+// The parts are the Realized Profit, the Unrealized Profit, the net dividends, the net interest, the Rewards and the fees.
 // It multiplies each Net Deposits flow by the rate of the day of that flow.
 // The Currency Result is the sum, for each flow, of the flow amount × (the latest rate − the rate of the flow day).
 // The Total Result is the sum of the parts plus the Currency Result.
@@ -138,7 +145,8 @@ func convert(acc Account, rates Rates) Row {
 		row.Amounts = Amounts{
 			Value: s.Value, Cash: s.Cash, NetDeposits: s.NetDeposits, TotalResult: s.TotalResult,
 			RealizedProfit: s.RealizedProfit, UnrealizedProfit: s.UnrealizedProfit, NetDividends: s.NetDividends,
-			NetInterest: s.NetInterest, Fees: s.Fees, CurrencyResult: decimal.Zero,
+			NetInterest: s.NetInterest, Fees: s.Fees, Rewards: s.Rewards.Decimal, CurrencyResult: decimal.Zero,
+			SplitUnknown: !s.UnrealizedProfitKnown(),
 		}
 		return row
 	}
@@ -173,9 +181,10 @@ func convert(acc Account, rates Rates) Row {
 		Value: s.Value.Mul(latest), Cash: s.Cash.Mul(latest), NetDeposits: netDeposits,
 		RealizedProfit: s.RealizedProfit.Mul(latest), UnrealizedProfit: s.UnrealizedProfit.Mul(latest),
 		NetDividends: s.NetDividends.Mul(latest), NetInterest: s.NetInterest.Mul(latest), Fees: s.Fees.Mul(latest),
-		CurrencyResult: currencyResult,
+		Rewards: s.Rewards.Decimal.Mul(latest), CurrencyResult: currencyResult, SplitUnknown: !s.UnrealizedProfitKnown(),
 	}
-	a.TotalResult = a.RealizedProfit.Add(a.UnrealizedProfit).Add(a.NetDividends).Add(a.NetInterest).Add(a.Fees).Add(currencyResult)
+	a.TotalResult = a.RealizedProfit.Add(a.UnrealizedProfit).Add(a.NetDividends).Add(a.NetInterest).Add(a.Rewards).
+		Add(a.Fees).Add(currencyResult)
 	row.Available, row.Amounts = true, a
 	return row
 }

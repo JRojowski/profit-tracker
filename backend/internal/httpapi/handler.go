@@ -105,8 +105,23 @@ type api struct {
 type errorResponse struct {
 	Error string `json:"error"`
 	// Code is a stable name of the case, so that the frontend can tell the cases apart. Only the errors of the
-	// Assistant have a code.
+	// Assistant and the errors "unsupported-entries" and "kraken-currency-not-eur" of an Import have a code.
 	Code string `json:"code,omitempty"`
+	// UnsupportedEntries are the entries of a Kraken export that the tool does not support.
+	// Only the error with the code "unsupported-entries" has them.
+	UnsupportedEntries []unsupportedEntryResponse `json:"unsupportedEntries,omitempty"`
+}
+
+// unsupportedEntryResponse is one entry of a Kraken export that the tool does not support.
+type unsupportedEntryResponse struct {
+	// Type, Subtype and Asset are the values of the export, for example "withdrawal", "" and "BTC".
+	Type    string `json:"type"`
+	Subtype string `json:"subtype"`
+	Asset   string `json:"asset"`
+	// Time is RFC 3339 text in UTC.
+	Time string `json:"time"`
+	// Reason tells why the tool does not support the entry, for example "sale" or "withdrawal".
+	Reason string `json:"reason"`
 }
 
 // notFound answers an unknown /api path. It never returns the frontend.

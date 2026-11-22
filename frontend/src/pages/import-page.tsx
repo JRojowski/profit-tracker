@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { ImportConflictsCard } from "@/components/import-conflicts-card"
 import { ImportFileDrop } from "@/components/import-file-drop"
 import { ImportPreviewCard } from "@/components/import-preview-card"
+import { UnsupportedEntriesAlert } from "@/components/unsupported-entries-alert"
 import {
+  ApiError,
   cancelImport,
   confirmImport,
   decideConflict,
@@ -16,10 +18,33 @@ import {
   type ImportPreview,
   type ImportSummary,
   type NewAccount,
+  type UnsupportedEntry,
 } from "@/lib/api"
 
 // confirmFormId is the id of the form of the preview. The Confirm button submits it.
 const confirmFormId = "import-confirm"
+
+// ImportError is the error of a failed action. unsupportedEntries lists the entries of a Kraken export
+// that the tool does not support. The list is empty for each other error.
+// title is the heading of the alert. A known error code has its own title.
+type ImportError = {
+  title: string
+  message: string
+  unsupportedEntries: UnsupportedEntry[]
+}
+
+// importError reads the error of a failed action.
+function importError(err: unknown): ImportError {
+  const code = err instanceof ApiError ? err.code : null
+  return {
+    title:
+      code === "kraken-currency-not-eur"
+        ? "A Kraken Account must have the currency EUR"
+        : "The Import failed",
+    message: errorMessage(err),
+    unsupportedEntries: err instanceof ApiError ? err.unsupportedEntries : [],
+  }
+}
 
 type ImportPageProps = {
   onImported: (summary: ImportSummary) => void
@@ -31,7 +56,7 @@ export function ImportPage({ onImported }: ImportPageProps) {
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ImportError | null>(null)
   // The input key resets the file input after a cancel, a confirmation or a removed file.
   const [inputKey, setInputKey] = useState(0)
 
@@ -58,7 +83,7 @@ export function ImportPage({ onImported }: ImportPageProps) {
     try {
       await action()
     } catch (err) {
-      setError(errorMessage(err))
+      setError(importError(err))
     } finally {
       setBusy(false)
     }
@@ -111,10 +136,15 @@ export function ImportPage({ onImported }: ImportPageProps) {
         onPreview={handlePreview}
       />
 
-      {error && (
+      {error && error.unsupportedEntries.length > 0 && (
+        <UnsupportedEntriesAlert entries={error.unsupportedEntries} />
+      )}
+      {error && error.unsupportedEntries.length === 0 && (
         <Alert variant="destructive">
-          <AlertTitle>The Import failed</AlertTitle>
-          <AlertDescription className="break-words">{error}</AlertDescription>
+          <AlertTitle>{error.title}</AlertTitle>
+          <AlertDescription className="break-words">
+            {error.message}
+          </AlertDescription>
         </Alert>
       )}
 

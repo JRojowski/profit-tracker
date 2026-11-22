@@ -4,7 +4,6 @@
 package valuehistory
 
 import (
-	"cmp"
 	"slices"
 	"time"
 
@@ -49,7 +48,7 @@ type Point struct {
 	returns.DayValue
 	// NetDeposits are the Net Deposits at the end of the day.
 	NetDeposits decimal.Decimal
-	// ValuedAtCost are the broker tickers of the Instruments that Calculate valued at the cost of their open Lots
+	// ValuedAtCost are the broker tickers of the Instruments that Calculate valued at their open cost
 	// on this day, in ticker order. It is nil if there is none.
 	ValuedAtCost []string
 }
@@ -59,7 +58,7 @@ type History struct {
 	// Points has one point for each calendar day from the day of the first Cash Operation to today.
 	// It is empty if the Ledger has no Cash Operation.
 	Points []Point
-	// ValuedAtCost are the Instruments that Calculate valued at the cost of their open Lots on one or more days,
+	// ValuedAtCost are the Instruments that Calculate valued at their open cost on one or more days,
 	// in ticker order.
 	ValuedAtCost []ledger.Instrument
 }
@@ -68,14 +67,17 @@ type History struct {
 //
 // It makes one pass over the days and the Cash Operations. It values each Holding of a past day at the last
 // stored price on that day or before it. It converts the value at the last Exchange Rate on that day or before it.
-// It values a Holding at the cost of its open Lots in these cases:
+// The open volume and the open cost of a Holding come from its open Lots (ADR 0001), or from the crypto purchases
+// and the Rewards so far by the Average Cost rule (ADR 0009). A Reward with no known value adds no cost.
+// It values a Holding at its open cost in these cases:
 //   - It has no such price or no such rate.
 //   - Its Quote Currency is not known.
 //   - It needs a rate between two currencies that are not PLN.
 //
 // The point of today uses the state of the hero (ledger.Calculate) with the current prices and the latest
 // Exchange Rates. Thus the value of today is equal to the value in the hero when each Holding has a value.
-// A Holding with no value in the hero counts at its cost. The point of today also has the Cash Operations
+// A Holding with no value in the hero counts at its cost. A Holding with an unknown cost (ADR 0009) counts at the
+// current price if it has one, because its value does not need the cost. The point of today also has the Cash Operations
 // with a later time.
 //
 // It returns the error of ledger.Calculate if a Closed Position does not fit the Lots.
@@ -109,7 +111,7 @@ func Calculate(in Input) (History, error) {
 		})
 	}
 	points = append(points, c.todayPoint(today, state, l.CashOperations[next:]))
-	return History{Points: points, ValuedAtCost: c.valuedAtCost(l.Lots)}, nil
+	return History{Points: points, ValuedAtCost: c.valuedAtCost()}, nil
 }
 
 // dayOf returns the calendar day of t in the location loc, at midnight UTC.
@@ -130,6 +132,8 @@ type calculator struct {
 	holdings map[string]*holding
 	// tickers are the broker tickers of holdings in ticker order, so that the sum has a fixed order.
 	tickers []string
+	// instruments are the Instruments of holdings, by broker ticker.
+	instruments map[string]ledger.Instrument
 	// closeIndex and rateIndex are the positions of the last price and the last rate that the pass used.
 	closeIndex map[string]int
 	rateIndex  map[string]int
@@ -174,11 +178,25 @@ type holding struct {
 	volume, cost decimal.Decimal
 }
 
+// addHolding adds the Holding of the Instrument with no volume and no cost, if it is not there.
+// It keeps tickers in ticker order.
+func (c *calculator) addHolding(inst ledger.Instrument) *holding {
+	if h, ok := c.holdings[inst.Ticker]; ok {
+		return h
+	}
+	h := &holding{volume: decimal.Zero, cost: decimal.Zero}
+	c.holdings[inst.Ticker] = h
+	c.instruments[inst.Ticker] = inst
+	i, _ := slices.BinarySearch(c.tickers, inst.Ticker)
+	c.tickers = slices.Insert(c.tickers, i, inst.Ticker)
+	return h
+}
+
 func newCalculator(in Input) *calculator {
 	c := &calculator{
 		in: in, cash: decimal.Zero, netDeposits: decimal.Zero,
 		lots: map[string]*lotState{}, fills: map[string]fill{}, holdings: map[string]*holding{},
-		closeIndex: map[string]int{}, rateIndex: map[string]int{}, atCost: map[string]bool{},
+		instruments: map[string]ledger.Instrument{}, closeIndex: map[string]int{}, rateIndex: map[string]int{}, atCost: map[string]bool{},
 	}
 	for _, lot := range in.Ledger.Lots {
 		st := &lotState{
@@ -191,12 +209,8 @@ func newCalculator(in Input) *calculator {
 			c.fills[f.XTBID] = fill{positionID: lot.PositionID, volume: f.Volume, purchase: f.Amount.Neg()}
 		}
 		c.lots[lot.PositionID] = st
-		if _, ok := c.holdings[st.ticker]; !ok {
-			c.holdings[st.ticker] = &holding{volume: decimal.Zero, cost: decimal.Zero}
-			c.tickers = append(c.tickers, st.ticker)
-		}
+		c.addHolding(lot.Instrument)
 	}
-	slices.Sort(c.tickers)
 	return c
 }
 
@@ -212,8 +226,11 @@ func (c *calculator) apply(op ledger.CashOperation) decimal.Decimal {
 		})
 		return flow
 	}
-	// ledger.Calculate checked that each Closed Position closes a known Lot within its volume.
-	if op.Type == ledger.TypeStockSell {
+	switch op.Type {
+	case ledger.TypeCryptoPurchase, ledger.TypeReward:
+		c.addAverageCost(op)
+	case ledger.TypeStockSell:
+		// ledger.Calculate checked that each Closed Position closes a known Lot within its volume.
 		c.changeLot(op.PositionID, func(st *lotState) {
 			st.closedVolume = st.closedVolume.Add(op.Volume)
 			// ADR 0001, rule 3, as in ledger.Calculate.
@@ -221,6 +238,22 @@ func (c *calculator) apply(op ledger.CashOperation) decimal.Decimal {
 		})
 	}
 	return flow
+}
+
+// addAverageCost adds a crypto purchase or a Reward to the Holding of its Instrument, as ledger.Calculate does
+// (ADR 0009). A purchase adds its volume after the fee and its full amount. A Reward adds its volume and its value
+// on its day. A Reward with no known value adds no cost, so a value at cost on a later day is only the known part.
+func (c *calculator) addAverageCost(op ledger.CashOperation) {
+	// The asset code is also the name of a crypto Instrument, as in ledger.Calculate.
+	h := c.addHolding(ledger.Instrument{Ticker: op.Ticker, Name: op.Ticker})
+	h.volume = h.volume.Add(op.Volume)
+	if op.Type == ledger.TypeCryptoPurchase {
+		h.cost = h.cost.Sub(op.Amount)
+		return
+	}
+	if value, ok := c.in.Ledger.RewardValue(op); ok {
+		h.cost = h.cost.Add(value)
+	}
 }
 
 // changeLot changes the Lot and moves the change of its open volume and open cost to its Instrument.
@@ -311,11 +344,12 @@ func (c *calculator) todayPoint(today time.Time, state ledger.State, rest []ledg
 	value := state.Value
 	var atCost []string
 	for _, h := range state.Holdings {
-		if !h.HasValue() {
-			c.atCost[h.Instrument.Ticker] = true
-			atCost = append(atCost, h.Instrument.Ticker)
-			value = value.Add(h.Cost)
+		if h.HasValue() {
+			continue
 		}
+		c.atCost[h.Instrument.Ticker] = true
+		atCost = append(atCost, h.Instrument.Ticker)
+		value = value.Add(h.Cost)
 	}
 	slices.Sort(atCost)
 	return Point{
@@ -324,16 +358,12 @@ func (c *calculator) todayPoint(today time.Time, state ledger.State, rest []ledg
 }
 
 // valuedAtCost returns the Instruments that the pass valued at cost, in ticker order.
-func (c *calculator) valuedAtCost(lots []ledger.Lot) []ledger.Instrument {
+func (c *calculator) valuedAtCost() []ledger.Instrument {
 	result := []ledger.Instrument{}
-	seen := map[string]bool{}
-	for _, lot := range lots {
-		ticker := lot.Instrument.Ticker
-		if c.atCost[ticker] && !seen[ticker] {
-			seen[ticker] = true
-			result = append(result, lot.Instrument)
+	for _, ticker := range c.tickers {
+		if c.atCost[ticker] {
+			result = append(result, c.instruments[ticker])
 		}
 	}
-	slices.SortFunc(result, func(a, b ledger.Instrument) int { return cmp.Compare(a.Ticker, b.Ticker) })
 	return result
 }

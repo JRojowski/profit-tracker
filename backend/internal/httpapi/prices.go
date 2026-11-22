@@ -220,18 +220,23 @@ func (v accountView) holdingRow(h ledger.Holding, warnings priceWarnings) holdin
 	inst := v.instruments[ticker]
 	inst.Ticker = ticker
 	row := holdingResponse{
-		Ticker: ticker,
-		Name:   h.Instrument.Name,
-		Volume: h.Volume.String(),
-		Cost:   formatAmount(h.Cost),
-		// The frontend rounds for display. ADR 0001: the tool rounds only for display.
-		AverageCost:         h.AverageCost().String(),
+		Ticker:              ticker,
+		Name:                h.Instrument.Name,
+		Volume:              h.Volume.String(),
 		priceSourceResponse: toPriceSourceResponse(inst),
 		PriceWarnings:       warnings.of(ticker),
+	}
+	if !h.UnknownCost {
+		row.Cost = new(formatAmount(h.Cost))
+		// The frontend rounds for display. ADR 0001: the tool rounds only for display.
+		row.AverageCost = new(h.AverageCost().String())
 	}
 	if !h.HasValue() {
 		row.Note = new(v.noValueNote(h))
 		return row
+	}
+	if h.UnknownCost {
+		row.Note = new(noRewardCloseNote)
 	}
 	row.Price = new(h.Price.String())
 	row.PriceDate = new(v.prices[ticker].Date.Format(time.DateOnly))
@@ -241,12 +246,17 @@ func (v accountView) holdingRow(h ledger.Holding, warnings priceWarnings) holdin
 		row.ExchangeRateDate = new(h.ExchangeRate.Date.Format(time.DateOnly))
 	}
 	row.Value = new(formatAmount(h.Value))
-	row.UnrealizedProfit = new(formatAmount(h.UnrealizedProfit))
+	if h.HasUnrealizedProfit() {
+		row.UnrealizedProfit = new(formatAmount(h.UnrealizedProfit))
+	}
 	if percent, ok := h.UnrealizedProfitPercent(); ok {
 		row.UnrealizedProfitPercent = new(percent.String())
 	}
 	return row
 }
+
+// noRewardCloseNote tells the user why a Holding has no known cost. ADR 0009, rule 3.
+const noRewardCloseNote = "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history."
 
 // noValueNote returns the sentence that tells the user why the Holding has no value.
 func (v accountView) noValueNote(h ledger.Holding) string {

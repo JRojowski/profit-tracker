@@ -89,8 +89,8 @@ func (q *Queries) FillLot(ctx context.Context, cashOperationID int64) (string, e
 }
 
 const insertCashOperation = `-- name: InsertCashOperation :one
-INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, import_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, fee_currency, import_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (account_id, xtb_id) DO NOTHING
 RETURNING id
 `
@@ -106,6 +106,8 @@ type InsertCashOperationParams struct {
 	PositionID   sql.NullString
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
+	Fee          decimal.NullDecimal
+	FeeCurrency  sql.NullString
 	ImportID     int64
 }
 
@@ -121,6 +123,8 @@ func (q *Queries) InsertCashOperation(ctx context.Context, arg InsertCashOperati
 		arg.PositionID,
 		arg.Volume,
 		arg.Price,
+		arg.Fee,
+		arg.FeeCurrency,
 		arg.ImportID,
 	)
 	var id int64
@@ -197,7 +201,7 @@ func (q *Queries) KnownCashOperations(ctx context.Context, accountID int64) ([]K
 }
 
 const ledgerCashOperations = `-- name: LedgerCashOperations :many
-SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price
+SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price, c.fee, COALESCE(c.fee_currency, '') AS fee_currency
 FROM cash_operations c
 LEFT JOIN instruments i ON i.id = c.instrument_id
 WHERE c.account_id = ?
@@ -205,14 +209,16 @@ ORDER BY c.time, c.id
 `
 
 type LedgerCashOperationsRow struct {
-	XtbID      string
-	Type       string
-	Time       string
-	Amount     decimal.Decimal
-	Ticker     string
-	PositionID sql.NullString
-	Volume     decimal.NullDecimal
-	Price      decimal.NullDecimal
+	XtbID       string
+	Type        string
+	Time        string
+	Amount      decimal.Decimal
+	Ticker      string
+	PositionID  sql.NullString
+	Volume      decimal.NullDecimal
+	Price       decimal.NullDecimal
+	Fee         decimal.NullDecimal
+	FeeCurrency string
 }
 
 func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]LedgerCashOperationsRow, error) {
@@ -233,6 +239,8 @@ func (q *Queries) LedgerCashOperations(ctx context.Context, accountID int64) ([]
 			&i.PositionID,
 			&i.Volume,
 			&i.Price,
+			&i.Fee,
+			&i.FeeCurrency,
 		); err != nil {
 			return nil, err
 		}
@@ -400,7 +408,7 @@ func (q *Queries) TransfersOfOtherAccounts(ctx context.Context, arg TransfersOfO
 
 const updateCashOperation = `-- name: UpdateCashOperation :exec
 UPDATE cash_operations
-SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, import_id = ?
+SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, fee_currency = ?, import_id = ?
 WHERE id = ?
 `
 
@@ -413,6 +421,8 @@ type UpdateCashOperationParams struct {
 	PositionID   sql.NullString
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
+	Fee          decimal.NullDecimal
+	FeeCurrency  sql.NullString
 	ImportID     int64
 	ID           int64
 }
@@ -427,6 +437,8 @@ func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperati
 		arg.PositionID,
 		arg.Volume,
 		arg.Price,
+		arg.Fee,
+		arg.FeeCurrency,
 		arg.ImportID,
 		arg.ID,
 	)
@@ -434,17 +446,19 @@ func (q *Queries) UpdateCashOperation(ctx context.Context, arg UpdateCashOperati
 }
 
 const upsertInstrument = `-- name: UpsertInstrument :one
-INSERT INTO instruments (ticker, name, category, quote_currency)
-VALUES (?, ?, ?, ?)
+INSERT INTO instruments (ticker, name, category, quote_currency, default_price_ticker, default_quote_currency)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (ticker) DO UPDATE SET ticker = excluded.ticker
 RETURNING id
 `
 
 type UpsertInstrumentParams struct {
-	Ticker        string
-	Name          string
-	Category      string
-	QuoteCurrency sql.NullString
+	Ticker               string
+	Name                 string
+	Category             string
+	QuoteCurrency        sql.NullString
+	DefaultPriceTicker   sql.NullString
+	DefaultQuoteCurrency sql.NullString
 }
 
 func (q *Queries) UpsertInstrument(ctx context.Context, arg UpsertInstrumentParams) (int64, error) {
@@ -453,6 +467,8 @@ func (q *Queries) UpsertInstrument(ctx context.Context, arg UpsertInstrumentPara
 		arg.Name,
 		arg.Category,
 		arg.QuoteCurrency,
+		arg.DefaultPriceTicker,
+		arg.DefaultQuoteCurrency,
 	)
 	var id int64
 	err := row.Scan(&id)

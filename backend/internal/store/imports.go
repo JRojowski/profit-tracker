@@ -42,6 +42,8 @@ type Account struct {
 	// Type is "regular", "IKE" or "IKZE".
 	Type     string
 	Currency string
+	// Provider is the Provider of the Account: "xtb" or "kraken".
+	Provider string
 }
 
 // PendingImport is an Import with the file that the user uploaded. The file is nil after the save or the cancel.
@@ -89,14 +91,26 @@ type CashOperation struct {
 	// QuoteCurrency is the Quote Currency of the Instrument, or empty if it is not known.
 	// The store sets it only when it adds the Instrument. Thus a later Import keeps a Quote Currency that the user set.
 	QuoteCurrency string
-	Time          time.Time
-	Amount        decimal.Decimal
-	Comment       string
+	// DefaultPriceTicker and DefaultQuoteCurrency are the defaults of the price source that the parser gives,
+	// for example "BTC-EUR" and "EUR" for a Kraken asset. They are empty for an XTB Instrument, which uses the
+	// mapping from the ticker suffix. The store sets them only when it adds the Instrument.
+	DefaultPriceTicker   string
+	DefaultQuoteCurrency string
+	Time                 time.Time
+	Amount               decimal.Decimal
+	Comment              string
 	// PositionID is the Lot ID. It is empty for an operation with no Lot.
 	PositionID string
 	// Volume and Price are the parsed volume and price. They are not valid for an operation with no volume.
 	Volume decimal.NullDecimal
 	Price  decimal.NullDecimal
+	// Fee is the fee of a crypto purchase in FeeCurrency. It is not valid for an operation with no such fee.
+	// It is not a part of Data: a fee in the crypto asset decreases the volume, and a fee in EUR is a part of the
+	// amount. Thus a changed fee changes the volume or the amount, and the Import comparison finds it.
+	Fee decimal.NullDecimal
+	// FeeCurrency is the currency of Fee: the Account currency or the crypto asset (ADR 0009).
+	// It is empty for an operation with no fee.
+	FeeCurrency string
 	// IsFill tells that the operation is a Fill of the Lot LotID.
 	IsFill bool
 	// LotID is the ID of the Lot of a Fill. ADR 0002: it can be the position ID of a different Fill
@@ -150,7 +164,7 @@ func (s *Store) AccountByNumber(ctx context.Context, number string) (Account, er
 	if err != nil {
 		return Account{}, fmt.Errorf("read account %s: %w", number, err)
 	}
-	return Account{ID: row.ID, AccountNumber: row.AccountNumber, Name: row.Name, Type: row.Type, Currency: row.Currency}, nil
+	return toAccount(row), nil
 }
 
 // CreatePreview saves a new Import and its Import Conflicts, and returns the ID of the Import.
@@ -301,6 +315,7 @@ func saveAccount(ctx context.Context, q *queries.Queries, a Account) (int64, err
 		Name:          a.Name,
 		Type:          a.Type,
 		Currency:      a.Currency,
+		Provider:      a.Provider,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("create account %s: %w", a.AccountNumber, err)
@@ -408,6 +423,8 @@ func (w *ledgerWriter) insert(ctx context.Context, op CashOperation) error {
 		PositionID:   sql.NullString{String: op.PositionID, Valid: op.PositionID != ""},
 		Volume:       op.Volume,
 		Price:        op.Price,
+		Fee:          op.Fee,
+		FeeCurrency:  sql.NullString{String: op.FeeCurrency, Valid: op.FeeCurrency != ""},
 		ImportID:     w.importID,
 	})
 	if err != nil {
@@ -431,6 +448,8 @@ func (w *ledgerWriter) replace(ctx context.Context, opID int64, op CashOperation
 		PositionID:   sql.NullString{String: op.PositionID, Valid: op.PositionID != ""},
 		Volume:       op.Volume,
 		Price:        op.Price,
+		Fee:          op.Fee,
+		FeeCurrency:  sql.NullString{String: op.FeeCurrency, Valid: op.FeeCurrency != ""},
 		ImportID:     w.importID,
 		ID:           opID,
 	})
@@ -514,10 +533,12 @@ func (w *ledgerWriter) instrument(ctx context.Context, op CashOperation) (sql.Nu
 		return sql.NullInt64{Int64: id, Valid: true}, nil
 	}
 	id, err := w.q.UpsertInstrument(ctx, queries.UpsertInstrumentParams{
-		Ticker:        op.Ticker,
-		Name:          op.InstrumentName,
-		Category:      op.Category,
-		QuoteCurrency: sql.NullString{String: op.QuoteCurrency, Valid: op.QuoteCurrency != ""},
+		Ticker:               op.Ticker,
+		Name:                 op.InstrumentName,
+		Category:             op.Category,
+		QuoteCurrency:        sql.NullString{String: op.QuoteCurrency, Valid: op.QuoteCurrency != ""},
+		DefaultPriceTicker:   sql.NullString{String: op.DefaultPriceTicker, Valid: op.DefaultPriceTicker != ""},
+		DefaultQuoteCurrency: sql.NullString{String: op.DefaultQuoteCurrency, Valid: op.DefaultQuoteCurrency != ""},
 	})
 	if err != nil {
 		return sql.NullInt64{}, fmt.Errorf("save instrument %s: %w", op.Ticker, err)

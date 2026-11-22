@@ -22,7 +22,11 @@ import {
   type NewAccount,
 } from "@/lib/api"
 import { formatAmount } from "@/lib/format"
+import { isKraken } from "@/lib/provider"
 import { cn } from "@/lib/utils"
+
+// KRAKEN_CURRENCY is the only currency of a Kraken Account.
+const KRAKEN_CURRENCY = "EUR"
 
 type ImportPreviewCardProps = {
   preview: ImportPreview
@@ -41,9 +45,16 @@ export function ImportPreviewCard({
   onConfirm,
 }: ImportPreviewCardProps) {
   const isNewAccount = preview.account === null
-  const [name, setName] = useState("")
-  const [type, setType] = useState<AccountType>("regular")
-  const [currency, setCurrency] = useState(preview.suggestedCurrency)
+  // A new Kraken Account must have the currency EUR. The backend rejects each other currency.
+  const currencyLocked = isKraken(preview.provider)
+  // The form starts with the values that the file suggests. An XTB export suggests only the currency.
+  const [name, setName] = useState(preview.suggestedName)
+  const [type, setType] = useState<AccountType>(
+    preview.suggestedType || "regular"
+  )
+  const [currency, setCurrency] = useState(
+    currencyLocked ? KRAKEN_CURRENCY : preview.suggestedCurrency
+  )
   const [submitted, setSubmitted] = useState(false)
 
   const nameError = name.trim() === "" ? "Enter a name." : null
@@ -152,7 +163,9 @@ export function ImportPreviewCard({
               <div className="flex flex-col gap-1">
                 <FigureLabel>New Account</FigureLabel>
                 <p className="text-sm text-muted-foreground">
-                  The account number is new. Enter the data of the new Account.
+                  {preview.suggestedName
+                    ? "The account number is new. Check the suggested data of the new Account."
+                    : "The account number is new. Enter the data of the new Account."}
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
@@ -199,15 +212,26 @@ export function ImportPreviewCard({
                     value={currency}
                     maxLength={3}
                     disabled={busy}
-                    className="font-mono"
+                    readOnly={currencyLocked}
+                    className={cn(
+                      "font-mono",
+                      currencyLocked && "bg-muted text-muted-foreground"
+                    )}
                     onChange={(event) =>
                       setCurrency(event.target.value.toUpperCase())
                     }
                   />
-                  {preview.suggestedCurrency && (
+                  {currencyLocked ? (
                     <FieldDescription>
-                      Suggested from the file name: {preview.suggestedCurrency}
+                      A Kraken Account always has the currency EUR.
                     </FieldDescription>
+                  ) : (
+                    preview.suggestedCurrency && (
+                      <FieldDescription>
+                        Suggested from the file name:{" "}
+                        {preview.suggestedCurrency}
+                      </FieldDescription>
+                    )
                   )}
                   {submitted && currencyError && (
                     <FieldError>{currencyError}</FieldError>

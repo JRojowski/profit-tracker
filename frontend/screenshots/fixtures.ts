@@ -20,7 +20,9 @@ import type {
   ImportPreview,
   ImportSummary,
   InstrumentOverview,
+  OverviewFill,
   PriceWarning,
+  UnsupportedEntry,
   ValueHistoryPoint,
 } from "../src/lib/api"
 
@@ -37,6 +39,8 @@ export type DataSet =
   | "benchmarkUnavailable"
   | "noAccounts"
   | "emptyAccounts"
+  | "kraken"
+  | "krakenRewardUnknown"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -45,6 +49,7 @@ export const mainAccount: Account = {
   name: "Main Account",
   type: "regular",
   currency: "PLN",
+  provider: "xtb",
 }
 
 export const ikzeAccount: Account = {
@@ -53,6 +58,17 @@ export const ikzeAccount: Account = {
   name: "Retirement",
   type: "IKZE",
   currency: "PLN",
+  provider: "xtb",
+}
+
+// krakenAccount is the Account at Kraken. It has no Lots and uses the Average Cost. Only the data set "kraken" has it.
+export const krakenAccount: Account = {
+  id: 3,
+  accountNumber: "kraken-spot",
+  name: "Kraken",
+  type: "regular",
+  currency: "EUR",
+  provider: "kraken",
 }
 
 const priceMismatch: PriceWarning = {
@@ -160,6 +176,41 @@ const delta: Holding = {
   ...noSource,
 }
 
+// bitcoin is the crypto Holding of the Kraken Account. The volume has 8 decimal places and includes the Rewards.
+// The cost is 1999.74 EUR of purchases plus 36.52 EUR of Rewards at the closes of their days.
+// The Average Cost has more decimal places than the screen shows. cost = volume × averageCost, rounded.
+const bitcoin: Holding = {
+  ticker: "BTC",
+  name: "BTC",
+  volume: "0.03448875",
+  cost: "2036.26",
+  averageCost: "59041.2815773259",
+  price: "92450.00",
+  priceDate: today,
+  exchangeRate: "4.2600",
+  exchangeRateCurrency: "EUR",
+  exchangeRateDate: today,
+  value: "3188.48",
+  unrealizedProfit: "1152.22",
+  unrealizedProfitPercent: "56.59",
+  note: null,
+  priceWarnings: [],
+  priceTicker: "BTC-EUR",
+  quoteCurrency: "EUR",
+  ...noSource,
+}
+
+// bitcoinRewardUnknown is the Bitcoin Holding when a Reward has no stored close on or before its day.
+// Then the cost, the Average Cost and the Unrealized Profit are not known. The value comes from the price.
+const bitcoinRewardUnknown: Holding = {
+  ...bitcoin,
+  cost: null,
+  averageCost: null,
+  unrealizedProfit: null,
+  unrealizedProfitPercent: null,
+  note: "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history.",
+}
+
 const mainHoldings = [alpha, beta, gamma]
 const ikzeHoldings = [delta]
 
@@ -261,6 +312,8 @@ const mainSummary: AccountSummary = {
   netDividends: "820.40",
   netInterest: "35.15",
   fees: "-185.00",
+  rewards: "0.00",
+  feeSum: "0.00",
   priceDate: today,
   stalePrices: false,
   exchangeRateDate: today,
@@ -284,6 +337,8 @@ const ikzeSummary: AccountSummary = {
   netDividends: "0.00",
   netInterest: "0.00",
   fees: "-350.00",
+  rewards: "0.00",
+  feeSum: "0.00",
   priceDate: today,
   stalePrices: false,
   exchangeRateDate: null,
@@ -293,6 +348,42 @@ const ikzeSummary: AccountSummary = {
   simpleReturnNote: null,
   annualReturn: "3.10",
   annualReturnNote: null,
+}
+
+// Totals of the Kraken Account: 2500 EUR of Deposits, one Bitcoin Holding and the rest in cash.
+// The fee is in the cost, so the fees part is zero. feeSum is information only.
+const krakenSummary: AccountSummary = {
+  accountId: 3,
+  currency: "EUR",
+  cash: "500.26",
+  netDeposits: "2500.00",
+  value: "3688.74",
+  totalResult: "1188.74",
+  realizedProfit: "0.00",
+  unrealizedProfit: "1152.22",
+  netDividends: "0.00",
+  netInterest: "0.00",
+  fees: "0.00",
+  rewards: "36.52",
+  feeSum: "8.97",
+  priceDate: today,
+  stalePrices: false,
+  exchangeRateDate: today,
+  staleRates: false,
+  unpricedHoldings: 0,
+  simpleReturn: "47.55",
+  simpleReturnNote: null,
+  annualReturn: "21.40",
+  annualReturnNote: null,
+}
+
+// krakenRewardUnknownSummary is the Kraken summary when a Reward has no stored close (ADR 0009, rule 3).
+// The Holding keeps its value from the price, so the value and the Total Result stay known.
+// The tool cannot split the Total Result into the Unrealized Profit and the Rewards part.
+const krakenRewardUnknownSummary: AccountSummary = {
+  ...krakenSummary,
+  unrealizedProfit: null,
+  rewards: null,
 }
 
 // emptySummary is the summary of an Account with no Cash Operations.
@@ -309,6 +400,8 @@ function emptySummary(accountId: number): AccountSummary {
     netDividends: "0.00",
     netInterest: "0.00",
     fees: "0.00",
+    rewards: "0.00",
+    feeSum: "0.00",
     priceDate: null,
     stalePrices: false,
     exchangeRateDate: null,
@@ -494,6 +587,22 @@ const ikzeHistory: AccountValueHistory = {
   priceWarnings: [],
 }
 
+const krakenHistory: AccountValueHistory = {
+  accountId: 3,
+  currency: "EUR",
+  points: historyPoints(2500, 3688.74, 500, 140),
+  timeWeightedReturn: {
+    "1M": "3.20",
+    "3M": "11.40",
+    YTD: "24.80",
+    "1Y": "38.10",
+    All: "47.90",
+  },
+  periodStarts,
+  valuedAtCost: [],
+  priceWarnings: [],
+}
+
 function emptyHistory(accountId: number): AccountValueHistory {
   return {
     accountId,
@@ -560,7 +669,7 @@ function returnSeries(
   })
 }
 
-// benchmarkRows gives the five Benchmarks for a user return. The last Benchmark has no price for the whole period.
+// benchmarkRows gives the six Benchmarks for a user return. Gold has no price for the whole period.
 function benchmarkRows(
   user: number,
   from: string,
@@ -600,6 +709,7 @@ function benchmarkRows(
       38.7,
     ],
     ["gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD", null],
+    ["bitcoin", "Bitcoin", "Bitcoin spot price", "BTC-USD", "USD", 112.4],
   ]
   return rows.map(([id, name, fund, ticker, quoteCurrency, value], index) => ({
     id,
@@ -733,6 +843,7 @@ function accountRow(account: Account, summary: AccountSummary): AllAccountsRow {
     netDividends: summary.netDividends,
     netInterest: summary.netInterest,
     fees: summary.fees,
+    rewards: "0.00",
     currencyResult: "0.00",
     annualReturn: summary.annualReturn,
     annualReturnNote: null,
@@ -756,6 +867,7 @@ const allSummary: AllAccountsSummary = {
   netDividends: "820.40",
   netInterest: "35.15",
   fees: "-535.00",
+  rewards: "0.00",
   currencyResult: "0.00",
   simpleReturn: "26.66",
   simpleReturnNote: null,
@@ -794,6 +906,8 @@ const allAllocation = allocationOf(
   "3650.50",
   "PLN"
 )
+
+const krakenAllocation = allocationOf([bitcoin], "500.26", "EUR")
 
 const ikzeLimit: IkzeLimit = {
   currentYear: 2026,
@@ -874,6 +988,9 @@ const betaOverview: InstrumentOverview = {
       volume: "10",
       price: "100.00",
       positionId: "94101",
+      cost: null,
+      fee: null,
+      feeCurrency: null,
     },
     {
       xtbId: "4102",
@@ -881,6 +998,9 @@ const betaOverview: InstrumentOverview = {
       volume: "30",
       price: "122.50",
       positionId: "94102",
+      cost: null,
+      fee: null,
+      feeCurrency: null,
     },
     {
       xtbId: "4103",
@@ -888,6 +1008,9 @@ const betaOverview: InstrumentOverview = {
       volume: "10",
       price: "134.00",
       positionId: "94103",
+      cost: null,
+      fee: null,
+      feeCurrency: null,
     },
   ],
   holding: beta,
@@ -905,6 +1028,9 @@ const betaOverview: InstrumentOverview = {
           volume: "30",
           price: "122.50",
           positionId: "94102",
+          cost: null,
+          fee: null,
+          feeCurrency: null,
         },
       ],
     },
@@ -921,12 +1047,122 @@ const betaOverview: InstrumentOverview = {
           volume: "10",
           price: "134.00",
           positionId: "94103",
+          cost: null,
+          fee: null,
+          feeCurrency: null,
         },
       ],
     },
   ],
   realizedProfitSum: "900.00",
   closedPositions: [mainClosed[1]],
+  rewards: [],
+  feeSum: null,
+}
+
+// bitcoinPrices builds the daily closes of BTC-EUR for the 150 days before the fixed date. Crypto has weekend closes.
+function bitcoinPrices(): { date: string; close: string }[] {
+  const series: { date: string; close: string }[] = []
+  const end = Date.UTC(2026, 5, 15)
+  const days = 150
+  for (let back = days; back >= 0; back--) {
+    const time = end - back * 86_400_000
+    const step = days - back
+    const close = 52000 + step * 260 + 2600 * Math.sin(step / 11)
+    series.push({
+      date: new Date(time).toISOString().slice(0, 10),
+      close: close.toFixed(2),
+    })
+  }
+  series[series.length - 1].close = bitcoin.price ?? "0"
+  return series
+}
+
+// cryptoPurchase builds one Kraken purchase as a Fill. A crypto purchase has no Lot, so positionId is empty.
+function cryptoPurchase(
+  xtbId: string,
+  time: string,
+  volume: string,
+  price: string,
+  cost: string,
+  fee: string,
+  feeCurrency: string
+): OverviewFill {
+  return { xtbId, time, volume, price, positionId: "", cost, fee, feeCurrency }
+}
+
+// bitcoinOverview is the Instrument Overview of Bitcoin on the Kraken Account.
+// Two purchases have the fee in BTC and one has the fee in EUR. The fees add to the feeSum of the summary.
+// The purchases cost 1999.74 EUR, and the Rewards have 36.52 EUR of value at the closes of their days.
+const bitcoinOverview: InstrumentOverview = {
+  ticker: "BTC",
+  name: "BTC",
+  priceTicker: "BTC-EUR",
+  priceTickerManual: false,
+  quoteCurrency: "EUR",
+  quoteCurrencyManual: false,
+  priceConfirmed: false,
+  prices: { currency: "EUR", series: bitcoinPrices() },
+  fills: [
+    cryptoPurchase(
+      "TQ7GA2-K1",
+      "2026-01-20T09:14:00Z",
+      "0.01294663",
+      "53960.00",
+      "700.00",
+      "0.00002594",
+      "BTC"
+    ),
+    cryptoPurchase(
+      "TQ7GA2-K2",
+      "2026-03-10T10:02:00Z",
+      "0.01024529",
+      "63190.00",
+      "650.00",
+      "2.60",
+      "EUR"
+    ),
+    cryptoPurchase(
+      "TQ7GA2-K3",
+      "2026-05-05T08:47:00Z",
+      "0.00814823",
+      "79130.00",
+      "649.74",
+      "0.00006281",
+      "BTC"
+    ),
+  ],
+  holding: bitcoin,
+  openLots: [],
+  realizedProfitSum: null,
+  closedPositions: [],
+  rewards: [
+    {
+      xtbId: "ST3RW1-R1",
+      time: "2026-03-02T01:05:00Z",
+      volume: "0.00012000",
+      value: "7.39",
+    },
+    {
+      xtbId: "ST3RW1-R2",
+      time: "2026-04-06T01:05:00Z",
+      volume: "0.00012000",
+      value: "9.00",
+    },
+    {
+      xtbId: "ST3RW1-R3",
+      time: "2026-05-04T01:05:00Z",
+      volume: "0.00011990",
+      value: "9.48",
+    },
+    {
+      xtbId: "ST3RW1-R4",
+      time: "2026-06-08T01:05:00Z",
+      volume: "0.00011800",
+      value: "10.65",
+    },
+  ],
+  feeSum: krakenSummary.feeSum,
 }
 
 // ApiFixture is the set of answers of the fake backend for one data set.
@@ -949,6 +1185,36 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
+  if (dataSet === "krakenRewardUnknown") {
+    // The data set "krakenRewardUnknown" is the data set "kraken" with a Reward that has no stored close.
+    const kraken = fixtureFor("kraken")
+    return {
+      ...kraken,
+      // The Holding has a value, so the Allocation is the same as in the data set "kraken".
+      summary: { ...kraken.summary, 3: krakenRewardUnknownSummary },
+      holdings: { ...kraken.holdings, 3: [bitcoinRewardUnknown] },
+    }
+  }
+  if (dataSet === "kraken") {
+    // The data set "kraken" is the populated data set with the Kraken Account in addition.
+    const populated = fixtureFor("populated")
+    return {
+      ...populated,
+      accounts: [...populated.accounts, krakenAccount].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      ),
+      summary: { ...populated.summary, 3: krakenSummary },
+      allocation: { ...populated.allocation, 3: krakenAllocation },
+      history: { ...populated.history, 3: krakenHistory },
+      benchmarks: {
+        ...populated.benchmarks,
+        3: accountBenchmarks(krakenHistory),
+      },
+      holdings: { ...populated.holdings, 3: [bitcoin] },
+      closedPositions: { ...populated.closedPositions, 3: [] },
+      overview: { ...populated.overview, "3:BTC": bitcoinOverview },
+    }
+  }
   if (
     dataSet === "populated" ||
     dataSet === "nearEqualEnd" ||
@@ -1020,48 +1286,103 @@ const previewOperation = {
 }
 
 // importPreviews are the answers of an upload. "known" is a file of the Main Account with an Import Conflict and a warning.
-// "new" is a file with a new account number.
-export const importPreviews: Record<"known" | "new", ImportPreview> = {
-  known: {
-    id: 3,
-    fileName: "account_10000001_2026.xlsx",
-    accountNumber: "10000001",
-    account: mainAccount,
-    suggestedCurrency: "PLN",
-    newCashOperations: 12,
-    skippedCashOperations: 148,
-    state: "needs-review",
-    conflicts: [
-      {
-        id: 1,
-        kind: "changed-data",
-        xtbId: "900001",
-        existing: previewOperation,
-        new: { ...previewOperation, amount: "1550.00" },
-        check: null,
-        decision: null,
-      },
-    ],
-    warnings: [
-      {
-        kind: "transfer-without-other-side",
-        direction: "out",
-        xtbId: "900002",
-        time: "2026-05-20T10:00:00Z",
-        amount: "-500.00",
-      },
-    ],
+// "new" is a file with a new account number. "kraken" is the first Kraken ledger export, with the suggested Account values.
+export const importPreviews: Record<"known" | "new" | "kraken", ImportPreview> =
+  {
+    known: {
+      id: 3,
+      fileName: "account_10000001_2026.xlsx",
+      accountNumber: "10000001",
+      account: mainAccount,
+      provider: "xtb",
+      suggestedName: "",
+      suggestedType: "",
+      suggestedCurrency: "PLN",
+      newCashOperations: 12,
+      skippedCashOperations: 148,
+      state: "needs-review",
+      conflicts: [
+        {
+          id: 1,
+          kind: "changed-data",
+          xtbId: "900001",
+          existing: previewOperation,
+          new: { ...previewOperation, amount: "1550.00" },
+          check: null,
+          decision: null,
+        },
+      ],
+      warnings: [
+        {
+          kind: "transfer-without-other-side",
+          direction: "out",
+          xtbId: "900002",
+          time: "2026-05-20T10:00:00Z",
+          amount: "-500.00",
+        },
+      ],
+    },
+    new: {
+      id: 4,
+      fileName: "account_10000003_2026.xlsx",
+      accountNumber: "10000003",
+      account: null,
+      provider: "xtb",
+      suggestedName: "",
+      suggestedType: "",
+      suggestedCurrency: "PLN",
+      newCashOperations: 30,
+      skippedCashOperations: 0,
+      state: "preview",
+      conflicts: [],
+      warnings: [],
+    },
+    kraken: {
+      id: 5,
+      fileName: "kraken_spot_ledgers_2026-01-01-2026-06-01.csv",
+      accountNumber: "kraken-spot",
+      account: null,
+      provider: "kraken",
+      suggestedName: "Kraken",
+      suggestedType: "regular",
+      suggestedCurrency: "EUR",
+      newCashOperations: 7,
+      skippedCashOperations: 0,
+      state: "preview",
+      conflicts: [],
+      warnings: [],
+    },
+  }
+
+// unsupportedEntries are the entries of a Kraken export that stop an Import: a sale, a withdrawal and a staking move.
+const unsupportedEntries: UnsupportedEntry[] = [
+  {
+    type: "trade",
+    subtype: "tradespot",
+    asset: "BTC",
+    time: "2026-04-14T08:21:00Z",
+    reason: "sale",
   },
-  new: {
-    id: 4,
-    fileName: "account_10000003_2026.xlsx",
-    accountNumber: "10000003",
-    account: null,
-    suggestedCurrency: "PLN",
-    newCashOperations: 30,
-    skippedCashOperations: 0,
-    state: "preview",
-    conflicts: [],
-    warnings: [],
+  {
+    type: "withdrawal",
+    subtype: "",
+    asset: "BTC",
+    time: "2026-05-02T17:45:12Z",
+    reason: "withdrawal",
   },
+  {
+    type: "earn",
+    subtype: "allocation",
+    asset: "BTC",
+    time: "2026-05-20T06:00:00Z",
+    reason: "unknown entry",
+  },
+]
+
+// unsupportedEntriesError is the body of the HTTP 400 answer to an upload of a Kraken export with unsupported entries.
+export const unsupportedEntriesError = {
+  error:
+    "the export has entries that the tool does not support: sale at 2026-04-14T08:21:00Z; withdrawal at 2026-05-02T17:45:12Z; unknown entry at 2026-05-20T06:00:00Z",
+  code: "unsupported-entries",
+  unsupportedEntries,
 }

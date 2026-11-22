@@ -12,6 +12,8 @@ type PageCase = {
   charts: boolean
   // panel tells that the page opens the Instrument Overview panel.
   panel?: boolean
+  // panelEnd scrolls the body of the panel to its end before the screenshot, to show the lists at the bottom.
+  panelEnd?: boolean
   // populatedSet is the data set of the populated state. The default is "populated".
   populatedSet?: DataSet
 }
@@ -82,6 +84,57 @@ const pageCases: PageCase[] = [
     empty: "emptyAccounts",
     charts: false,
   },
+  {
+    // The Kraken Account has no Closed Positions page in the sidebar.
+    name: "kraken-overview",
+    url: "/accounts/3",
+    empty: null,
+    charts: true,
+    populatedSet: "kraken",
+  },
+  {
+    // The Holdings table of the Kraken Account has the Average Cost and a quantity with 8 decimal places.
+    name: "kraken-holdings",
+    url: "/accounts/3/holdings",
+    empty: null,
+    charts: false,
+    populatedSet: "kraken",
+  },
+  {
+    // The Instrument Overview of Bitcoin shows the Average Cost, the purchases, the Rewards and the sum of the fees.
+    // It has no Lot section and no Closed Position section.
+    name: "kraken-instrument-overview",
+    url: "/accounts/3/holdings?overview=BTC",
+    empty: null,
+    charts: true,
+    panel: true,
+    populatedSet: "kraken",
+  },
+  {
+    // The end of the Bitcoin panel: the sum of the fees, the purchases with the fee in BTC or EUR, and the Rewards.
+    name: "kraken-instrument-overview-end",
+    url: "/accounts/3/holdings?overview=BTC",
+    empty: null,
+    charts: true,
+    panel: true,
+    panelEnd: true,
+    populatedSet: "kraken",
+  },
+  {
+    // A Reward has no stored close. The Bitcoin Holding has a value, but no known cost and no Unrealized Profit.
+    name: "kraken-overview-reward-unknown",
+    url: "/accounts/3",
+    empty: null,
+    charts: true,
+    populatedSet: "krakenRewardUnknown",
+  },
+  {
+    name: "kraken-holdings-reward-unknown",
+    url: "/accounts/3/holdings",
+    empty: null,
+    charts: false,
+    populatedSet: "krakenRewardUnknown",
+  },
   { name: "import", url: "/import", empty: null, charts: false },
   { name: "imports", url: "/imports", empty: "emptyAccounts", charts: false },
   { name: "not-found", url: "/no-such-page", empty: null, charts: false },
@@ -108,6 +161,12 @@ async function waitForRenderedPage(
   }
   if (pageCase.charts && populated) {
     await expect(page.locator(".recharts-surface").first()).toBeVisible()
+  }
+  if (pageCase.panelEnd && populated) {
+    // The panel body is the element that scrolls. The page itself does not scroll.
+    await page
+      .locator("[data-overview-body]")
+      .evaluate((body) => body.scrollTo(0, body.scrollHeight))
   }
   await page.evaluate(() => document.fonts.ready)
 }
@@ -211,10 +270,38 @@ for (const sidebarCase of sidebarCases) {
   }
 }
 
-// Each Import case uploads a file and shows the preview that the fake backend answers with.
+// Each Import case uploads a file and shows the answer of the fake backend: a preview or the error of unsupported entries.
+// text is a text that the answer shows. The test waits for it.
+const xlsxFile = {
+  name: "export.xlsx",
+  mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+const csvFile = { name: "kraken_spot_ledgers.csv", mimeType: "text/csv" }
 const previewCases = [
-  { name: "import-preview-known", preview: "known" },
-  { name: "import-preview-new", preview: "new" },
+  {
+    name: "import-preview-known",
+    preview: "known",
+    file: xlsxFile,
+    text: "Known Account:",
+  },
+  {
+    name: "import-preview-new",
+    preview: "new",
+    file: xlsxFile,
+    text: "New Account",
+  },
+  {
+    name: "import-preview-kraken",
+    preview: "kraken",
+    file: csvFile,
+    text: "New Account",
+  },
+  {
+    name: "import-unsupported-entries",
+    preview: undefined,
+    file: csvFile,
+    text: "The Import stopped: 3 unsupported entries",
+  },
 ] as const
 
 for (const previewCase of previewCases) {
@@ -229,21 +316,17 @@ for (const previewCase of previewCases) {
         await page.clock.setFixedTime(fixedNow)
         const failures = await installFakeBackend(page, "populated", {
           preview: previewCase.preview,
+          unsupportedEntries: previewCase.preview === undefined,
         })
 
         await page.goto("/import")
         await page.locator('input[type="file"]').setInputFiles({
-          name: "export.xlsx",
-          mimeType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          ...previewCase.file,
           buffer: Buffer.from("synthetic"),
         })
         await page.getByRole("button", { name: "Preview", exact: true }).click()
         await expect(
-          page.getByText(
-            previewCase.preview === "known" ? "Known Account:" : "New Account",
-            { exact: true }
-          )
+          page.getByText(previewCase.text, { exact: true })
         ).toBeVisible()
         await page.waitForLoadState("networkidle")
         await page.evaluate(() => document.fonts.ready)

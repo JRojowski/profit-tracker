@@ -32,6 +32,8 @@ type TotalResultWaterfallProps = {
   parts: WaterfallPart[]
   totalResult: string | null
   currency: string
+  // totalNote is an optional line under the amount of the Total Result, for example the sum of the fees.
+  totalNote?: string
 }
 
 // BarKind selects the colour of a bar.
@@ -56,6 +58,8 @@ const chartConfig = {
 const gridColumns: Record<number, string> = {
   6: "lg:grid-cols-6",
   7: "lg:grid-cols-7",
+  // All Accounts with a Kraken Account have 7 parts and the Total Result. Two rows of 4 boxes fit them.
+  8: "lg:grid-cols-4",
 }
 
 // TotalResultWaterfall shows how each part adds to the Total Result. Each bar starts at the sum of the bars before it.
@@ -64,6 +68,7 @@ export function TotalResultWaterfall({
   parts,
   totalResult,
   currency,
+  totalNote,
 }: TotalResultWaterfallProps) {
   const isMobile = useIsMobile()
   const bars = waterfallBars(parts, totalResult)
@@ -100,6 +105,7 @@ export function TotalResultWaterfall({
               part={box}
               currency={currency}
               total={index === boxes.length - 1}
+              note={index === boxes.length - 1 ? totalNote : undefined}
             />
           ))}
         </ul>
@@ -266,10 +272,11 @@ type AmountBoxProps = {
   part: WaterfallPart
   currency: string
   total: boolean
+  note?: string
 }
 
-// AmountBox shows the exact amount of one part, or of the Total Result.
-function AmountBox({ part, currency, total }: AmountBoxProps) {
+// AmountBox shows the exact amount of one part, or of the Total Result, and an optional note under it.
+function AmountBox({ part, currency, total, note }: AmountBoxProps) {
   return (
     <InsetSurface
       as="li"
@@ -293,6 +300,7 @@ function AmountBox({ part, currency, total }: AmountBoxProps) {
           ? "—"
           : formatAmount(part.amount, currency, { signed: true })}
       </span>
+      {note && <span className="text-xs text-muted-foreground">{note}</span>}
     </InsetSurface>
   )
 }

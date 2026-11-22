@@ -105,11 +105,15 @@ func Ticker(brokerTicker string) string {
 	return base + m.priceSuffix
 }
 
-// EffectiveTicker returns the price ticker that the tool uses.
-// It is the manual price ticker, or the default mapping if manual is empty.
-func EffectiveTicker(brokerTicker, manual string) string {
-	if manual != "" {
+// EffectiveTicker returns the price ticker that the tool uses. It is the manual price ticker.
+// If manual is empty, it is the default price ticker that the parser of the Provider gave, for example "BTC-EUR".
+// If that is empty too, it is the default mapping from the suffix of the XTB ticker.
+func EffectiveTicker(brokerTicker, defaultTicker, manual string) string {
+	switch {
+	case manual != "":
 		return manual
+	case defaultTicker != "":
+		return defaultTicker
 	}
 	return Ticker(brokerTicker)
 }

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/returns"
@@ -48,6 +49,11 @@ type resultsResult struct {
 	NetDividends     *string `json:"netDividends"`
 	NetInterest      *string `json:"netInterest"`
 	Fees             *string `json:"fees"`
+	// Rewards is the Rewards part of the Total Result (ADR 0009). FeeSum is the sum of the fees of the crypto
+	// purchases. It is a part of the cost of the Holdings, not of the Total Result. Only one Account at the
+	// Average Cost (Kraken) has them. Rewards is null if a Reward has no known value.
+	Rewards averageCostAmount `json:"rewards,omitzero"`
+	FeeSum  averageCostAmount `json:"feeSum,omitzero"`
 	// CurrencyResult exists only for all Accounts. The tool calculates it only in PLN (ADR 0004).
 	CurrencyResult   *string `json:"currencyResult,omitempty"`
 	PriceDate        *string `json:"priceDate"`
@@ -91,7 +97,10 @@ func (a *api) resultsFunction() assistant.Function {
 				"For all Accounts the amounts are in PLN. For one Account they are in the Account currency. " +
 				"With the arguments from and to (a period, both days included) it returns only the Total Result of the period " +
 				"and the values that give it: the value at the start and at the end, and the Net Deposits of the period. " +
-				"It has no returns and no parts of the Total Result then.",
+				"It has no returns and no parts of the Total Result then. " +
+				"For one Kraken Account, the result also has the Rewards part of the Total Result and feeSum. " +
+				"For all Accounts with a Kraken Account, the result also has the Rewards part in PLN. " +
+				"feeSum is the sum of the fees of the crypto purchases. It is a part of the cost of the Holdings, not of the Total Result.",
 			Parameters: json.RawMessage(resultsParameters),
 		},
 		Run: a.runResults,
@@ -117,7 +126,7 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 		return a.periodResults(ctx, args, accounts, scope)
 	}
 	if args.AccountID == nil {
-		return a.allAccountsResults(ctx, scope)
+		return a.allAccountsResults(ctx, scope, slices.ContainsFunc(accounts, usesAverageCost))
 	}
 
 	acc := accounts[0]
@@ -130,21 +139,27 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 		return nil, err
 	}
 	s := a.summaryOf(view)
-	return resultsResult{
+	result := resultsResult{
 		Scope: scope, AccountID: &acc.ID, AccountName: acc.Name, Currency: acc.Currency, Available: true, Warnings: []string{},
 		Value: new(roundAmountText(s.Value)), Cash: new(roundAmountText(s.Cash)), NetDeposits: new(roundAmountText(s.NetDeposits)),
 		TotalResult: new(roundAmountText(s.TotalResult)), RealizedProfit: new(roundAmountText(s.RealizedProfit)),
-		UnrealizedProfit: new(roundAmountText(s.UnrealizedProfit)), NetDividends: new(roundAmountText(s.NetDividends)),
+		UnrealizedProfit: roundAmountPointer(s.UnrealizedProfit), NetDividends: new(roundAmountText(s.NetDividends)),
 		NetInterest: new(roundAmountText(s.NetInterest)), Fees: new(roundAmountText(s.Fees)), PriceDate: s.PriceDate, UnpricedHoldings: s.UnpricedHoldings,
 		SimpleReturn:       returnResult{Percent: s.SimpleReturn, Reason: s.SimpleReturnNote},
 		AnnualReturn:       returnResult{Percent: s.AnnualReturn, Reason: s.AnnualReturnNote},
 		TimeWeightedReturn: timeWeightedOf(history.TimeWeightedReturn, ""),
 		ValuedAtCost:       tickersOf(history.ValuedAtCost),
-	}, nil
+	}
+	if usesAverageCost(acc) {
+		result.Rewards = averageCostAmountOf(roundAmountPointer(s.Rewards))
+		result.FeeSum = averageCostAmountOf(new(roundAmountText(s.FeeSum)))
+	}
+	return result, nil
 }
 
 // allAccountsResults returns the result of get_results for all Accounts, in PLN.
-func (a *api) allAccountsResults(ctx context.Context, scope string) (resultsResult, error) {
+// If an Account uses the Average Cost (Kraken), the result also has the Rewards part in PLN.
+func (a *api) allAccountsResults(ctx context.Context, scope string, averageCost bool) (resultsResult, error) {
 	summary, err := a.allAccountsSummaryOf(ctx)
 	if err != nil {
 		return resultsResult{}, err
@@ -157,7 +172,7 @@ func (a *api) allAccountsResults(ctx context.Context, scope string) (resultsResu
 	if !history.Available {
 		unavailable = allValueHistoryNote
 	}
-	return resultsResult{
+	result := resultsResult{
 		Scope: scope, Currency: "PLN", Available: summary.Available, Warnings: summary.Warnings,
 		Value: roundAmountPointer(summary.Value), Cash: roundAmountPointer(summary.Cash),
 		NetDeposits: roundAmountPointer(summary.NetDeposits), TotalResult: roundAmountPointer(summary.TotalResult),
@@ -168,7 +183,11 @@ func (a *api) allAccountsResults(ctx context.Context, scope string) (resultsResu
 		AnnualReturn:       returnResult{Percent: summary.AnnualReturn, Reason: summary.AnnualReturnNote},
 		TimeWeightedReturn: timeWeightedOf(history.TimeWeightedReturn, unavailable),
 		ValuedAtCost:       tickersOf(history.ValuedAtCost),
-	}, nil
+	}
+	if averageCost {
+		result.Rewards = averageCostAmountOf(roundAmountPointer(summary.Rewards))
+	}
+	return result, nil
 }
 
 // timeWeightedOf returns the Time-Weighted Returns with a reason for each period that has no number.

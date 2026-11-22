@@ -1,8 +1,9 @@
-// Package demo holds synthetic XTB exports for a demo database.
+// Package demo holds synthetic XTB and Kraken exports for a demo database.
 //
-// The data is made up. The three Accounts cover the cases that the pages show:
+// The data is made up. The three XTB Accounts cover the cases that the pages show:
 // two currencies, a Holding quoted in another currency, a Holding with no price,
 // the same Instrument on two Accounts, Closed Positions, dividends and IKZE Contributions.
+// The Kraken Account has EUR deposits, Bitcoin purchases with the fee in BTC or in EUR, and weekly Rewards.
 package demo
 
 import (

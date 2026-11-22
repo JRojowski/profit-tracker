@@ -6,12 +6,17 @@ export const accountTypes = ["regular", "IKE", "IKZE"] as const
 
 export type AccountType = (typeof accountTypes)[number]
 
+// Provider is the company that holds an Account. The rules of a Kraken Account are different (ADR 0009).
+// Use isKraken from "@/lib/provider" to test for these rules.
+export type Provider = "xtb" | "kraken"
+
 export type Account = {
   id: number
   accountNumber: string
   name: string
   type: AccountType
   currency: string
+  provider: Provider
 }
 
 export type NewAccount = {
@@ -90,6 +95,12 @@ export type ImportPreview = {
   fileName: string
   accountNumber: string
   account: Account | null
+  // provider is the Provider of the file, for example "kraken".
+  provider: Provider
+  // suggestedName and suggestedType are the proposed values of a new Account, for example "Kraken" and "regular".
+  // They are "" when the file does not tell them, as for an XTB export.
+  suggestedName: string
+  suggestedType: AccountType | ""
   suggestedCurrency: string
   newCashOperations: number
   skippedCashOperations: number
@@ -109,17 +120,36 @@ export type ImportSummary = {
   skippedCashOperations: number
 }
 
+// UnsupportedEntry is one entry of a Kraken export that the tool does not support. The time is RFC 3339 text in UTC.
+// The reason is for example "sale", "withdrawal" or "unknown entry".
+export type UnsupportedEntry = {
+  type: string
+  subtype: string
+  asset: string
+  time: string
+  reason: string
+}
+
 // ApiError holds the error message that the backend returns. The code is the machine-readable code of the
-// error, when the backend gives one, for example "rate_limited".
+// error, when the backend gives one, for example "rate_limited" or "unsupported-entries".
+// The error with the code "unsupported-entries" lists the unsupported entries of a Kraken export.
+// The error with the code "kraken-currency-not-eur" tells that a new Kraken Account must have the currency EUR.
 export class ApiError extends Error {
   readonly status: number
   readonly code: string | null
+  readonly unsupportedEntries: UnsupportedEntry[]
 
-  constructor(status: number, message: string, code: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    code: string | null = null,
+    unsupportedEntries: UnsupportedEntry[] = []
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    this.unsupportedEntries = unsupportedEntries
   }
 }
 
@@ -132,14 +162,20 @@ async function readJSON<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `HTTP ${response.status}`
     let code: string | null = null
+    let unsupportedEntries: UnsupportedEntry[] = []
     try {
-      const body = (await response.json()) as { error?: string; code?: string }
+      const body = (await response.json()) as {
+        error?: string
+        code?: string
+        unsupportedEntries?: UnsupportedEntry[]
+      }
       if (body.error) message = body.error
       if (body.code) code = body.code
+      if (body.unsupportedEntries) unsupportedEntries = body.unsupportedEntries
     } catch {
       // The body is not JSON. Keep the status message.
     }
-    throw new ApiError(response.status, message, code)
+    throw new ApiError(response.status, message, code, unsupportedEntries)
   }
   return (await response.json()) as T
 }
@@ -216,10 +252,17 @@ export type AccountSummary = {
   // totalResult is the sum of the parts below.
   totalResult: string
   realizedProfit: string
-  unrealizedProfit: string
+  // unrealizedProfit is null when rewards is null: the tool cannot split the result into these two parts (ADR 0009).
+  unrealizedProfit: string | null
   netDividends: string
   netInterest: string
   fees: string
+  // rewards is the sum of the values of the Rewards on their days, a part of totalResult (ADR 0009).
+  // It is null when a Reward has no stored close on or before its day. It is "0.00" for an Account with no Rewards.
+  rewards: string | null
+  // feeSum is the sum of the crypto fees in the Account currency: for each crypto purchase, the fee × the purchase
+  // price. It is information only and not a part of totalResult. It is "0.00" for an XTB Account.
+  feeSum: string
   // priceDate is the oldest price date of the priced Holdings, as YYYY-MM-DD. It is null when no Holding has a price.
   priceDate: string | null
   // stalePrices tells that a Holding with a known Quote Currency has no price, or that its price is not from today.
@@ -249,8 +292,10 @@ export type Holding = {
   ticker: string
   name: string
   volume: string
-  cost: string
-  averageCost: string
+  // cost, averageCost and unrealizedProfit are null when a Reward of the Holding has no stored close on or before
+  // its day (ADR 0009). Then note tells the user why. The Holding still has a value when it has a price.
+  cost: string | null
+  averageCost: string | null
   price: string | null
   // priceDate is YYYY-MM-DD.
   priceDate: string | null
@@ -372,7 +417,26 @@ export type OverviewFill = {
   time: string
   volume: string
   price: string | null
+  // positionId is empty for a crypto purchase, because it has no Lot.
   positionId: string
+  // cost, fee and feeCurrency are set only for a crypto purchase (ADR 0009). They are null for a Fill of a Lot.
+  // cost is the full amount in the Account currency, with a fee in the Account currency.
+  cost: string | null
+  // fee is in feeCurrency: the Account currency (for example "EUR") or the crypto asset (for example "BTC").
+  fee: string | null
+  feeCurrency: string | null
+}
+
+// OverviewReward is one Reward of a crypto Instrument.
+export type OverviewReward = {
+  // xtbId is the ID of the Reward at the Provider, for example the Kraken refid.
+  xtbId: string
+  // time is an RFC 3339 time in UTC.
+  time: string
+  volume: string
+  // value is the value on the day of the Reward in the Account currency (ADR 0009).
+  // It is null when the backend has no stored close on or before that day.
+  value: string | null
 }
 
 // OverviewLot is one open Lot of the Instrument. volume and cost are the open part of the Lot.
@@ -395,13 +459,19 @@ export type InstrumentOverview = NamedPriceSource & {
   fills: OverviewFill[]
   // holding is null when the Account has no open volume of the Instrument.
   holding: Holding | null
-  // openLots is empty exactly when holding is null.
+  // openLots is empty when holding is null. It is always empty for a crypto Instrument, which has no Lots.
+  // For a crypto Instrument, holding.averageCost is the Average Cost.
   openLots: OverviewLot[]
   // realizedProfitSum is the sum of the Realized Profit of the closedPositions, in the Account currency.
   // The backend adds the amounts. It is null exactly when closedPositions is empty.
   realizedProfitSum: string | null
   // closedPositions are in close time order, oldest first.
   closedPositions: ClosedPosition[]
+  // rewards are in ascending time order. It is empty for an Instrument with Lots.
+  rewards: OverviewReward[]
+  // feeSum is the sum of the fees of the crypto purchases in the Account currency. It is information only.
+  // It is null for an Instrument with Lots, and not null for a crypto Instrument.
+  feeSum: string | null
 }
 
 // fetchInstrumentOverview loads the Instrument Overview of one Instrument on one Account.
@@ -637,6 +707,9 @@ export type AllAccountsAmounts = {
   netDividends: string | null
   netInterest: string | null
   fees: string | null
+  // rewards is the sum of the values of the Rewards on their days, in PLN (ADR 0009). It is "0.00" for no Rewards.
+  // rewards and unrealizedProfit are null when a Reward of an Account has no stored close on or before its day.
+  rewards: string | null
   // currencyResult is the part of the Total Result that comes from the change of the Exchange Rates.
   currencyResult: string | null
 }
@@ -811,7 +884,7 @@ export type BenchmarkPoint = { date: string; return: string }
 export type BenchmarkReturn = {
   id: string
   name: string
-  // fund is the name of the ETF or ETC that represents the Benchmark.
+  // fund names what represents the Benchmark: an ETF or ETC, or the spot price of a crypto asset.
   fund: string
   ticker: string
   quoteCurrency: string

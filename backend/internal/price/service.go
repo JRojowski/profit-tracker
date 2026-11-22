@@ -274,7 +274,7 @@ func HeldInstruments(ctx context.Context, st *store.Store) ([]HeldInstrument, er
 			continue
 		}
 		held = append(held, HeldInstrument{
-			Ticker: ticker, PriceTicker: EffectiveTicker(ticker, inst.PriceTicker), QuoteCurrency: inst.QuoteCurrency,
+			Ticker: ticker, PriceTicker: EffectiveTicker(ticker, inst.DefaultPriceTicker, inst.PriceTicker), QuoteCurrency: inst.QuoteCurrency,
 			AccountCurrencies: slices.Sorted(maps.Keys(tickers[ticker])),
 		})
 	}

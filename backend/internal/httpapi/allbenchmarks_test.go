@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,8 +100,56 @@ func TestAllBenchmarks_PLNAndUSDAccounts_ReturnInPLNAndDifference(t *testing.T) 
 			noFullPeriod("mwig40tr", "mWIG40TR", "Beta ETF mWIG40TR Portfelowy FIZ", "ETFBM40TR.WA", "PLN"),
 			noFullPeriod("world", "World equities", "iShares Core MSCI World UCITS ETF USD (Acc)", "IWDA.L", "USD"),
 			noFullPeriod("gold", "Gold", "iShares Physical Gold ETC", "IGLN.L", "USD"),
+			noFullPeriod("bitcoin", "Bitcoin", "Bitcoin spot price", "BTC-USD", "USD"),
 		},
 	}, got)
+}
+
+// TestAllBenchmarks_Bitcoin_PeriodBeforeAnyBitcoinPurchase checks that the Bitcoin Benchmark needs no Bitcoin
+// Holding. The Bitcoin Benchmark is not the Bitcoin Instrument (ADR 0008, amendment). Only one XTB Account exists,
+// with no Bitcoin purchase. Its Cash Operations start on 2025-06-10, so the refresh gets the Bitcoin closes from
+// 2025-06-03.
+//
+//	Account:  1000 PLN on 2025-06-10, interest 100 on 2025-09-01 and 110 on 2025-11-15 (1210 PLN today)
+//	USD rate: 4.00 from 2025-06-10, 3.80 on today 2026-10-23
+//
+//	Period  base day    user                     Bitcoin in PLN                     Benchmark Return  difference
+//	1Y      2025-10-23  1210 / 1100 − 1 = 10     40000 × 4.00 = 160000 → 209000     30.625            −20.625
+//	All     2025-06-10  1210 / 1000 − 1 = 21     25000 × 4.00 = 100000 → 209000     109               −88
+//
+// Today: the last close 55000 USD (2026-10-22) × 3.80 = 209000 PLN.
+func TestAllBenchmarks_Bitcoin_PeriodBeforeAnyBitcoinPurchase(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.setHistory(t, "BTC-USD", "USD", "2025-06-10=25000", "2025-10-23=40000", "2026-10-22=55000")
+	srv := startServerWithPrices(t, provider)
+	srv.rateProvider.set(t, "USD", "2025-06-10", "4.00")
+	srv.rateProvider.set(t, "USD", "2026-10-23", "3.80")
+	at := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 10, 0, 0, 0, time.UTC) }
+	srv.importAccount(t, xtbtest.Export{AccountNumber: "61000011", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		interest("6B03", "110.00", at(2025, time.November, 15)),
+		interest("6B02", "100.00", at(2025, time.September, 1)),
+		cashDeposit("6B01", "1000.00", at(2025, time.June, 10)),
+	}}, "XTB PLN")
+	srv.refreshHistory(t)
+
+	cases := []struct{ period, baseDay, user, benchmarkReturn, difference string }{
+		{"1Y", "2025-10-23", "10", "30.625", "-20.625"},
+		{"All", "2025-06-10", "21", "109", "-88"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.period, func(t *testing.T) {
+			t.Parallel()
+			got := srv.allBenchmarks(t, tc.period)
+
+			assert.Equal(t, ptr(tc.baseDay), got.BaseDay)
+			assert.Equal(t, ptr(tc.user), got.User.Return)
+			bitcoin := benchmarkByID(t, benchmarksResponse{Benchmarks: got.Benchmarks}, "bitcoin")
+			assert.Equal(t, "available", bitcoin.Status)
+			assert.Equal(t, ptr(tc.benchmarkReturn), bitcoin.Return)
+			assert.Equal(t, ptr(tc.difference), bitcoin.Difference)
+		})
+	}
 }
 
 // TestAllBenchmarks_EachPeriod_UserReturnEqualsTheValueHistory checks that the user return and the base day of

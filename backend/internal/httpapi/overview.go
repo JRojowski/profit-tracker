@@ -13,14 +13,16 @@ import (
 // overviewResponse is the body of GET /api/accounts/{id}/instruments/{ticker}/overview.
 // It is the Instrument Overview of one Instrument on one Account. It has the identity and the price source state,
 // the daily price series, the Fills, the Holding (nil when the Account has no open volume), the open Lots
-// and the Closed Positions.
+// and the Closed Positions. For a crypto Instrument on an Account with no Lots (ADR 0009), it also has the Rewards
+// and the sum of the fees. The Holding gives the Average Cost. The open Lots and the Closed Positions are empty.
 type overviewResponse struct {
 	Ticker string `json:"ticker"`
 	Name   string `json:"name"`
 	// The price source state has the same fields and names as a row of the Holdings response.
 	priceSourceResponse
 	Prices overviewPrices `json:"prices"`
-	// Fills are the Fills of the Instrument on the Account, in time order.
+	// Fills are the Fills of the Instrument on the Account, in time order. For a crypto Instrument,
+	// they are the crypto purchases.
 	Fills []overviewFill `json:"fills"`
 	// Holding is the same row as the Holdings endpoint gives for the Instrument. It is nil when the Account has no open volume.
 	Holding *holdingResponse `json:"holding"`
@@ -32,6 +34,25 @@ type overviewResponse struct {
 	// RealizedProfitSum is the sum of the Realized Profit of the Closed Positions above, in the Account currency, as decimal text.
 	// It is nil when the Instrument has no Closed Position on the Account.
 	RealizedProfitSum *string `json:"realizedProfitSum"`
+	// Rewards are the Rewards of the Instrument on the Account, in time order (ADR 0009).
+	// It is an empty array when there is none, for example for an Instrument with Lots.
+	Rewards []overviewReward `json:"rewards"`
+	// FeeSum is the sum of the fees of the crypto purchases of the Instrument in the Account currency, as decimal text.
+	// It is information only (ADR 0009, rule 2). It is nil for an Instrument with Lots.
+	FeeSum *string `json:"feeSum"`
+}
+
+// overviewReward is one Reward in the Instrument Overview.
+type overviewReward struct {
+	// XTBID is the ID of the Reward at the Provider, for example the Kraken refid.
+	XTBID string `json:"xtbId"`
+	// Time is RFC 3339 text in UTC.
+	Time string `json:"time"`
+	// Volume is the received quantity as decimal text.
+	Volume string `json:"volume"`
+	// Value is the value of the Reward on its day in the Account currency, as decimal text (ADR 0009, rule 3).
+	// It is nil when the tool has no stored close on or before the day of the Reward.
+	Value *string `json:"value"`
 }
 
 // overviewOpenLot is the open part of one Lot.
@@ -73,11 +94,18 @@ type overviewFill struct {
 	Volume string `json:"volume"`
 	// Price is the XTB price of one unit as decimal text, or nil if the Fill has no price.
 	Price *string `json:"price"`
-	// PositionID is the ID of the Lot of the Fill.
+	// PositionID is the ID of the Lot of the Fill. It is empty for a crypto purchase, because it has no Lot.
 	PositionID string `json:"positionId"`
+	// Cost is the full amount of a crypto purchase in the Account currency, with a fee in the Account currency,
+	// as decimal text (ADR 0009, rule 1). It is nil for a Fill of a Lot.
+	Cost *string `json:"cost"`
+	// Fee is the fee of a crypto purchase in FeeCurrency, as decimal text. It is nil for a Fill of a Lot.
+	Fee *string `json:"fee"`
+	// FeeCurrency is the Account currency or the crypto asset, for example "EUR" or "BTC". It is nil for a Fill of a Lot.
+	FeeCurrency *string `json:"feeCurrency"`
 }
 
-// instrumentOverview returns the price series and the Fills of one Instrument on one Account.
+// instrumentOverview returns the Instrument Overview of one Instrument on one Account.
 // It reads only stored data and starts no price refresh.
 func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 	id, ok := accountID(w, r)
@@ -103,7 +131,20 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 			lots = append(lots, lot)
 		}
 	}
-	if len(lots) == 0 {
+	// An Instrument on an Account with no Lots has crypto purchases and Rewards (ADR 0009).
+	var purchases, rewards []ledger.CashOperation
+	for _, op := range in.ledger.CashOperations {
+		if op.Ticker != ticker {
+			continue
+		}
+		switch op.Type {
+		case ledger.TypeCryptoPurchase:
+			purchases = append(purchases, op)
+		case ledger.TypeReward:
+			rewards = append(rewards, op)
+		}
+	}
+	if len(lots) == 0 && len(purchases) == 0 && len(rewards) == 0 {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("account %d never held instrument %q", id, ticker))
 		return
 	}
@@ -162,17 +203,62 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 	if len(instrumentClosed) > 0 {
 		realizedProfitSum = new(formatAmount(ledger.SumRealizedProfit(instrumentClosed)))
 	}
-	writeJSON(w, http.StatusOK, overviewResponse{
+	resp := overviewResponse{
 		Ticker:              ticker,
-		Name:                lots[0].Instrument.Name,
 		priceSourceResponse: toPriceSourceResponse(inst),
 		Prices:              toOverviewPrices(prices),
-		Fills:               toOverviewFills(lots),
 		Holding:             holding,
 		OpenLots:            openLots,
 		ClosedPositions:     closedPositions,
 		RealizedProfitSum:   realizedProfitSum,
-	})
+		Rewards:             toOverviewRewards(in.ledger, rewards),
+	}
+	if len(lots) > 0 {
+		resp.Name, resp.Fills = lots[0].Instrument.Name, toOverviewFills(lots)
+	} else {
+		// The asset code is also the name of a crypto Instrument, as in the Holding.
+		resp.Name, resp.Fills = ticker, toCryptoFills(purchases)
+		// ADR 0009, rule 2: one rule for the sum of the fees, as in the Account summary.
+		crypto := ledger.SumRewardsAndFees(in.ledger, ledger.IncomeFilter{Ticker: ticker})
+		resp.FeeSum = new(formatAmount(crypto.FeeSum))
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// toCryptoFills returns the crypto purchases as Fills with no Lot, in the order of the Ledger.
+// The Ledger gives the Cash Operations in time order.
+func toCryptoFills(purchases []ledger.CashOperation) []overviewFill {
+	resp := make([]overviewFill, 0, len(purchases))
+	for _, op := range purchases {
+		// An empty fee currency with a fee tells the crypto asset (ADR 0009).
+		feeCurrency := op.FeeCurrency
+		if feeCurrency == "" {
+			feeCurrency = op.Ticker
+		}
+		resp = append(resp, overviewFill{
+			XTBID:       op.XTBID,
+			Time:        op.Time.UTC().Format(time.RFC3339),
+			Volume:      op.Volume.String(),
+			Price:       nullPrice(op.Price),
+			Cost:        new(formatAmount(op.Amount.Neg())),
+			Fee:         new(op.Fee.String()),
+			FeeCurrency: &feeCurrency,
+		})
+	}
+	return resp
+}
+
+// toOverviewRewards returns the Rewards with their values on their days, in the order of the Ledger.
+func toOverviewRewards(l ledger.Ledger, rewards []ledger.CashOperation) []overviewReward {
+	resp := make([]overviewReward, 0, len(rewards))
+	for _, op := range rewards {
+		r := overviewReward{XTBID: op.XTBID, Time: op.Time.UTC().Format(time.RFC3339), Volume: op.Volume.String()}
+		if value, ok := l.RewardValue(op); ok {
+			r.Value = new(formatAmount(value))
+		}
+		resp = append(resp, r)
+	}
+	return resp
 }
 
 // toOverviewPrices returns the series of the closes in the currency of the newest close.
