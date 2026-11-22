@@ -142,7 +142,12 @@ export function holdingColumns(
             header: "Average Cost",
             meta: { align: "right" },
             sortValue: (holding) => decimalSortValue(holding.averageCost),
-            cell: ({ row }) => formatAmount(row.original.averageCost, currency),
+            cell: ({ row }) =>
+              row.original.averageCost !== null ? (
+                formatAmount(row.original.averageCost, currency)
+              ) : (
+                <NoValue />
+              ),
           },
         ]
       : []
@@ -190,7 +195,12 @@ export function holdingColumns(
       header: "Cost",
       meta: { align: "right" },
       sortValue: (holding) => decimalSortValue(holding.cost),
-      cell: ({ row }) => formatAmount(row.original.cost, currency),
+      cell: ({ row }) =>
+        row.original.cost !== null ? (
+          formatAmount(row.original.cost, currency)
+        ) : (
+          <NoValue />
+        ),
     },
     {
       id: "price",
@@ -289,7 +299,8 @@ type HoldingTotals = {
 // holdingTotals sums the Holdings with a known value. A Holding with no value is in no sum, also not in the cost.
 function holdingTotals(holdings: Holding[]): HoldingTotals {
   const known = holdings.filter(hasKnownValue)
-  const cost = sumDecimals(known.map((holding) => holding.cost))
+  // A Holding with a known value always has a known cost.
+  const cost = sumDecimals(known.map((holding) => holding.cost as string))
   const unrealizedProfit = sumDecimals(
     known.map((holding) => holding.unrealizedProfit as string)
   )
@@ -420,7 +431,10 @@ function HoldingRows({
                 </span>
                 {showAverageCost && (
                   <span className="num text-xs text-muted-foreground">
-                    Average Cost {formatAmount(holding.averageCost, currency)}
+                    Average Cost{" "}
+                    {holding.averageCost !== null
+                      ? formatAmount(holding.averageCost, currency)
+                      : "—"}
                   </span>
                 )}
                 <span className="sr-only">Open the Instrument Overview.</span>

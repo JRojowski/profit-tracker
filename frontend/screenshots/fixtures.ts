@@ -39,6 +39,7 @@ export type DataSet =
   | "noAccounts"
   | "emptyAccounts"
   | "kraken"
+  | "krakenRewardUnknown"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -174,27 +175,45 @@ const delta: Holding = {
   ...noSource,
 }
 
-// bitcoin is the crypto Holding of the Kraken Account. The volume has 8 decimal places.
+// bitcoin is the crypto Holding of the Kraken Account. The volume has 8 decimal places and includes the Rewards.
+// The cost is 1999.74 EUR of purchases plus 36.52 EUR of Rewards at the closes of their days.
 // The Average Cost has more decimal places than the screen shows. cost = volume × averageCost, rounded.
 const bitcoin: Holding = {
   ticker: "BTC",
   name: "BTC",
   volume: "0.03448875",
-  cost: "1999.74",
-  averageCost: "57982.3311204723",
+  cost: "2036.26",
+  averageCost: "59041.2815773259",
   price: "92450.00",
   priceDate: today,
   exchangeRate: "4.2600",
   exchangeRateCurrency: "EUR",
   exchangeRateDate: today,
   value: "3188.48",
-  unrealizedProfit: "1188.74",
-  unrealizedProfitPercent: "59.44",
+  unrealizedProfit: "1152.22",
+  unrealizedProfitPercent: "56.59",
   note: null,
   priceWarnings: [],
   priceTicker: "BTC-EUR",
   quoteCurrency: "EUR",
   ...noSource,
+}
+
+// bitcoinRewardUnknown is the Bitcoin Holding when a Reward has no stored close on or before its day.
+// Then the cost, the Average Cost and the value are not known.
+const bitcoinRewardUnknown: Holding = {
+  ...bitcoin,
+  cost: null,
+  averageCost: null,
+  price: null,
+  priceDate: null,
+  exchangeRate: null,
+  exchangeRateCurrency: null,
+  exchangeRateDate: null,
+  value: null,
+  unrealizedProfit: null,
+  unrealizedProfitPercent: null,
+  note: "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history.",
 }
 
 const mainHoldings = [alpha, beta, gamma]
@@ -298,6 +317,8 @@ const mainSummary: AccountSummary = {
   netDividends: "820.40",
   netInterest: "35.15",
   fees: "-185.00",
+  rewards: "0.00",
+  feeSum: "0.00",
   priceDate: today,
   stalePrices: false,
   exchangeRateDate: today,
@@ -321,6 +342,8 @@ const ikzeSummary: AccountSummary = {
   netDividends: "0.00",
   netInterest: "0.00",
   fees: "-350.00",
+  rewards: "0.00",
+  feeSum: "0.00",
   priceDate: today,
   stalePrices: false,
   exchangeRateDate: null,
@@ -333,7 +356,7 @@ const ikzeSummary: AccountSummary = {
 }
 
 // Totals of the Kraken Account: 2500 EUR of Deposits, one Bitcoin Holding and the rest in cash.
-// The fee is in the cost, so the fees part is zero.
+// The fee is in the cost, so the fees part is zero. feeSum is information only.
 const krakenSummary: AccountSummary = {
   accountId: 3,
   currency: "EUR",
@@ -342,10 +365,12 @@ const krakenSummary: AccountSummary = {
   value: "3688.74",
   totalResult: "1188.74",
   realizedProfit: "0.00",
-  unrealizedProfit: "1188.74",
+  unrealizedProfit: "1152.22",
   netDividends: "0.00",
   netInterest: "0.00",
   fees: "0.00",
+  rewards: "36.52",
+  feeSum: "8.97",
   priceDate: today,
   stalePrices: false,
   exchangeRateDate: today,
@@ -355,6 +380,22 @@ const krakenSummary: AccountSummary = {
   simpleReturnNote: null,
   annualReturn: "21.40",
   annualReturnNote: null,
+}
+
+// krakenRewardUnknownSummary is the Kraken summary when a Reward has no stored close.
+// The Rewards part and the Holding have no known value, so they add nothing to the Total Result.
+const krakenRewardUnknownSummary: AccountSummary = {
+  ...krakenSummary,
+  value: "500.26",
+  totalResult: "0.00",
+  unrealizedProfit: "0.00",
+  rewards: null,
+  priceDate: null,
+  stalePrices: true,
+  exchangeRateDate: null,
+  unpricedHoldings: 1,
+  simpleReturn: "0.00",
+  annualReturn: "0.00",
 }
 
 // emptySummary is the summary of an Account with no Cash Operations.
@@ -371,6 +412,8 @@ function emptySummary(accountId: number): AccountSummary {
     netDividends: "0.00",
     netInterest: "0.00",
     fees: "0.00",
+    rewards: "0.00",
+    feeSum: "0.00",
     priceDate: null,
     stalePrices: false,
     exchangeRateDate: null,
@@ -1030,6 +1073,30 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
+  if (dataSet === "krakenRewardUnknown") {
+    // The data set "krakenRewardUnknown" is the data set "kraken" with a Reward that has no stored close.
+    const kraken = fixtureFor("kraken")
+    return {
+      ...kraken,
+      summary: { ...kraken.summary, 3: krakenRewardUnknownSummary },
+      // The Holding with no value is not in the Allocation. The cash counts in the Account currency.
+      allocation: {
+        ...kraken.allocation,
+        3: {
+          ...allocationOf([], krakenRewardUnknownSummary.cash, "EUR"),
+          byQuoteCurrency: [
+            {
+              currency: "EUR",
+              value: krakenRewardUnknownSummary.cash,
+              share: "100.0000000000",
+            },
+          ],
+          unpricedHoldings: 1,
+        },
+      },
+      holdings: { ...kraken.holdings, 3: [bitcoinRewardUnknown] },
+    }
+  }
   if (dataSet === "kraken") {
     // The data set "kraken" is the populated data set with the Kraken Account in addition.
     const populated = fixtureFor("populated")
