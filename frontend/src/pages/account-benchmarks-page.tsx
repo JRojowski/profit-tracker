@@ -2,6 +2,7 @@ import { TriangleAlertIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { useSearchParams } from "react-router"
 
+import { BenchmarkChart } from "@/components/benchmark-chart"
 import { LoadedView } from "@/components/loaded-view"
 import { PeriodPills } from "@/components/period-pills"
 import { ResultBadge } from "@/components/result-badge"
@@ -89,7 +90,10 @@ export function BenchmarksBody({
           <LoadedView loaded={loaded} errorTitle="Cannot load the Benchmarks">
             {(data) =>
               data.available ? (
-                <BenchmarkTable data={data} subject={subject} />
+                <>
+                  <BenchmarkChart data={data} />
+                  <BenchmarkTable data={data} subject={subject} />
+                </>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">{emptyText}</p>

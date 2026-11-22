@@ -425,7 +425,7 @@ function AmountBox({ label, colour, dashed, children }: AmountBoxProps) {
 }
 
 // dayMs is the length of one day in milliseconds.
-const dayMs = 24 * 60 * 60 * 1000
+export const dayMs = 24 * 60 * 60 * 1000
 
 // chartPoint gives the geometry of one day. The floats are for the chart only. The texts use the exact amounts.
 function chartPoint(point: ValueHistoryPoint): ChartPoint {
@@ -449,14 +449,14 @@ function periodPoints(
 }
 
 // dateTime reads a YYYY-MM-DD date as milliseconds since 1970 at midnight UTC.
-function dateTime(date: string): number {
+export function dateTime(date: string): number {
   const [year, month, day] = date.split("-").map(Number)
   return Date.UTC(year, month - 1, day)
 }
 
 // monthTicks gives the first day of each month in the range, as milliseconds since 1970 in UTC.
 // It keeps every nth month, so that the axis has at most max ticks.
-function monthTicks(first: number, last: number, max: number): number[] {
+export function monthTicks(first: number, last: number, max: number): number[] {
   const start = new Date(first)
   const months: number[] = []
   for (let month = start.getUTCMonth() + 1; ; month++) {
@@ -469,7 +469,7 @@ function monthTicks(first: number, last: number, max: number): number[] {
 }
 
 // axisDate shows a day of the time axis: the month and the year for a long period, else the day and the month.
-function axisDate(time: number, long: boolean): string {
+export function axisDate(time: number, long: boolean): string {
   return new Date(time).toLocaleDateString(undefined, {
     timeZone: "UTC",
     ...(long

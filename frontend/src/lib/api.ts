@@ -804,6 +804,9 @@ export async function askAssistant(
 // noFullPeriod means that the tool has no price of the Benchmark for the whole period.
 export type BenchmarkStatus = "available" | "noFullPeriod" | "sourceFailure"
 
+// BenchmarkPoint is the cumulative return of one day, as a percentage in decimal text. The first day of a series is "0".
+export type BenchmarkPoint = { date: string; return: string }
+
 // BenchmarkReturn is the Benchmark Return of one Benchmark for a period, and its difference to the user.
 export type BenchmarkReturn = {
   id: string
@@ -817,6 +820,8 @@ export type BenchmarkReturn = {
   return: string | null
   // difference is the return of the user minus the Benchmark Return, in percentage points as decimal text.
   difference: string | null
+  // series has one point for each day from the base day to the last day. It is empty unless the status is "available".
+  series: BenchmarkPoint[]
 }
 
 // Benchmarks is the comparison of the user with the Benchmarks for one period.
@@ -829,7 +834,7 @@ export type Benchmarks = {
   warnings: string[]
   baseDay: string | null
   lastDay: string | null
-  user: { return: string | null }
+  user: { return: string | null; series: BenchmarkPoint[] }
   benchmarks: BenchmarkReturn[]
 }
 

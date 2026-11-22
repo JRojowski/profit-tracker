@@ -60,20 +60,20 @@ const pageCases: PageCase[] = [
     name: "benchmarks",
     url: "/accounts/1/benchmarks",
     empty: "emptyAccounts",
-    charts: false,
+    charts: true,
   },
   {
     name: "all-benchmarks",
     url: "/accounts/all/benchmarks",
     empty: "emptyAccounts",
-    charts: false,
+    charts: true,
   },
   {
     // WIG20TR has a failed price source. Gold has no price for the full period. The two rows show the reason.
     name: "benchmarks-unavailable",
     url: "/accounts/1/benchmarks",
     empty: null,
-    charts: false,
+    charts: true,
     populatedSet: "benchmarkUnavailable",
   },
   {
