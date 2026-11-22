@@ -28,19 +28,41 @@ type benchmarksResponse struct {
 
 // userReturnDTO is the Time-Weighted Return of the user in the period.
 type userReturnDTO struct {
-	Return *string `json:"return"`
+	Return *string          `json:"return"`
+	Series []seriesPointDTO `json:"series"`
+}
+
+// seriesPointDTO is the return from the base day to the date, as a percentage.
+type seriesPointDTO struct {
+	Date   string `json:"date"`
+	Return string `json:"return"`
 }
 
 // benchmarkDTO is one Benchmark with its Benchmark Return and the difference in percentage points.
 type benchmarkDTO struct {
-	ID            string  `json:"id"`
-	Name          string  `json:"name"`
-	Fund          string  `json:"fund"`
-	Ticker        string  `json:"ticker"`
-	QuoteCurrency string  `json:"quoteCurrency"`
-	Status        string  `json:"status"`
-	Return        *string `json:"return"`
-	Difference    *string `json:"difference"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	Fund          string           `json:"fund"`
+	Ticker        string           `json:"ticker"`
+	QuoteCurrency string           `json:"quoteCurrency"`
+	Status        string           `json:"status"`
+	Return        *string          `json:"return"`
+	Difference    *string          `json:"difference"`
+	Series        []seriesPointDTO `json:"series"`
+}
+
+// octoberSeries returns one point for each day from 2026-10-01 to today, 2026-10-23, inclusive.
+// Each point has the return of the last change on or before its day. changes maps the day of the month to the return.
+func octoberSeries(changes map[int]string) []seriesPointDTO {
+	series := make([]seriesPointDTO, 0, 23)
+	current := "0"
+	for d := 1; d <= 23; d++ {
+		if r, ok := changes[d]; ok {
+			current = r
+		}
+		series = append(series, seriesPointDTO{Date: fmt.Sprintf("2026-10-%02d", d), Return: current})
+	}
+	return series
 }
 
 // benchmarks returns the Benchmarks of the Account for the period. It stops the test if the status is not 200.
@@ -67,7 +89,10 @@ func benchmarkByID(t *testing.T, got benchmarksResponse, id string) benchmarkDTO
 
 // noFullPeriod is a Benchmark of the list with no Benchmark Return, because it has no close on or before the base day.
 func noFullPeriod(id, name, fund, ticker, quoteCurrency string) benchmarkDTO {
-	return benchmarkDTO{ID: id, Name: name, Fund: fund, Ticker: ticker, QuoteCurrency: quoteCurrency, Status: "noFullPeriod"}
+	return benchmarkDTO{
+		ID: id, Name: name, Fund: fund, Ticker: ticker, QuoteCurrency: quoteCurrency, Status: "noFullPeriod",
+		Series: []seriesPointDTO{},
+	}
 }
 
 // plnInterestExport is a PLN Account with a Deposit of 1000.00 on 2026-10-01 and 10.00 of interest on 2026-10-20.
@@ -83,13 +108,15 @@ func plnInterestExport() xtbtest.Export {
 // TestBenchmarks_BenchmarkInAccountCurrency_ReturnAndDifference checks a PLN Benchmark on a PLN Account.
 //
 //	User:     1 % (see plnInterestExport), base day 2026-10-01, last day 2026-10-23
-//	WIG20TR:  close on 2026-10-01 = 104, last close before today (2026-10-22) = 117
+//	          series: 0 % until 2026-10-19, 1010 / 1000 − 1 = 1 % from the interest on 2026-10-20
+//	WIG20TR:  close on 2026-10-01 = 104, close on 2026-10-15 = 110.24, last close before today (2026-10-22) = 117
 //	          117 / 104 − 1 = 12.5 %, difference 1 − 12.5 = −11.5 pp
+//	          series: 0 % until 2026-10-14, 110.24 / 104 − 1 = 6 % from 2026-10-15, 12.5 % from 2026-10-22
 //	Others:   no close, so no data for the full period
 func TestBenchmarks_BenchmarkInAccountCurrency_ReturnAndDifference(t *testing.T) {
 	t.Parallel()
 	provider := newFakeProvider()
-	provider.setHistory(t, "ETFBW20TR.WA", "PLN", "2026-09-30=100", "2026-10-01=104", "2026-10-22=117")
+	provider.setHistory(t, "ETFBW20TR.WA", "PLN", "2026-09-30=100", "2026-10-01=104", "2026-10-15=110.24", "2026-10-22=117")
 	srv := startServerWithPrices(t, provider)
 	id := srv.importAccount(t, plnInterestExport(), "XTB PLN")
 	srv.refreshHistory(t)
@@ -98,12 +125,14 @@ func TestBenchmarks_BenchmarkInAccountCurrency_ReturnAndDifference(t *testing.T)
 
 	assert.Equal(t, benchmarksResponse{
 		AccountID: id, Period: "All", Currency: "PLN", Available: true, Warnings: []string{},
-		BaseDay: ptr("2026-10-01"), LastDay: ptr("2026-10-23"), User: userReturnDTO{Return: ptr("1")},
+		BaseDay: ptr("2026-10-01"), LastDay: ptr("2026-10-23"),
+		User: userReturnDTO{Return: ptr("1"), Series: octoberSeries(map[int]string{20: "1"})},
 		Benchmarks: []benchmarkDTO{
 			noFullPeriod("sp500", "S&P 500", "iShares Core S&P 500 UCITS ETF USD (Acc)", "CSPX.L", "USD"),
 			{
 				ID: "wig20tr", Name: "WIG20TR", Fund: "Beta ETF WIG20TR Portfelowy FIZ", Ticker: "ETFBW20TR.WA",
 				QuoteCurrency: "PLN", Status: "available", Return: ptr("12.5"), Difference: ptr("-11.5"),
+				Series: octoberSeries(map[int]string{15: "6", 22: "12.5"}),
 			},
 			noFullPeriod("mwig40tr", "mWIG40TR", "Beta ETF mWIG40TR Portfelowy FIZ", "ETFBM40TR.WA", "PLN"),
 			noFullPeriod("world", "World equities", "iShares Core MSCI World UCITS ETF USD (Acc)", "IWDA.L", "USD"),
@@ -136,6 +165,8 @@ func TestBenchmarks_USDBenchmarkOnPLNAccount_UsesTheExchangeRateOfEachDay(t *tes
 	assert.Equal(t, "available", got.Status)
 	assert.Equal(t, ptr("2.6"), got.Return)
 	assert.Equal(t, ptr("-1.6"), got.Difference)
+	// 10-15: 520 × 3.90 = 2028 → 1.4 %. 10-22: 540 × 3.75 = 2025 → 1.25 %. 10-23: 2052 → 2.6 %.
+	assert.Equal(t, octoberSeries(map[int]string{15: "1.4", 22: "1.25", 23: "2.6"}), got.Series)
 }
 
 // TestBenchmarks_PLNBenchmarkOnUSDAccount_DividesByTheExchangeRate checks the conversion of a PLN Benchmark to USD.
@@ -228,15 +259,17 @@ func TestBenchmarks_EachPeriod_UsesTheDaysAndTheReturnOfTheTimeWeightedReturn(t 
 	srv.refreshHistory(t)
 	history := srv.valueHistory(t, id)
 
+	// days is the number of calendar days from the base day to 2026-10-23, inclusive.
 	cases := []struct {
 		period, baseDay, user, benchmarkReturn, difference string
+		days                                               int
 		valueHistoryReturn, valueHistoryStart              *string
 	}{
-		{"1M", "2026-09-23", "10", "25", "-15", history.TimeWeightedReturn.OneMonth, history.PeriodStarts.OneMonth},
-		{"3M", "2026-07-23", "21", "60", "-39", history.TimeWeightedReturn.ThreeMonths, history.PeriodStarts.ThreeMonths},
-		{"YTD", "2025-12-31", "33.1", "100", "-66.9", history.TimeWeightedReturn.YearToDate, history.PeriodStarts.YearToDate},
-		{"1Y", "2025-10-23", "46.41", "150", "-103.59", history.TimeWeightedReturn.OneYear, history.PeriodStarts.OneYear},
-		{"All", "2025-06-10", "61.051", "300", "-238.949", history.TimeWeightedReturn.All, history.PeriodStarts.All},
+		{"1M", "2026-09-23", "10", "25", "-15", 31, history.TimeWeightedReturn.OneMonth, history.PeriodStarts.OneMonth},
+		{"3M", "2026-07-23", "21", "60", "-39", 93, history.TimeWeightedReturn.ThreeMonths, history.PeriodStarts.ThreeMonths},
+		{"YTD", "2025-12-31", "33.1", "100", "-66.9", 297, history.TimeWeightedReturn.YearToDate, history.PeriodStarts.YearToDate},
+		{"1Y", "2025-10-23", "46.41", "150", "-103.59", 366, history.TimeWeightedReturn.OneYear, history.PeriodStarts.OneYear},
+		{"All", "2025-06-10", "61.051", "300", "-238.949", 501, history.TimeWeightedReturn.All, history.PeriodStarts.All},
 	}
 	for _, tc := range cases {
 		t.Run(tc.period, func(t *testing.T) {
@@ -253,8 +286,39 @@ func TestBenchmarks_EachPeriod_UsesTheDaysAndTheReturnOfTheTimeWeightedReturn(t 
 			wig := benchmarkByID(t, got, "wig20tr")
 			assert.Equal(t, ptr(tc.benchmarkReturn), wig.Return)
 			assert.Equal(t, ptr(tc.difference), wig.Difference)
+			for name, series := range map[string][]seriesPointDTO{"user": got.User.Series, "wig20tr": wig.Series} {
+				require.Len(t, series, tc.days, name)
+				assert.Equal(t, seriesPointDTO{Date: tc.baseDay, Return: "0"}, series[0], name)
+			}
+			assert.Equal(t, seriesPointDTO{Date: "2026-10-23", Return: tc.user}, got.User.Series[tc.days-1])
+			assert.Equal(t, seriesPointDTO{Date: "2026-10-23", Return: tc.benchmarkReturn}, wig.Series[tc.days-1])
 		})
 	}
+}
+
+// TestBenchmarks_Series_UserChainsTheDailyFactors checks the user series of an Account with a deposit and a loss.
+// The deposit is a flow, so it does not change the return.
+//
+//	2026-10-01: deposit 1000                      value 1000
+//	2026-10-10: interest 100   1100 / 1000 = 1.1  value 1100   return 10 %
+//	2026-10-15: deposit 900    (2000 − 900) / 1100 = 1        value 2000   return 10 %
+//	2026-10-20: fee −200       1800 / 2000 = 0.9  value 1800   return 1.1 × 0.9 − 1 = −1 %
+//
+// The 1M period starts on 2026-09-23, before the first day, so its base day is the first day.
+func TestBenchmarks_Series_UserChainsTheDailyFactors(t *testing.T) {
+	t.Parallel()
+	srv := startServer(t)
+	id := srv.importAccount(t, xtbtest.Export{AccountNumber: "61000007", Currency: "PLN", CashOperations: []xtbtest.CashOperation{
+		{ID: "6704", Type: "Withholding tax", Time: octoberAt(20), Amount: "-200.00"},
+		cashDeposit("6703", "900.00", octoberAt(15)),
+		interest("6702", "100.00", octoberAt(10)),
+		cashDeposit("6701", "1000.00", octoberAt(1)),
+	}}, "XTB PLN")
+
+	got := srv.benchmarks(t, id, "1M")
+
+	assert.Equal(t, ptr("-1"), got.User.Return)
+	assert.Equal(t, octoberSeries(map[int]string{10: "10", 20: "-1"}), got.User.Series)
 }
 
 func TestBenchmarks_UnknownOrMissingPeriod_Gives400(t *testing.T) {
@@ -305,7 +369,7 @@ func TestBenchmarks_NoTimeWeightedReturn_NotAvailable(t *testing.T) {
 
 			assert.Equal(t, benchmarksResponse{
 				AccountID: id, Period: "1M", Currency: "PLN", Available: false, Warnings: []string{},
-				Benchmarks: []benchmarkDTO{},
+				User: userReturnDTO{Series: []seriesPointDTO{}}, Benchmarks: []benchmarkDTO{},
 			}, got)
 		})
 	}
@@ -322,7 +386,7 @@ func TestBenchmarks_JSONShape_NullsAndEmptyLists(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	assert.JSONEq(t, fmt.Sprintf(`{
 		"accountId": %d, "period": "YTD", "currency": "USD", "available": false, "warnings": [],
-		"baseDay": null, "lastDay": null, "user": {"return": null}, "benchmarks": []
+		"baseDay": null, "lastDay": null, "user": {"return": null, "series": []}, "benchmarks": []
 	}`, id), body)
 }
 

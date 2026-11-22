@@ -101,3 +101,58 @@ func TestCompare_EachBenchmarkOfTheListInOrder(t *testing.T) {
 	}
 	assert.Equal(t, []string{"sp500", "wig20tr", "mwig40tr", "world", "gold"}, ids)
 }
+
+// TestCompare_Series checks the Benchmark Return of each calendar day from the base day 2026-10-01 to the last
+// day 2026-10-04, in PLN, for the USD Benchmark S&P 500.
+func TestCompare_Series(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		closes     []benchmark.Close
+		rates      []benchmark.Rate
+		wantSeries []string
+	}{
+		{
+			// 10-01: 100 × 4.00 = 400 → 0 %. 10-02: 100 × 4.20 = 420 → 5 %. 10-03: 110 × 4.20 = 462 → 15.5 %.
+			// 10-04: 110 × 4.00 = 440 → 10 %.
+			name:       "last earlier close and rate on each day",
+			closes:     []benchmark.Close{{Date: day(1), Price: dec("100")}, {Date: day(3), Price: dec("110")}},
+			rates:      []benchmark.Rate{{Date: day(1), Mid: dec("4.00")}, {Date: day(2), Mid: dec("4.20")}, {Date: day(4), Mid: dec("4.00")}},
+			wantSeries: []string{"0", "5", "15.5", "10"},
+		},
+		{
+			// 10-02 has a rate of 0, which is not valid, so the day keeps the point of the day before.
+			// 10-03: 100 × 4.40 = 440 → 10 %. 10-04: the same.
+			name:       "a day with no valid rate keeps the point of the day before",
+			closes:     []benchmark.Close{{Date: day(1), Price: dec("100")}},
+			rates:      []benchmark.Rate{{Date: day(1), Mid: dec("4.00")}, {Date: day(2), Mid: dec("0")}, {Date: day(3), Mid: dec("4.40")}},
+			wantSeries: []string{"0", "0", "10", "10"},
+		},
+		{
+			name:       "no full period has no series",
+			closes:     []benchmark.Close{{Date: day(2), Price: dec("100")}},
+			rates:      []benchmark.Rate{{Date: day(1), Mid: dec("4.00")}},
+			wantSeries: []string{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := sp500(t, benchmark.Compare(benchmark.Input{
+				Currency: "PLN", BaseDay: day(1), LastDay: day(4), UserReturn: dec("5"),
+				Closes: map[string][]benchmark.Close{"sp500": tc.closes},
+				Rates:  map[string][]benchmark.Rate{"USD": tc.rates},
+			}))
+
+			percents := make([]string, 0, len(got.Series))
+			for i, p := range got.Series {
+				assert.Equal(t, day(1+i), p.Date)
+				percents = append(percents, p.Return.String())
+			}
+			assert.Equal(t, tc.wantSeries, percents)
+			if len(got.Series) > 0 {
+				assert.Equal(t, got.Return.String(), got.Series[len(got.Series)-1].Return.String())
+			}
+		})
+	}
+}

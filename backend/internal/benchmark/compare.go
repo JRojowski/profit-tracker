@@ -65,6 +65,17 @@ type Result struct {
 	Return decimal.Decimal
 	// Difference is UserReturn minus Return, in percentage points. It is zero unless the status is StatusAvailable.
 	Difference decimal.Decimal
+	// Series has one point for each calendar day from the base day to the last day. The first point is 0 and the
+	// last point is equal to Return. It is empty unless the status is StatusAvailable.
+	Series []Point
+}
+
+// Point is the Benchmark Return from the base day to Date.
+type Point struct {
+	// Date is the day at midnight UTC.
+	Date time.Time
+	// Return is a percentage with at most 8 decimal places.
+	Return decimal.Decimal
 }
 
 // Compare returns the comparison of each Benchmark of List, in the order of List.
@@ -77,29 +88,46 @@ func Compare(in Input) []Result {
 	list := List()
 	results := make([]Result, 0, len(list))
 	for _, b := range list {
-		r := Result{Benchmark: b, Status: StatusNoFullPeriod}
-		if ret, ok := benchmarkReturn(in, b); ok {
-			r.Status, r.Return, r.Difference = StatusAvailable, ret, in.UserReturn.Sub(ret)
+		r := Result{Benchmark: b, Status: StatusNoFullPeriod, Series: []Point{}}
+		if series, ok := benchmarkSeries(in, b); ok {
+			ret := series[len(series)-1].Return
+			r.Status, r.Return, r.Difference, r.Series = StatusAvailable, ret, in.UserReturn.Sub(ret), series
 		}
 		results = append(results, r)
 	}
 	return results
 }
 
-// benchmarkReturn returns the Benchmark Return of b in the period, as a percentage. It returns false if a close
-// or an Exchange Rate is missing on the base day or on the last day.
-func benchmarkReturn(in Input, b Benchmark) (decimal.Decimal, bool) {
-	last, ok := in.value(b, in.LastDay)
-	if !ok {
-		return decimal.Zero, false
+// benchmarkSeries returns the Benchmark Return of b from the base day to each day of the period, as a percentage.
+// It returns false if a close or an Exchange Rate is missing on the base day or on the last day.
+// A day between them with no valid value keeps the point of the day before.
+func benchmarkSeries(in Input, b Benchmark) ([]Point, bool) {
+	if in.BaseDay.After(in.LastDay) {
+		return nil, false
+	}
+	if _, ok := in.value(b, in.LastDay); !ok {
+		return nil, false
 	}
 	base, ok := in.value(b, in.BaseDay)
 	if !ok {
-		return decimal.Zero, false
+		return nil, false
 	}
+	var series []Point
+	previous := decimal.Zero
+	for day := in.BaseDay; !day.After(in.LastDay); day = day.AddDate(0, 0, 1) {
+		if v, ok := in.value(b, day); ok {
+			previous = change(base, v)
+		}
+		series = append(series, Point{Date: day, Return: previous})
+	}
+	return series, true
+}
+
+// change returns value / base − 1 as a percentage with 8 decimal places.
+func change(base, value fraction) decimal.Decimal {
 	// One division keeps the rounding to the end.
-	ratio := last.numerator.Mul(base.denominator).DivRound(base.numerator.Mul(last.denominator), precision)
-	return ratio.Sub(decimal.NewFromInt(1)).Mul(hundred).Round(8), true
+	ratio := value.numerator.Mul(base.denominator).DivRound(base.numerator.Mul(value.denominator), precision)
+	return ratio.Sub(decimal.NewFromInt(1)).Mul(hundred).Round(8)
 }
 
 // fraction is the value of a Benchmark on a day as numerator / denominator, so that the return needs one division.

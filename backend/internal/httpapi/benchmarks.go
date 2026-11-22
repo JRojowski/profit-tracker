@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/jrojowski/profit-tracker/backend/internal/benchmark"
 	"github.com/jrojowski/profit-tracker/backend/internal/returns"
 	"github.com/jrojowski/profit-tracker/backend/internal/valuehistory"
@@ -38,6 +40,15 @@ type benchmarksBody struct {
 // userReturnResponse is the Time-Weighted Return of the user in the period. It is the value of the Value History.
 type userReturnResponse struct {
 	Return *string `json:"return"`
+	// Series has the cumulative Time-Weighted Return of each calendar day from the base day to the last day.
+	// The first point is "0" and the last point is Return. It is empty when the comparison is not available.
+	Series []seriesPointResponse `json:"series"`
+}
+
+// seriesPointResponse is the return from the base day to the date, as a percentage.
+type seriesPointResponse struct {
+	Date   string `json:"date"`
+	Return string `json:"return"`
 }
 
 // benchmarkResponse is one Benchmark of the comparison.
@@ -53,6 +64,9 @@ type benchmarkResponse struct {
 	Return *string `json:"return"`
 	// Difference is the return of the user minus Return, in percentage points, or nil unless the status is "available".
 	Difference *string `json:"difference"`
+	// Series has the Benchmark Return of each calendar day from the base day to the last day. The first point is
+	// "0" and the last point is Return. It is empty unless the status is "available".
+	Series []seriesPointResponse `json:"series"`
 }
 
 // periods are the names of the periods of the Value History.
@@ -103,6 +117,7 @@ func (a *api) accountBenchmarks(w http.ResponseWriter, r *http.Request) {
 func (a *api) benchmarksBody(ctx context.Context, currency, period string, points []valuehistory.Point) (benchmarksBody, error) {
 	body := benchmarksBody{
 		Period: period, Currency: currency, Warnings: []string{}, Benchmarks: []benchmarkResponse{},
+		User: userReturnResponse{Series: []seriesPointResponse{}},
 	}
 	days := make([]returns.DayValue, 0, len(points))
 	for _, p := range points {
@@ -128,16 +143,28 @@ func (a *api) benchmarksBody(ctx context.Context, currency, period string, point
 	body.Available = true
 	body.BaseDay, body.LastDay = dateText(baseDay), dateText(lastDay)
 	body.User.Return = percent(userReturn)
+	for _, p := range returns.TimeWeightedSeries(days, baseDay) {
+		body.User.Series = append(body.User.Series, seriesPoint(p.Date, p.Percent))
+	}
 	for _, c := range benchmark.Compare(in) {
 		b := benchmarkResponse{
 			ID: c.ID, Name: c.Name, Fund: c.Fund, Ticker: c.Ticker, QuoteCurrency: c.QuoteCurrency, Status: string(c.Status),
+			Series: make([]seriesPointResponse, 0, len(c.Series)),
 		}
 		if c.Status == benchmark.StatusAvailable {
 			b.Return, b.Difference = new(c.Return.String()), new(c.Difference.String())
 		}
+		for _, p := range c.Series {
+			b.Series = append(b.Series, seriesPoint(p.Date, p.Return))
+		}
 		body.Benchmarks = append(body.Benchmarks, b)
 	}
 	return body, nil
+}
+
+// seriesPoint returns the point of a series on the day, with the percentage as decimal text.
+func seriesPoint(day time.Time, percent decimal.Decimal) seriesPointResponse {
+	return seriesPointResponse{Date: day.Format(time.DateOnly), Return: percent.String()}
 }
 
 // benchmarkCloses returns the stored closes of each Benchmark in its Quote Currency, by Benchmark identifier.
