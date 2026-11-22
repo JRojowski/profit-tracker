@@ -43,6 +43,13 @@ type summaryResponse struct {
 	NetDividends   string `json:"netDividends"`
 	NetInterest    string `json:"netInterest"`
 	Fees           string `json:"fees"`
+	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). It is a part of TotalResult.
+	// It is nil if a Reward has no known value, because the tool has no stored close for its day.
+	// It is "0.00" for an Account with no Rewards.
+	Rewards *string `json:"rewards"`
+	// FeeSum is the sum of the crypto fees in the Account currency: for each crypto purchase, the fee × the
+	// purchase price. It is information only and not a part of TotalResult. It is "0.00" for an XTB Account.
+	FeeSum string `json:"feeSum"`
 	// UnrealizedProfit is the sum over the Holdings with a price. It is a part of TotalResult.
 	UnrealizedProfit string `json:"unrealizedProfit"`
 	TotalResult      string `json:"totalResult"`
@@ -75,11 +82,13 @@ type summaryResponse struct {
 // holdingResponse is one row of GET /api/accounts/{id}/holdings. Amounts and the volume are decimal text.
 // The price fields are nil when the Holding has no value. Then Note tells the reason.
 type holdingResponse struct {
-	Ticker      string `json:"ticker"`
-	Name        string `json:"name"`
-	Volume      string `json:"volume"`
-	Cost        string `json:"cost"`
-	AverageCost string `json:"averageCost"`
+	Ticker string `json:"ticker"`
+	Name   string `json:"name"`
+	Volume string `json:"volume"`
+	// Cost and AverageCost are nil if the cost is not known: a Reward of the Holding has no stored close
+	// on or before its day (ADR 0009). Then the Holding has no value, and Note tells the reason.
+	Cost        *string `json:"cost"`
+	AverageCost *string `json:"averageCost"`
 	priceSourceResponse
 	// Price is the close price in the Quote Currency. PriceDate is its date as YYYY-MM-DD.
 	Price     *string `json:"price"`
@@ -187,6 +196,8 @@ func (a *api) summaryOf(view accountView) summaryResponse {
 		NetDividends:     formatAmount(state.NetDividends),
 		NetInterest:      formatAmount(state.NetInterest),
 		Fees:             formatAmount(state.Fees),
+		Rewards:          nullAmount(state.Rewards),
+		FeeSum:           formatAmount(state.FeeSum),
 		UnrealizedProfit: formatAmount(state.UnrealizedProfit),
 		TotalResult:      formatAmount(state.TotalResult),
 		Value:            formatAmount(state.Value),
@@ -333,6 +344,9 @@ func (a *api) readHeroInput(ctx context.Context, acc store.Account) (heroInput, 
 		l.QuoteCurrencies[ticker] = inst.QuoteCurrency
 	}
 	l.Prices = quotePrices(instruments, prices)
+	if l.Closes, err = a.rewardCloses(ctx, l.CashOperations, instruments); err != nil {
+		return heroInput{}, err
+	}
 	// The Annual Return counts days in Polish time, as the day of a flow in ADR 0004.
 	l.Today = exchange.StartOfDayInWarsaw(a.now())
 	l.ExchangeRates = make(map[string]ledger.ExchangeRate, len(rates))
@@ -340,6 +354,35 @@ func (a *api) readHeroInput(ctx context.Context, acc store.Account) (heroInput, 
 		l.ExchangeRates[currency] = ledger.ExchangeRate{Rate: r.Mid, Date: r.Date}
 	}
 	return heroInput{ledger: l, instruments: instruments, prices: prices, rates: rates}, nil
+}
+
+// rewardCloses reads the closes of the daily history of each Instrument with a Reward, in its Quote Currency.
+// ledger.Calculate takes the cost of a Reward from them (ADR 0009). The other Instruments need no closes,
+// so the function does not read them.
+func (a *api) rewardCloses(ctx context.Context, ops []ledger.CashOperation, instruments map[string]store.Instrument) (map[string][]ledger.Close, error) {
+	closes := map[string][]ledger.Close{}
+	for _, op := range ops {
+		if op.Type != ledger.TypeReward {
+			continue
+		}
+		if _, ok := closes[op.Ticker]; ok {
+			continue
+		}
+		daily, err := a.store.DailyPrices(ctx, op.Ticker)
+		if err != nil {
+			return nil, err
+		}
+		// A close keeps the currency of the price source. Only a close in the Quote Currency is a valid cost.
+		quote := instruments[op.Ticker].QuoteCurrency
+		tickerCloses := make([]ledger.Close, 0, len(daily))
+		for _, p := range daily {
+			if quote != "" && p.Currency == quote {
+				tickerCloses = append(tickerCloses, ledger.Close{Date: p.Date, Close: p.Close})
+			}
+		}
+		closes[op.Ticker] = tickerCloses
+	}
+	return closes, nil
 }
 
 // accountID returns the Account ID of the path. An ID that is not a number is an unknown Account.
@@ -382,6 +425,14 @@ func formatAmount(d decimal.Decimal) string {
 		return d.String()
 	}
 	return d.StringFixed(2)
+}
+
+// nullAmount writes the amount with formatAmount, or returns nil if the amount is not valid.
+func nullAmount(d decimal.NullDecimal) *string {
+	if !d.Valid {
+		return nil
+	}
+	return new(formatAmount(d.Decimal))
 }
 
 // formatRoundedAmount writes an amount rounded to 2 decimal places, for example "6.32".

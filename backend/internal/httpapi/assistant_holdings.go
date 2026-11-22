@@ -49,8 +49,9 @@ type holdingResult struct {
 	Volume string `json:"volume"`
 	// Currency is the currency of Cost, Value and UnrealizedProfit: the Account currency.
 	Currency string `json:"currency"`
-	Cost     string `json:"cost"`
-	HasValue bool   `json:"hasValue"`
+	// Cost is nil if a Reward of the Holding has no known value (ADR 0009).
+	Cost     *string `json:"cost"`
+	HasValue bool    `json:"hasValue"`
 	// Price is the close price in QuoteCurrency.
 	Price                   *string `json:"price"`
 	QuoteCurrency           *string `json:"quoteCurrency"`
@@ -106,7 +107,7 @@ func (a *api) runHoldings(ctx context.Context, arguments json.RawMessage) (any, 
 			// The Price Warnings are not a part of the result.
 			row := view.holdingRow(h, nil)
 			part.Holdings = append(part.Holdings, holdingResult{
-				Ticker: row.Ticker, Name: row.Name, Volume: row.Volume, Currency: acc.Currency, Cost: roundAmountText(row.Cost),
+				Ticker: row.Ticker, Name: row.Name, Volume: row.Volume, Currency: acc.Currency, Cost: roundAmountPointer(row.Cost),
 				HasValue: row.Value != nil, Price: row.Price, QuoteCurrency: row.QuoteCurrency, PriceDate: row.PriceDate,
 				Value: roundAmountPointer(row.Value), UnrealizedProfit: roundAmountPointer(row.UnrealizedProfit), UnrealizedProfitPercent: row.UnrealizedProfitPercent,
 				NoValueReason: row.Note,

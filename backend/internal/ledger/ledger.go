@@ -33,6 +33,9 @@ const (
 	// TypeCryptoPurchase is a purchase of a crypto asset on an Account with no Lots, for example a Kraken Account.
 	// Its Holding uses the Average Cost (ADR 0009). The type is not an XTB type, so no XTB Account has it.
 	TypeCryptoPurchase = "Crypto purchase"
+	// TypeReward is a Reward: an amount of a crypto asset that a Provider pays for a balance. Its amount is zero.
+	// It adds its volume to the Holding at its value on its day (ADR 0009). The type is not an XTB type.
+	TypeReward = "Reward"
 )
 
 // Errors of Calculate. Each error that Calculate returns wraps one of them.
@@ -60,6 +63,10 @@ type Ledger struct {
 	// Prices are the close prices in the Quote Currency of each Instrument, by broker ticker.
 	// A Holding with no price has no value and no Unrealized Profit.
 	Prices map[string]decimal.Decimal
+	// Closes are the stored closes of the daily history in the Quote Currency, by broker ticker, in date order.
+	// Calculate uses them only for the cost of a Reward: the close on or before the day of the Reward (ADR 0009).
+	// The caller gives the closes of each Instrument with a Reward. A Reward with no such close has no known value.
+	Closes map[string][]Close
 	// ExchangeRates are the latest Exchange Rates, by currency.
 	ExchangeRates map[string]ExchangeRate
 	// Today is the start of today in Polish time. The Annual Return counts days in its location.
@@ -74,6 +81,14 @@ type ExchangeRate struct {
 	Rate decimal.Decimal
 	// Date is the NBP table date.
 	Date time.Time
+}
+
+// Close is one close of the daily history of an Instrument.
+type Close struct {
+	// Date is the day of the close at midnight UTC.
+	Date time.Time
+	// Close is the close price in the Quote Currency.
+	Close decimal.Decimal
 }
 
 // NoValueReason tells why a Holding has no value.
@@ -91,6 +106,9 @@ const (
 	ReasonNoPrice
 	// ReasonNoExchangeRate tells that the Ledger has no Exchange Rate for the conversion to the Account currency.
 	ReasonNoExchangeRate
+	// ReasonNoRewardClose tells that a Reward of the Holding has no known value, so the cost is not known.
+	// The Ledger has no close in the Account currency on or before the day of the Reward.
+	ReasonNoRewardClose
 )
 
 // RateCurrency returns the currency whose Exchange Rate converts an amount in the Quote Currency quote
@@ -125,10 +143,12 @@ type CashOperation struct {
 	// PositionID is the Lot ID. It is empty for an operation with no Lot.
 	PositionID string
 	// Volume is the parsed volume. For a Stock sell, it is the closed volume of the Lot.
-	// For a crypto purchase, it is the volume after the fee. It is zero for an operation with no volume.
+	// For a crypto purchase and a Reward, it is the volume after the fee. It is zero for an operation with no volume.
 	Volume decimal.Decimal
 	// Price is the stored price of one unit. It is not valid for an operation with no price.
 	Price decimal.NullDecimal
+	// Fee is the fee of a crypto purchase in the crypto asset. It is zero for each other operation.
+	Fee decimal.Decimal
 }
 
 // Instrument is one security, identified by its broker ticker.
@@ -180,11 +200,18 @@ type State struct {
 	NetInterest decimal.Decimal
 	// Fees is the sum of the SEC fees and the corrections, with the sign of the export. It is usually negative.
 	Fees decimal.Decimal
+	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). It is not valid if a Reward
+	// has no known value. It is zero for an Account with no Rewards.
+	Rewards decimal.NullDecimal
+	// FeeSum is the sum of the crypto fees in the Account currency: for each crypto purchase, the fee × the price.
+	// It is information only. The fee is in the cost of the Holding, so FeeSum is not a part of TotalResult.
+	FeeSum decimal.Decimal
 	// UnrealizedProfit is the sum of the Unrealized Profit of the Holdings that have a price.
 	UnrealizedProfit decimal.Decimal
 	// Value is the cash balance plus the value of the Holdings that have a price.
 	Value decimal.Decimal
-	// TotalResult is RealizedProfit + UnrealizedProfit + NetDividends + NetInterest + Fees.
+	// TotalResult is RealizedProfit + UnrealizedProfit + NetDividends + NetInterest + Rewards + Fees.
+	// A Rewards part with no known value adds nothing.
 	TotalResult decimal.Decimal
 	// SimpleReturn is TotalResult × 100 / NetDeposits.
 	SimpleReturn returns.Rate
@@ -240,8 +267,12 @@ type Holding struct {
 	Instrument Instrument
 	// Volume is the open volume.
 	Volume decimal.Decimal
-	// Cost is the open cost in the Account currency. It is positive.
+	// Cost is the open cost in the Account currency. It is positive. If UnknownCost is true,
+	// it is only the cost of the parts with a known cost.
 	Cost decimal.Decimal
+	// UnknownCost tells that a Reward of the Holding has no known value, so the cost is not known.
+	// Then the Holding has no value.
+	UnknownCost bool
 	// NoValueReason tells why the Holding has no value in the Account currency. It is ReasonNone for a Holding
 	// with a value. For a Holding with no value, Price, ExchangeRate, Value and UnrealizedProfit are zero.
 	NoValueReason NoValueReason
@@ -308,7 +339,9 @@ func Calculate(l Ledger) (State, error) {
 		return State{}, err
 	}
 	s.ClosedPositions = closedPositions
-	s.Holdings = holdings(l, lots)
+	crypto := averageCostHoldings(l)
+	s.Rewards, s.FeeSum = crypto.rewards, crypto.feeSum
+	s.Holdings = holdings(l, crypto.holdings, lots)
 	s.OpenLots = openLots(l, lots)
 	s.RealizedProfit = SumRealizedProfit(closedPositions)
 	s.UnrealizedProfit, s.Value = decimal.Zero, s.Cash
@@ -316,7 +349,8 @@ func Calculate(l Ledger) (State, error) {
 		s.UnrealizedProfit = s.UnrealizedProfit.Add(h.UnrealizedProfit)
 		s.Value = s.Value.Add(h.Value)
 	}
-	s.TotalResult = s.RealizedProfit.Add(s.UnrealizedProfit).Add(s.NetDividends).Add(s.NetInterest).Add(s.Fees)
+	s.TotalResult = s.RealizedProfit.Add(s.UnrealizedProfit).Add(s.NetDividends).Add(s.NetInterest).
+		Add(s.Rewards.Decimal).Add(s.Fees)
 	s.Flows = flows(l.CashOperations)
 	s.SimpleReturn = returns.Simple(s.TotalResult, s.NetDeposits)
 	s.AnnualReturn = returns.Annual(s.Flows, s.Value, s.AllHoldingsHaveValue(), l.Today)
@@ -543,8 +577,8 @@ func openLots(l Ledger, states map[string]*lotState) []OpenLot {
 // holdings adds the open part of the Lots per Instrument. A fully closed Lot adds nothing.
 // It also adds each crypto purchase to the Holding of its Instrument by the Average Cost rule (ADR 0009).
 // A Holding with a value gets its Unrealized Profit.
-func holdings(l Ledger, states map[string]*lotState) []Holding {
-	byTicker := averageCostHoldings(l.CashOperations)
+// byTicker has the Holdings at the Average Cost. holdings adds the Lots to it.
+func holdings(l Ledger, byTicker map[string]*Holding, states map[string]*lotState) []Holding {
 	for _, lot := range l.Lots {
 		st := states[lot.PositionID]
 		if !st.openVolume().IsPositive() {
@@ -569,25 +603,75 @@ func holdings(l Ledger, states map[string]*lotState) []Holding {
 	return result
 }
 
-// averageCostHoldings returns the Holdings of the crypto purchases, by ticker. ADR 0009: each purchase adds
-// its volume after the fee and its full EUR amount, so the cost includes the fee.
-// The Average Cost is Holding.AverageCost: the sum of the costs divided by the sum of the volumes.
-func averageCostHoldings(ops []CashOperation) map[string]*Holding {
-	byTicker := map[string]*Holding{}
-	for _, op := range ops {
-		if op.Type != TypeCryptoPurchase {
+// averageCost is the result of averageCostHoldings.
+type averageCost struct {
+	// holdings are the Holdings at the Average Cost, by ticker.
+	holdings map[string]*Holding
+	// rewards is the sum of the values of the Rewards. It is not valid if a Reward has no known value.
+	rewards decimal.NullDecimal
+	// feeSum is the sum of the crypto fees × the purchase prices.
+	feeSum decimal.Decimal
+}
+
+// averageCostHoldings returns the Holdings of the crypto purchases and the Rewards, by ticker (ADR 0009).
+// Each purchase adds its volume after the fee and its full EUR amount, so the cost includes the fee.
+// Each Reward adds its volume and its value on its day. The Average Cost is Holding.AverageCost:
+// the sum of the costs divided by the sum of the volumes.
+func averageCostHoldings(l Ledger) averageCost {
+	result := averageCost{
+		holdings: map[string]*Holding{}, rewards: decimal.NewNullDecimal(decimal.Zero), feeSum: decimal.Zero,
+	}
+	for _, op := range l.CashOperations {
+		if op.Type != TypeCryptoPurchase && op.Type != TypeReward {
 			continue
 		}
-		h, ok := byTicker[op.Ticker]
+		h, ok := result.holdings[op.Ticker]
 		if !ok {
 			// The asset code is also the name of a crypto Instrument.
 			h = &Holding{Instrument: Instrument{Ticker: op.Ticker, Name: op.Ticker}, Volume: decimal.Zero, Cost: decimal.Zero}
-			byTicker[op.Ticker] = h
+			result.holdings[op.Ticker] = h
 		}
 		h.Volume = h.Volume.Add(op.Volume)
-		h.Cost = h.Cost.Sub(op.Amount)
+		if op.Type == TypeCryptoPurchase {
+			h.Cost = h.Cost.Sub(op.Amount)
+			result.feeSum = result.feeSum.Add(op.Fee.Mul(op.Price.Decimal))
+			continue
+		}
+		value, ok := l.rewardValue(op)
+		if !ok {
+			h.UnknownCost = true
+			result.rewards = decimal.NullDecimal{}
+			continue
+		}
+		h.Cost = h.Cost.Add(value)
+		if result.rewards.Valid {
+			result.rewards.Decimal = result.rewards.Decimal.Add(value)
+		}
 	}
-	return byTicker
+	return result
+}
+
+// rewardValue returns the value of the Reward in the Account currency: the volume × the close on or before
+// the day of the Reward in UTC. ADR 0009, rule 3. It returns false if the Ledger has no such close,
+// or if the Quote Currency is not the Account currency. The Ledger has no Exchange Rates of past days.
+func (l Ledger) rewardValue(op CashOperation) (decimal.Decimal, bool) {
+	if quote, ok := l.QuoteCurrencies[op.Ticker]; !ok || quote != l.Currency {
+		return decimal.Zero, false
+	}
+	t := op.Time.UTC()
+	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	closes := l.Closes[op.Ticker]
+	// The closes are in date order. i is the number of closes on or before the day.
+	i, _ := slices.BinarySearchFunc(closes, day, func(c Close, d time.Time) int {
+		if c.Date.After(d) {
+			return 1
+		}
+		return -1
+	})
+	if i == 0 {
+		return decimal.Zero, false
+	}
+	return op.Volume.Mul(closes[i-1].Close), true
 }
 
 // setValue sets the value of the Holding in the Account currency from its price and, if necessary,
@@ -601,6 +685,10 @@ func (h *Holding) setValue(l Ledger) {
 	currency, ok := RateCurrency(quote, l.Currency)
 	if !ok {
 		h.NoValueReason = ReasonCrossRate
+		return
+	}
+	if h.UnknownCost {
+		h.NoValueReason = ReasonNoRewardClose
 		return
 	}
 	h.ExchangeRateCurrency = currency

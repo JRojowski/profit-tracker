@@ -266,8 +266,13 @@ func TestKrakenImport_UnsupportedEntry_StopsTheImportAndListsTheEntry(t *testing
 			want:    []unsupportedEntry{{Type: "deposit", Subtype: "", Asset: "EUR", Time: atText, Reason: "wallet that is not spot / main"}},
 		},
 		{
-			name:    "reward",
-			entries: []krakentest.Entry{{RefID: "ERN-0099", Time: at, Type: "earn", Subtype: "reward", Asset: "BTC", Amount: "0.00000110"}},
+			name:    "reward in EUR",
+			entries: []krakentest.Entry{{RefID: "ERN-0099", Time: at, Type: "earn", Subtype: "reward", Asset: "EUR", Amount: "0.10"}},
+			want:    []unsupportedEntry{{Type: "earn", Subtype: "reward", Asset: "EUR", Time: atText, Reason: "unknown entry"}},
+		},
+		{
+			name:    "reward with a negative amount",
+			entries: []krakentest.Entry{{RefID: "ERN-0099", Time: at, Type: "earn", Subtype: "reward", Asset: "BTC", Amount: "-0.00000110"}},
 			want:    []unsupportedEntry{{Type: "earn", Subtype: "reward", Asset: "BTC", Time: atText, Reason: "unknown entry"}},
 		},
 		{

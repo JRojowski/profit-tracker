@@ -36,16 +36,15 @@ func parseKraken(data []byte) (export, error) {
 			saved.Type = ledger.TypeDeposit
 		case kraken.KindPurchase:
 			saved.Type = ledger.TypeCryptoPurchase
-			saved.Ticker = op.Asset
-			saved.InstrumentName = op.Asset
-			saved.Category = krakenCategory
-			// The Ledger calculation has no cross rates, so the price ticker must quote the asset in EUR.
-			saved.QuoteCurrency = kraken.Currency
-			saved.DefaultPriceTicker = op.Asset + "-" + kraken.Currency
-			saved.DefaultQuoteCurrency = kraken.Currency
+			setCryptoInstrument(&saved, op.Asset)
 			saved.Volume = decimal.NewNullDecimal(op.Volume)
 			saved.Price = decimal.NewNullDecimal(op.Price)
 			saved.Fee = decimal.NewNullDecimal(op.Fee)
+		case kraken.KindReward:
+			// The cost of a Reward is not in the export. The Ledger calculation takes it from the stored closes (ADR 0009).
+			saved.Type = ledger.TypeReward
+			setCryptoInstrument(&saved, op.Asset)
+			saved.Volume = decimal.NewNullDecimal(op.Volume)
 		}
 		ops = append(ops, saved)
 	}
@@ -57,4 +56,15 @@ func parseKraken(data []byte) (export, error) {
 		SuggestedCurrency: kraken.Currency,
 		CashOperations:    ops,
 	}, nil
+}
+
+// setCryptoInstrument sets the crypto Instrument of the asset on the Cash Operation.
+func setCryptoInstrument(op *store.CashOperation, asset string) {
+	op.Ticker = asset
+	op.InstrumentName = asset
+	op.Category = krakenCategory
+	// The Ledger calculation has no cross rates, so the price ticker must quote the asset in EUR.
+	op.QuoteCurrency = kraken.Currency
+	op.DefaultPriceTicker = asset + "-" + kraken.Currency
+	op.DefaultQuoteCurrency = kraken.Currency
 }

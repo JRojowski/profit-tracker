@@ -87,6 +87,8 @@ func readLedger(ctx context.Context, q *queries.Queries, accountID int64) (ledge
 			// A missing volume gives zero. The Ledger calculator uses the volume only for a Closed Position.
 			Volume: row.Volume.Decimal,
 			Price:  row.Price,
+			// A missing fee gives zero. Only a crypto purchase has a fee.
+			Fee: row.Fee.Decimal,
 		})
 	}
 	// The rows are ordered by position ID, so the Fills of one Lot are next to each other.

@@ -54,7 +54,7 @@ INSERT INTO lot_fills (lot_id, cash_operation_id)
 VALUES (?, ?);
 
 -- name: LedgerCashOperations :many
-SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price
+SELECT c.xtb_id, c.type, c.time, c.amount, COALESCE(i.ticker, '') AS ticker, c.position_id, c.volume, c.price, c.fee
 FROM cash_operations c
 LEFT JOIN instruments i ON i.id = c.instrument_id
 WHERE c.account_id = ?

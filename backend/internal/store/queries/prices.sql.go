@@ -32,13 +32,21 @@ func (q *Queries) DeleteInstrumentPrices(ctx context.Context, ticker string) err
 }
 
 const firstFillTimes = `-- name: FirstFillTimes :many
-SELECT i.ticker, CAST(MIN(c.time) AS TEXT) AS first_time
-FROM lot_fills f
-JOIN lots l ON l.id = f.lot_id
-JOIN instruments i ON i.id = l.instrument_id
-JOIN cash_operations c ON c.id = f.cash_operation_id
-GROUP BY i.ticker
-ORDER BY i.ticker
+SELECT ticker, CAST(MIN(time) AS TEXT) AS first_time
+FROM (
+    SELECT i.ticker, c.time
+    FROM lot_fills f
+    JOIN lots l ON l.id = f.lot_id
+    JOIN instruments i ON i.id = l.instrument_id
+    JOIN cash_operations c ON c.id = f.cash_operation_id
+    UNION ALL
+    SELECT i.ticker, c.time
+    FROM cash_operations c
+    JOIN instruments i ON i.id = c.instrument_id
+    WHERE c.type IN ('Crypto purchase', 'Reward')
+)
+GROUP BY ticker
+ORDER BY ticker
 `
 
 type FirstFillTimesRow struct {
@@ -47,6 +55,7 @@ type FirstFillTimesRow struct {
 }
 
 // The time of the first Fill of each Instrument on any Account, as RFC 3339 text in UTC.
+// An Account with no Lots has no Fills. For it, a crypto purchase or a Reward counts as a Fill (ADR 0009).
 // The text has no fraction of a second, so the text order is the time order.
 func (q *Queries) FirstFillTimes(ctx context.Context) ([]FirstFillTimesRow, error) {
 	rows, err := q.db.QueryContext(ctx, firstFillTimes)
