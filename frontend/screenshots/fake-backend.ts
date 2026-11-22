@@ -47,6 +47,7 @@ function answer(
       summary: fixture.summary,
       allocation: fixture.allocation,
       "value-history": fixture.history,
+      benchmarks: fixture.benchmarks,
       holdings: fixture.holdings,
       "closed-positions": fixture.closedPositions,
       "ikze-limit": fixture.ikzeLimit,

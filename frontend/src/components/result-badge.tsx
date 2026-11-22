@@ -4,6 +4,7 @@ import {
   amountSign,
   formatAmount,
   formatPercent,
+  formatPoints,
   type Sign,
 } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -13,6 +14,8 @@ type ResultBadgeProps = {
   value: string | null
   // currency is set for an amount and omitted for a percent.
   currency?: string
+  // unit "pp" shows the value as a difference in percentage points.
+  unit?: "pp"
   className?: string
 }
 
@@ -27,7 +30,12 @@ const tints: Record<Sign, string> = {
 // ResultBadge shows a signed percent or a signed amount in a pill.
 // The tint comes from the sign. The sign and the arrow keep colour from being the only signal.
 // A zero or a missing value shows a neutral badge with no arrow.
-export function ResultBadge({ value, currency, className }: ResultBadgeProps) {
+export function ResultBadge({
+  value,
+  currency,
+  unit,
+  className,
+}: ResultBadgeProps) {
   const sign = value === null ? "zero" : amountSign(value)
   const Arrow =
     sign === "positive"
@@ -38,9 +46,11 @@ export function ResultBadge({ value, currency, className }: ResultBadgeProps) {
   const text =
     value === null
       ? "—"
-      : currency === undefined
-        ? formatPercent(value, { signed: true })
-        : formatAmount(value, currency, { signed: true })
+      : unit === "pp"
+        ? formatPoints(value, { signed: true })
+        : currency === undefined
+          ? formatPercent(value, { signed: true })
+          : formatAmount(value, currency, { signed: true })
 
   return (
     <span
