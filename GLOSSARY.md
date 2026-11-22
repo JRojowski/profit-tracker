@@ -143,7 +143,7 @@ _Avoid_: AI, chatbot, bot, agent
 ### Import
 
 **Import**:
-One upload of one broker export file into one Account.
+One upload of one Provider export file into one Account.
 _Avoid_: Sync, upload
 
 **Import Conflict**:
