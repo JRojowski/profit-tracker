@@ -153,6 +153,21 @@ func missingDays(first time.Time, r store.PriceRange, asked bool, yesterday time
 	return missing
 }
 
+// requestKey identifies the Instrument or the Benchmark of a history request. The ticker of an Instrument can
+// be the ticker of a Benchmark, so the key has the kind of the request.
+type requestKey struct {
+	benchmark bool
+	id        string
+}
+
+// keyOf returns the key of the Instrument or the Benchmark of the request.
+func keyOf(req historyRequest) requestKey {
+	if req.benchmarkID != "" {
+		return requestKey{benchmark: true, id: req.benchmarkID}
+	}
+	return requestKey{id: req.ticker}
+}
+
 // refreshHistory sends the history requests one after the other, with a pause before each request,
 // and stores the daily closes. It adds the counts and the failures to result.
 // It stops with no error when the price source answers "Too Many Requests". It stops with an error when ctx ends.
@@ -164,11 +179,12 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 	s.setProgress(func(p *Progress) { p.Total = len(plan) })
 	// failed are the Instruments and the Benchmarks with a failed request in this refresh. reported are
 	// the Instruments in result.HistoryFailures.
-	failed, reported := map[string]bool{}, map[string]bool{}
+	failed, reported := map[requestKey]bool{}, map[string]bool{}
 	for i, req := range plan {
 		s.setProgress(func(p *Progress) { p.Done, p.Ticker = i, req.ticker })
 		// The second range of a failed Instrument or Benchmark would fail too.
-		if failed[req.ticker] {
+		key := keyOf(req)
+		if failed[key] {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -184,7 +200,7 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 			if err != nil || result.TooManyRequests {
 				return err
 			}
-			failed[req.ticker] = !ok
+			failed[key] = !ok
 			continue
 		}
 		h, err := s.provider.DailyCloses(ctx, req.priceTicker, req.from, req.to)
@@ -196,7 +212,7 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 			if err := s.recordNoData(ctx, req.ticker, err); err != nil {
 				return err
 			}
-			failed[req.ticker] = true
+			failed[key] = true
 			if !reported[req.ticker] {
 				reported[req.ticker] = true
 				result.HistoryFailures = append(result.HistoryFailures, Failure{Ticker: req.ticker, Err: err})

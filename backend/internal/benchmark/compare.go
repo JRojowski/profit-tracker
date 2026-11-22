@@ -5,17 +5,14 @@ import (
 	"time"
 
 	"github.com/shopspring/decimal"
-)
 
-// PLN is the currency of the Exchange Rates. Its rate is 1.
-const PLN = "PLN"
+	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
+	"github.com/jrojowski/profit-tracker/backend/internal/returns"
+)
 
 // precision is the number of decimal places of the ratio of the two values of a Benchmark.
 // It is the same as the precision of the Time-Weighted Return.
 const precision = 20
-
-// hundred converts a fraction to a percentage.
-var hundred = decimal.NewFromInt(100)
 
 // Close is one daily close of a Benchmark in its Quote Currency.
 type Close struct {
@@ -138,7 +135,7 @@ func benchmarkSeries(in Input, b Benchmark) ([]Point, bool) {
 func change(base, value fraction) decimal.Decimal {
 	// One division keeps the rounding to the end.
 	ratio := value.numerator.Mul(base.denominator).DivRound(base.numerator.Mul(value.denominator), precision)
-	return ratio.Sub(decimal.NewFromInt(1)).Mul(hundred).Round(8)
+	return returns.CumulativePercent(ratio)
 }
 
 // fraction is the value of a Benchmark on a day as numerator / denominator, so that the return needs one division.
@@ -168,7 +165,7 @@ func (in Input) value(b Benchmark, day time.Time) (fraction, bool) {
 
 // rate returns the Exchange Rate of the currency on the day: 1 for PLN, else the last valid rate on or before the day.
 func (in Input) rate(currency string, day time.Time) (decimal.Decimal, bool) {
-	if currency == PLN {
+	if currency == ledger.PLN {
 		return decimal.NewFromInt(1), true
 	}
 	r, ok := onOrBefore(in.Rates[currency], day, func(r Rate) time.Time { return r.Date })

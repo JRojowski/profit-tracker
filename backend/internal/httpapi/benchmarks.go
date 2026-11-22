@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -69,6 +70,9 @@ type benchmarkResponse struct {
 	Series []seriesPointResponse `json:"series"`
 }
 
+// periodKeys are the keys of periods, in the order of the user interface.
+var periodKeys = []string{"1M", "3M", "YTD", "1Y", "All"}
+
 // periods are the names of the periods of the Value History.
 var periods = map[string]func(returns.TimeWeightedReturns) (returns.Rate, time.Time){
 	"1M": func(r returns.TimeWeightedReturns) (returns.Rate, time.Time) { return r.OneMonth, r.Starts.OneMonth },
@@ -116,7 +120,8 @@ func (a *api) accountBenchmarks(w http.ResponseWriter, r *http.Request) {
 func benchmarkPeriod(w http.ResponseWriter, r *http.Request) (string, bool) {
 	period := r.URL.Query().Get("period")
 	if _, ok := periods[period]; !ok {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown period %q, use 1M, 3M, YTD, 1Y or All", period))
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown period %q, use %s or %s", period,
+			strings.Join(periodKeys[:len(periodKeys)-1], ", "), periodKeys[len(periodKeys)-1]))
 		return "", false
 	}
 	return period, true

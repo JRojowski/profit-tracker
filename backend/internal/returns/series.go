@@ -34,7 +34,7 @@ func TimeWeightedSeries(days []DayValue, base time.Time) []SeriesPoint {
 				product = product.Mul(factor).Round(twrPrecision)
 			}
 		}
-		series = append(series, SeriesPoint{Date: days[t].Date, Percent: cumulativePercent(product)})
+		series = append(series, SeriesPoint{Date: days[t].Date, Percent: CumulativePercent(product)})
 	}
 	return series
 }

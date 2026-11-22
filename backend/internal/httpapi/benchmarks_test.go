@@ -570,6 +570,31 @@ func TestRefreshPrices_OneBenchmarkFails_OthersAndInstrumentsAreAsked(t *testing
 		"a Benchmark is not an Instrument, so the Instrument failures do not name it")
 }
 
+// TestRefreshPrices_InstrumentWithBenchmarkTicker_FailureDoesNotSkipTheBenchmark checks that the failures of
+// an Instrument and of a Benchmark are separate, also when the Instrument ticker is the ticker of the Benchmark.
+func TestRefreshPrices_InstrumentWithBenchmarkTicker_FailureDoesNotSkipTheBenchmark(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.setHistory(t, "CSPX.L", "USD", "2026-10-01=500", "2026-10-22=540")
+	provider.failDailyCloses("CSPX.L", errors.New("connection reset"))
+	srv := startServerWithPrices(t, provider)
+	srv.importAccount(t, xtbtest.Export{
+		AccountNumber: "58100001", Currency: "USD",
+		CashOperations: []xtbtest.CashOperation{
+			{Type: "Stock purchase", Ticker: "CSPX.L", Instrument: "CSPX", Time: historyTime(2), Amount: "-500.00", ID: "802", Comment: "OPEN BUY 1 @ 500.00", PositionID: "8000000001"},
+			{Type: "Deposit", Time: historyTime(1), Amount: "1000.00", ID: "801", Comment: "Blik deposit"},
+		},
+	}, "XTB USD")
+	srv.setQuoteCurrency(t, "CSPX.L", "USD")
+
+	refresh := srv.refreshHistory(t)
+
+	assert.Contains(t, provider.adjustedRequests(), historyRequest{Ticker: "CSPX.L", From: "2026-09-24", To: "2026-10-22"},
+		"the Benchmark is asked although the Instrument with the same ticker failed")
+	require.Len(t, refresh.HistoryFailures, 1)
+	assert.Equal(t, "CSPX.L", refresh.HistoryFailures[0].Ticker)
+}
+
 func TestRefreshPrices_BenchmarkTooManyRequests_StopsTheRefresh(t *testing.T) {
 	t.Parallel()
 	provider := historyProvider(t)

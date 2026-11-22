@@ -116,7 +116,7 @@ func Annual(flows []Flow, value decimal.Decimal, allHoldingsHaveValue bool, toda
 	if reason != ReasonNone {
 		return Rate{Reason: reason}
 	}
-	return Rate{Percent: growth.Sub(decimal.NewFromInt(1)).Mul(hundred).Round(8)}
+	return Rate{Percent: CumulativePercent(growth)}
 }
 
 // history returns ReasonNoFlows if there is no flow, ReasonShortHistory if the first flow is less than

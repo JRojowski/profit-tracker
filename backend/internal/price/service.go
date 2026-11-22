@@ -98,7 +98,8 @@ func (e *CurrencyError) Error() string {
 
 // Refresh gets a current price for each Instrument that is in a Holding of an Account and has a Quote Currency.
 // Then it gets the missing daily closes of each Instrument that an Account ever held and that has
-// a Quote Currency, and the missing closes of each Benchmark. A failure of one Instrument does not stop the others. "Too Many Requests" from the price
+// a Quote Currency. It also gets the missing closes of each Benchmark.
+// A failure of one Instrument does not stop the others. "Too Many Requests" from the price
 // source stops the refresh, and the result tells it.
 // Refresh returns an error if it cannot read or store data, or if ctx ends. Then the result holds the prices
 // that it stored before the error.
