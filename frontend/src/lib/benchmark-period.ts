@@ -1,6 +1,7 @@
-import { historyPeriods, type HistoryPeriod } from "@/lib/api"
+import { historyPeriods, type HistoryPeriod } from "./api"
 
-const periodParam = "period"
+// periodParam is the query key of the period.
+export const periodParam = "period"
 
 // defaultPeriod is the period of the Benchmarks page when the URL has no valid period.
 export const defaultPeriod: HistoryPeriod = "All"

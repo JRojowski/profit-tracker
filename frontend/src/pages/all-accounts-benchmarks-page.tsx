@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from "react-router"
 
+import { BenchmarksBody } from "@/components/benchmarks-body"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -8,7 +9,6 @@ import { fetchAllAccountsBenchmarks } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { parsePeriod } from "@/lib/benchmark-period"
 import { paths } from "@/lib/routes"
-import { BenchmarksBody } from "@/pages/account-benchmarks-page"
 
 // AllAccountsBenchmarksPage compares the Time-Weighted Return of all Accounts with the Benchmark Return of each
 // Benchmark for one period. The period is in the URL. All values are in PLN by ADR 0004.
