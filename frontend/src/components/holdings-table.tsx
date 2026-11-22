@@ -21,6 +21,7 @@ import {
   formatVolume,
   signColour,
 } from "@/lib/format"
+import { isKraken } from "@/lib/provider"
 import {
   decimalSortValue,
   sortRows,
@@ -39,8 +40,6 @@ type HoldingsTableProps = {
   // columns come from holdingColumns. The owner builds them once, for the table and for the view rules.
   columns: DataTableColumn<Holding>[]
   currency: string
-  // showAverageCost adds the Average Cost to the rows of the narrow list. It is true for a Kraken Account.
-  showAverageCost: boolean
   // view is the column order and the sorting, which the owner keeps with useTableView.
   view: TableViewProps
   // onOpenOverview opens the Instrument Overview of a Holding. A row of the wide table runs it.
@@ -53,10 +52,13 @@ const HOLDINGS_VIEW_STORAGE_KEY = "profit-tracker:table:holdings"
 // holdingsViewStorageKey gives the storage key of the table view for a Provider.
 // A Kraken Account has the extra Average Cost column, so its view has its own key and keeps the XTB view intact.
 export function holdingsViewStorageKey(provider: Provider): string {
-  return provider === "kraken"
+  return isKraken(provider)
     ? `${HOLDINGS_VIEW_STORAGE_KEY}:kraken`
     : HOLDINGS_VIEW_STORAGE_KEY
 }
+
+// AVERAGE_COST_COLUMN_ID is the id of the Average Cost column. Only the table of a Kraken Account has it.
+const AVERAGE_COST_COLUMN_ID = "averageCost"
 
 // FIXED_COLUMN_IDS are the leading columns that the user cannot move.
 const FIXED_COLUMN_IDS = ["instrument"]
@@ -71,12 +73,11 @@ export function holdingsViewRules(
 // HoldingsTable shows the Holdings of an Account: a table on a wide screen and a list of compact rows on a narrow screen.
 // A row of the wide table opens the Instrument Overview. A row of the list opens it too.
 // A Holding with a Price Warning has a badge.
-// A note under the table lists the Holdings with no value.
+// A note under the table lists the Holdings with no value or with no known cost.
 export function HoldingsTable({
   holdings,
   columns,
   currency,
-  showAverageCost,
   view,
   onOpenOverview,
 }: HoldingsTableProps) {
@@ -106,7 +107,10 @@ export function HoldingsTable({
           totals={totals}
           sortOptions={columns.filter((column) => column.sortValue)}
           currency={currency}
-          showAverageCost={showAverageCost}
+          // The narrow rows show the Average Cost when the columns have it, so that the columns stay the one source.
+          showAverageCost={columns.some(
+            (column) => column.id === AVERAGE_COST_COLUMN_ID
+          )}
           onOpenOverview={onOpenOverview}
           sorting={sorting}
           onSortingChange={onSortingChange}
@@ -128,29 +132,28 @@ export function HoldingsTable({
 
 // holdingColumns gives the columns of the wide table. Each sortable column has its own sortValue.
 // The select control of the cards reads the sortable columns from here, so a new column needs one edit.
-// An Account with the Provider "kraken" has no Lots. Its table has the Average Cost column after the volume.
+// A Kraken Account has no Lots. Its table has the Average Cost column after the volume.
 export function holdingColumns(
   currency: string,
   provider: Provider,
   onPriceSourceChanged: () => void
 ): DataTableColumn<Holding>[] {
-  const averageCost: DataTableColumn<Holding>[] =
-    provider === "kraken"
-      ? [
-          {
-            id: "averageCost",
-            header: "Average Cost",
-            meta: { align: "right" },
-            sortValue: (holding) => decimalSortValue(holding.averageCost),
-            cell: ({ row }) =>
-              row.original.averageCost !== null ? (
-                formatAmount(row.original.averageCost, currency)
-              ) : (
-                <NoValue />
-              ),
-          },
-        ]
-      : []
+  const averageCost: DataTableColumn<Holding>[] = isKraken(provider)
+    ? [
+        {
+          id: AVERAGE_COST_COLUMN_ID,
+          header: "Average Cost",
+          meta: { align: "right" },
+          sortValue: (holding) => decimalSortValue(holding.averageCost),
+          cell: ({ row }) =>
+            row.original.averageCost !== null ? (
+              formatAmount(row.original.averageCost, currency)
+            ) : (
+              <NoValue />
+            ),
+        },
+      ]
+    : []
   return [
     {
       id: "instrument",
@@ -279,50 +282,75 @@ export function holdingColumns(
   ]
 }
 
-// hasKnownValue tells that a Holding has a value and an Unrealized Profit. The totals and the note use only this test.
-function hasKnownValue(holding: Holding): boolean {
-  return holding.value !== null && holding.unrealizedProfit !== null
+// hasNoKnownCost tells that a Holding has a value, but no known cost and no Unrealized Profit.
+// On a Kraken Account, a Reward with no stored close gives this state (ADR 0009).
+function hasNoKnownCost(holding: Holding): boolean {
+  return holding.value !== null && holding.unrealizedProfit === null
 }
 
-// HoldingTotals are the sums over the Holdings with a known value.
+// HoldingTotals are the sums of the Holdings. A sum is null when no Holding has a known amount for it.
 type HoldingTotals = {
-  cost: string
-  value: string
-  unrealizedProfit: string
+  // value is the sum of the Holdings with a value.
+  value: string | null
+  // cost and unrealizedProfit are the sums of the Holdings with a value and a known cost.
+  cost: string | null
+  unrealizedProfit: string | null
   // percent is the total Unrealized Profit as a percentage of the total cost. It is null when the cost is zero.
   percent: string | null
-  // included is the number of Holdings in the sums. excluded is the number of Holdings with no known value.
-  included: number
-  excluded: number
+  // noValue is the number of Holdings with no value. They are in no sum.
+  noValue: number
+  // noCost is the number of Holdings with a value but no known cost. They are only in the value sum.
+  noCost: number
 }
 
-// holdingTotals sums the Holdings with a known value. A Holding with no value is in no sum, also not in the cost.
+// holdingTotals sums the Holdings. A Holding with no value is in no sum. A Holding with no known cost is only in the value.
 function holdingTotals(holdings: Holding[]): HoldingTotals {
-  const known = holdings.filter(hasKnownValue)
-  // A Holding with a known value always has a known cost.
-  const cost = sumDecimals(known.map((holding) => holding.cost as string))
-  const unrealizedProfit = sumDecimals(
-    known.map((holding) => holding.unrealizedProfit as string)
-  )
+  const values: string[] = []
+  const costs: string[] = []
+  const profits: string[] = []
+  for (const holding of holdings) {
+    if (holding.value === null) continue
+    values.push(holding.value)
+    if (holding.cost === null || holding.unrealizedProfit === null) continue
+    costs.push(holding.cost)
+    profits.push(holding.unrealizedProfit)
+  }
+  const cost = costs.length > 0 ? sumDecimals(costs) : null
+  const unrealizedProfit = profits.length > 0 ? sumDecimals(profits) : null
   return {
+    value: values.length > 0 ? sumDecimals(values) : null,
     cost,
-    value: sumDecimals(known.map((holding) => holding.value as string)),
     unrealizedProfit,
-    percent: percentOf(unrealizedProfit, cost),
-    included: known.length,
-    excluded: holdings.length - known.length,
+    percent:
+      cost !== null && unrealizedProfit !== null
+        ? percentOf(unrealizedProfit, cost)
+        : null,
+    noValue: holdings.length - values.length,
+    noCost: values.length - costs.length,
   }
 }
 
 // ExcludedNote tells how many Holdings are not in the totals.
-function ExcludedNote({ excluded }: { excluded: number }) {
-  if (excluded === 0) return null
+function ExcludedNote({ totals }: { totals: HoldingTotals }) {
+  if (totals.noValue === 0 && totals.noCost === 0) return null
   return (
-    <span className="max-w-56 text-xs font-normal whitespace-normal text-muted-foreground">
-      Without {excluded} {excluded === 1 ? "Holding" : "Holdings"} with no known
-      value
+    <span className="flex max-w-56 flex-col text-xs font-normal whitespace-normal text-muted-foreground">
+      {totals.noValue > 0 && (
+        <span>Without {holdingCount(totals.noValue)} with no known value</span>
+      )}
+      {totals.noCost > 0 && (
+        <span>
+          Cost and Unrealized Profit without {holdingCount(totals.noCost)} with
+          no known cost
+        </span>
+      )}
     </span>
   )
+}
+
+// holdingCount gives a count of Holdings as text, for example "1 Holding" or "2 Holdings".
+function holdingCount(count: number): string {
+  return count === 1 ? "1 Holding" : `${count} Holdings`
 }
 
 // WideTable shows all details of each Holding in columns, with a total row.
@@ -342,7 +370,6 @@ function WideTable({
   columns: DataTableColumn<Holding>[]
   currency: string
 }) {
-  const hasKnown = totals.included > 0
   return (
     <DataTable
       {...view}
@@ -354,21 +381,32 @@ function WideTable({
         label: (
           <div className="flex flex-col gap-0.5">
             <span>Total</span>
-            <ExcludedNote excluded={totals.excluded} />
+            <ExcludedNote totals={totals} />
           </div>
         ),
         cells: {
-          cost: hasKnown ? formatAmount(totals.cost, currency) : <NoValue />,
-          value: hasKnown ? formatAmount(totals.value, currency) : <NoValue />,
-          unrealizedProfit: hasKnown ? (
-            <ProfitFigure
-              profit={totals.unrealizedProfit}
-              percent={totals.percent}
-              currency={currency}
-            />
-          ) : (
-            <NoValue />
-          ),
+          cost:
+            totals.cost !== null ? (
+              formatAmount(totals.cost, currency)
+            ) : (
+              <NoValue />
+            ),
+          value:
+            totals.value !== null ? (
+              formatAmount(totals.value, currency)
+            ) : (
+              <NoValue />
+            ),
+          unrealizedProfit:
+            totals.unrealizedProfit !== null ? (
+              <ProfitFigure
+                profit={totals.unrealizedProfit}
+                percent={totals.percent}
+                currency={currency}
+              />
+            ) : (
+              <NoValue />
+            ),
         },
       }}
     />
@@ -421,20 +459,24 @@ function HoldingRows({
                 <span className="font-mono text-xs text-muted-foreground">
                   <span className="num">{formatVolume(holding.volume)} ×</span>{" "}
                   <span className="num">
-                    {holding.price !== null
-                      ? formatAmount(
-                          holding.price,
-                          holding.quoteCurrency ?? currency
-                        )
-                      : "—"}
+                    {holding.price !== null ? (
+                      formatAmount(
+                        holding.price,
+                        holding.quoteCurrency ?? currency
+                      )
+                    ) : (
+                      <NoValue />
+                    )}
                   </span>
                 </span>
                 {showAverageCost && (
                   <span className="num text-xs text-muted-foreground">
                     Average Cost{" "}
-                    {holding.averageCost !== null
-                      ? formatAmount(holding.averageCost, currency)
-                      : "—"}
+                    {holding.averageCost !== null ? (
+                      formatAmount(holding.averageCost, currency)
+                    ) : (
+                      <NoValue />
+                    )}
                   </span>
                 )}
                 <span className="sr-only">Open the Instrument Overview.</span>
@@ -449,7 +491,7 @@ function HoldingRows({
                     No value
                   </span>
                 )}
-                {holding.unrealizedProfit !== null && (
+                {holding.unrealizedProfit !== null ? (
                   <span
                     className={cn(
                       "num text-xs",
@@ -462,6 +504,13 @@ function HoldingRows({
                     {holding.unrealizedProfitPercent !== null &&
                       ` (${formatPercent(holding.unrealizedProfitPercent, { signed: true })})`}
                   </span>
+                ) : (
+                  // The wide table shows the same mark in the Unrealized Profit column.
+                  holding.value !== null && (
+                    <span className="text-xs">
+                      <NoValue />
+                    </span>
+                  )
                 )}
               </span>
             </button>
@@ -470,29 +519,33 @@ function HoldingRows({
         <li className="flex items-start justify-between gap-3 bg-muted/50 px-4 py-3 font-medium">
           <span className="flex min-w-0 flex-col gap-1">
             <span>Total</span>
-            <ExcludedNote excluded={totals.excluded} />
-            {totals.included > 0 && (
+            <ExcludedNote totals={totals} />
+            {totals.cost !== null && (
               <span className="num text-xs font-normal text-muted-foreground">
                 Cost {formatAmount(totals.cost, currency)}
               </span>
             )}
           </span>
           <span className="flex shrink-0 flex-col items-end gap-1 text-right">
-            {totals.included > 0 ? (
-              <>
-                <span className="num text-sm">
-                  {formatAmount(totals.value, currency)}
-                </span>
-                <span className="num text-xs font-normal">
+            {totals.value !== null ? (
+              <span className="num text-sm">
+                {formatAmount(totals.value, currency)}
+              </span>
+            ) : (
+              <NoValue />
+            )}
+            {totals.value !== null && (
+              <span className="num text-xs font-normal">
+                {totals.unrealizedProfit !== null ? (
                   <ProfitFigure
                     profit={totals.unrealizedProfit}
                     percent={totals.percent}
                     currency={currency}
                   />
-                </span>
-              </>
-            ) : (
-              <NoValue />
+                ) : (
+                  <NoValue />
+                )}
+              </span>
             )}
           </span>
         </li>
@@ -501,19 +554,44 @@ function HoldingRows({
   )
 }
 
-// NoValueNote lists the Holdings with no value and tells why each one has no value.
+// NoValueNote lists the Holdings with no value and the Holdings with no known cost. It tells why for each one.
 function NoValueNote({ holdings }: { holdings: Holding[] }) {
-  const unpriced = holdings.filter((holding) => !hasKnownValue(holding))
-  if (unpriced.length === 0) return null
+  const unpriced = holdings.filter((holding) => holding.value === null)
+  const noCost = holdings.filter(hasNoKnownCost)
+  if (unpriced.length === 0 && noCost.length === 0) return null
   return (
-    <div className="flex flex-col gap-1.5 text-sm text-muted-foreground">
-      <p>
-        {unpriced.length === 1
-          ? "1 Holding has no value. It is not in the value of the Account."
-          : `${unpriced.length} Holdings have no value. They are not in the value of the Account.`}
-      </p>
+    <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+      {unpriced.length > 0 && (
+        <NoteGroup
+          text={
+            unpriced.length === 1
+              ? "1 Holding has no value. It is not in the value of the Account."
+              : `${unpriced.length} Holdings have no value. They are not in the value of the Account.`
+          }
+          holdings={unpriced}
+        />
+      )}
+      {noCost.length > 0 && (
+        <NoteGroup
+          text={
+            noCost.length === 1
+              ? "1 Holding has no known cost. Its value is in the value of the Account. It has no Unrealized Profit."
+              : `${noCost.length} Holdings have no known cost. Their values are in the value of the Account. They have no Unrealized Profit.`
+          }
+          holdings={noCost}
+        />
+      )}
+    </div>
+  )
+}
+
+// NoteGroup shows one sentence and the ticker and the note of each Holding that it is about.
+function NoteGroup({ text, holdings }: { text: string; holdings: Holding[] }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p>{text}</p>
       <ul className="flex flex-col gap-1">
-        {unpriced.map((holding) => (
+        {holdings.map((holding) => (
           <li key={holding.ticker}>
             <span className="font-medium text-foreground">
               {holding.ticker}

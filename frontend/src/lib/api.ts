@@ -6,6 +6,8 @@ export const accountTypes = ["regular", "IKE", "IKZE"] as const
 
 export type AccountType = (typeof accountTypes)[number]
 
+// Provider is the company that holds an Account. The rules of a Kraken Account are different (ADR 0009).
+// Use isKraken from "@/lib/provider" to test for these rules.
 export type Provider = "xtb" | "kraken"
 
 export type Account = {
@@ -131,6 +133,7 @@ export type UnsupportedEntry = {
 // ApiError holds the error message that the backend returns. The code is the machine-readable code of the
 // error, when the backend gives one, for example "rate_limited" or "unsupported-entries".
 // The error with the code "unsupported-entries" lists the unsupported entries of a Kraken export.
+// The error with the code "kraken-currency-not-eur" tells that a new Kraken Account must have the currency EUR.
 export class ApiError extends Error {
   readonly status: number
   readonly code: string | null
@@ -249,7 +252,8 @@ export type AccountSummary = {
   // totalResult is the sum of the parts below.
   totalResult: string
   realizedProfit: string
-  unrealizedProfit: string
+  // unrealizedProfit is null when rewards is null: the tool cannot split the result into these two parts (ADR 0009).
+  unrealizedProfit: string | null
   netDividends: string
   netInterest: string
   fees: string
@@ -288,8 +292,8 @@ export type Holding = {
   ticker: string
   name: string
   volume: string
-  // cost and averageCost are null when a Reward of the Holding has no stored close on or before its day (ADR 0009).
-  // Then the Holding has no value, and note tells the user why.
+  // cost, averageCost and unrealizedProfit are null when a Reward of the Holding has no stored close on or before
+  // its day (ADR 0009). Then note tells the user why. The Holding still has a value when it has a price.
   cost: string | null
   averageCost: string | null
   price: string | null
@@ -704,6 +708,7 @@ export type AllAccountsAmounts = {
   netInterest: string | null
   fees: string | null
   // rewards is the sum of the values of the Rewards on their days, in PLN (ADR 0009). It is "0.00" for no Rewards.
+  // rewards and unrealizedProfit are null when a Reward of an Account has no stored close on or before its day.
   rewards: string | null
   // currencyResult is the part of the Total Result that comes from the change of the Exchange Rates.
   currencyResult: string | null

@@ -121,7 +121,7 @@ const pageCases: PageCase[] = [
     populatedSet: "kraken",
   },
   {
-    // A Reward has no stored close. The Rewards part and the Bitcoin Holding have no known value.
+    // A Reward has no stored close. The Bitcoin Holding has a value, but no known cost and no Unrealized Profit.
     name: "kraken-overview-reward-unknown",
     url: "/accounts/3",
     empty: null,

@@ -6,8 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -220,11 +218,9 @@ func (a *api) instrumentOverview(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// The asset code is also the name of a crypto Instrument, as in the Holding.
 		resp.Name, resp.Fills = ticker, toCryptoFills(purchases)
-		feeSum := decimal.Zero
-		for _, op := range purchases {
-			feeSum = feeSum.Add(in.ledger.FeeValue(op))
-		}
-		resp.FeeSum = new(formatAmount(feeSum))
+		// ADR 0009, rule 2: one rule for the sum of the fees, as in the Account summary.
+		crypto := ledger.SumRewardsAndFees(in.ledger, ledger.IncomeFilter{Ticker: ticker})
+		resp.FeeSum = new(formatAmount(crypto.FeeSum))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

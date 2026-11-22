@@ -319,6 +319,9 @@ func nullDecimalText(d decimal.NullDecimal) *string {
 // codeUnsupportedEntries is the code of the error for a Kraken export with unsupported entries.
 const codeUnsupportedEntries = "unsupported-entries"
 
+// codeKrakenCurrency is the code of the error for a new Kraken Account with a currency that is not EUR.
+const codeKrakenCurrency = "kraken-currency-not-eur"
+
 // writeImportError maps an error of the import service to a status.
 func (a *api) writeImportError(w http.ResponseWriter, r *http.Request, err error) {
 	var unsupported *kraken.UnsupportedError
@@ -327,6 +330,8 @@ func (a *api) writeImportError(w http.ResponseWriter, r *http.Request, err error
 		return
 	}
 	switch {
+	case errors.Is(err, importer.ErrKrakenCurrency):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error(), Code: codeKrakenCurrency})
 	case errors.Is(err, importer.ErrRejected), errors.Is(err, importer.ErrInvalidAccount), errors.Is(err, importer.ErrInvalidDecision):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, importer.ErrImportNotFound), errors.Is(err, importer.ErrConflictNotFound):

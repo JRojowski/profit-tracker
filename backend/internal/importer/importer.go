@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/kraken"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -21,6 +22,9 @@ var (
 	ErrTotalMismatch = errors.New("the sum of the cash operation amounts is not equal to the Total row")
 	// ErrInvalidAccount tells that the data of a new Account is not valid.
 	ErrInvalidAccount = errors.New("invalid account")
+	// ErrKrakenCurrency tells that a new Kraken Account has a currency that is not EUR.
+	// It wraps ErrInvalidAccount.
+	ErrKrakenCurrency = fmt.Errorf("%w: the currency of a Kraken account must be %s", ErrInvalidAccount, kraken.Currency)
 	// ErrImportNotFound tells that no Import has the ID.
 	ErrImportNotFound = errors.New("import not found")
 	// ErrImportClosed tells that the Import is already saved or cancelled.
@@ -266,7 +270,7 @@ func (s *Service) Confirm(ctx context.Context, id int64, newAccount NewAccount) 
 		return store.Import{}, err
 	}
 	if account == nil {
-		if err := newAccount.validate(); err != nil {
+		if err := newAccount.validate(export.Provider); err != nil {
 			return store.Import{}, err
 		}
 		account = &store.Account{
@@ -357,8 +361,8 @@ func (s *Service) account(ctx context.Context, number string) (*store.Account, e
 	return &account, nil
 }
 
-// validate checks the data of a new Account.
-func (a NewAccount) validate() error {
+// validate checks the data of a new Account of the Provider.
+func (a NewAccount) validate(provider string) error {
 	if strings.TrimSpace(a.Name) == "" {
 		return fmt.Errorf("%w: the name is empty", ErrInvalidAccount)
 	}
@@ -369,6 +373,10 @@ func (a NewAccount) validate() error {
 	}
 	if !currencyCode.MatchString(a.Currency) {
 		return fmt.Errorf("%w: the currency %q is not a code of 3 capital letters, for example USD", ErrInvalidAccount, a.Currency)
+	}
+	// ADR 0009: the Kraken ledger has EUR cash and the price tickers quote in EUR.
+	if provider == ProviderKraken && a.Currency != kraken.Currency {
+		return fmt.Errorf("%w, not %q", ErrKrakenCurrency, a.Currency)
 	}
 	return nil
 }

@@ -15,6 +15,7 @@ import {
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 import { formatAmount } from "@/lib/format"
+import { isKraken } from "@/lib/provider"
 import { useAccount } from "@/pages/account-layout"
 
 // AccountOverviewPage shows the values and the results of one Account, in the Account currency.
@@ -52,7 +53,7 @@ export function AccountOverviewPage() {
             totalResult={data.totalResult}
             parts={totalResultParts(data, account.provider)}
             totalNote={
-              account.provider === "kraken"
+              isKraken(account.provider)
                 ? `including fees: ${formatAmount(data.feeSum, data.currency)}`
                 : undefined
             }
@@ -64,19 +65,19 @@ export function AccountOverviewPage() {
 }
 
 // totalResultParts gives the parts of the Total Result of an Account in the order of the bars.
-// An Account with the Provider "kraken" also has the Rewards part (ADR 0009).
+// A Kraken Account has the Rewards part and no Fees part, because its fees are in the cost (ADR 0009).
 function totalResultParts(
   summary: AccountSummary,
   provider: Provider
 ): WaterfallPart[] {
-  return [
+  const parts: WaterfallPart[] = [
     { label: "Realized Profit", amount: summary.realizedProfit },
     { label: "Unrealized Profit", amount: summary.unrealizedProfit },
     { label: "Net dividends", amount: summary.netDividends },
     { label: "Net interest", amount: summary.netInterest },
-    ...(provider === "kraken"
-      ? [{ label: "Rewards", amount: summary.rewards }]
-      : []),
-    { label: "Fees", amount: summary.fees },
   ]
+  if (isKraken(provider)) {
+    return [...parts, { label: "Rewards", amount: summary.rewards }]
+  }
+  return [...parts, { label: "Fees", amount: summary.fees }]
 }

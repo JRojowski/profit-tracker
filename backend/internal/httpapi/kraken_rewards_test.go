@@ -47,7 +47,7 @@ func TestKrakenReward_StoredClose_AddsVolumeAndCostAtTheCloseOfItsDay(t *testing
 // rewardsSummary is the part of GET /api/accounts/{id}/summary that the Reward tests read.
 type rewardsSummary struct {
 	Rewards          *string `json:"rewards"`
-	UnrealizedProfit string  `json:"unrealizedProfit"`
+	UnrealizedProfit *string `json:"unrealizedProfit"`
 	TotalResult      string  `json:"totalResult"`
 	Value            string  `json:"value"`
 	UnpricedHoldings int     `json:"unpricedHoldings"`
@@ -86,7 +86,7 @@ func TestKrakenReward_LaterPriceChange_GoesIntoUnrealizedProfitNotIntoRewards(t 
 
 	got := srv.rewardsSummary(t, id)
 	assert.Equal(t, ptr("0.145"), got.Rewards)
-	assert.Equal(t, "14.2285", got.UnrealizedProfit)
+	assert.Equal(t, ptr("14.2285"), got.UnrealizedProfit)
 	assert.Equal(t, "14.3735", got.TotalResult)
 	assert.Equal(t, "814.3735", got.Value)
 }
@@ -176,9 +176,13 @@ type rewardHolding struct {
 	Note             *string `json:"note"`
 }
 
-// TestKrakenReward_NoStoredClose_GivesRewardsAndHoldingCostWithNoKnownValue checks a Reward before the tool
-// has the close of its day. The Holding has no known cost, so it has no value, like a Holding with no price.
-func TestKrakenReward_NoStoredClose_GivesRewardsAndHoldingCostWithNoKnownValue(t *testing.T) {
+// TestKrakenReward_NoStoredClose_GivesTheHoldingValueButNoCostAndNoRewards checks a Reward before the tool
+// has the close of its day. ADR 0009, rule 3. The price is known, so the Holding value and the Total Result are
+// known. The cost, the Average Cost, the Unrealized Profit and the Rewards part have no known value.
+//
+//	Value: 500.00 + 0.00448985 × 70000 = 500.00 + 314.2895 = 814.2895
+//	Total Result: 814.2895 - 800.00 = 14.2895
+func TestKrakenReward_NoStoredClose_GivesTheHoldingValueButNoCostAndNoRewards(t *testing.T) {
 	t.Parallel()
 	provider := newFakeProvider()
 	// The current price is known. The daily history has no close on or before the day of the Reward.
@@ -191,15 +195,15 @@ func TestKrakenReward_NoStoredClose_GivesRewardsAndHoldingCostWithNoKnownValue(t
 
 	summary := srv.rewardsSummary(t, id)
 	assert.Nil(t, summary.Rewards, "the Rewards part has no known value")
-	assert.Equal(t, 1, summary.UnpricedHoldings)
-	assert.Equal(t, "0.00", summary.UnrealizedProfit, "the Holding with no known cost has no Unrealized Profit")
-	assert.Equal(t, "0.00", summary.TotalResult)
-	assert.Equal(t, "500.00", summary.Value, "the value leaves out the Holding with no known cost")
+	assert.Nil(t, summary.UnrealizedProfit, "the tool cannot split the result into Unrealized Profit and Rewards")
+	assert.Equal(t, 0, summary.UnpricedHoldings, "the Holding has a price, so it has a value")
+	assert.Equal(t, "14.2895", summary.TotalResult, "the Total Result is the value minus the Net Deposits")
+	assert.Equal(t, "814.2895", summary.Value)
 
 	var holdings []rewardHolding
 	require.Equal(t, http.StatusOK, srv.getJSON(t, fmt.Sprintf("/api/accounts/%d/holdings", id), &holdings))
 	assert.Equal(t, []rewardHolding{{
-		Ticker: "BTC", Volume: "0.00448985",
+		Ticker: "BTC", Volume: "0.00448985", Value: ptr("314.2895"),
 		Note: ptr("A Reward has no close of its day or an earlier day. Refresh the prices to get the price history."),
 	}}, holdings)
 }

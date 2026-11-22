@@ -30,6 +30,7 @@ import {
 import { useSidebarView } from "@/hooks/use-sidebar-view"
 import { useAppState } from "@/lib/app-state"
 import { useAssistant } from "@/lib/assistant-state"
+import { isKraken } from "@/lib/provider"
 import { paths } from "@/lib/routes"
 
 type NavEntry = { to: string; icon: LucideIcon; label: string }
@@ -57,7 +58,7 @@ export function AppSidebar() {
           label: "Holdings",
         },
         // An Account with no Lots, as at Kraken, has no Closed Positions. The page is not in the sidebar.
-        ...(account.provider === "kraken"
+        ...(isKraken(account.provider)
           ? []
           : [
               {

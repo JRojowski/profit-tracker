@@ -87,7 +87,7 @@ type Export struct {
 type CashOperation struct {
 	// RefID is the Kraken reference ID. It is the Provider ID of the Cash Operation.
 	RefID string
-	// Kind is KindDeposit or KindPurchase.
+	// Kind is KindDeposit, KindPurchase or KindReward.
 	Kind string
 	Time time.Time
 	// Amount is in EUR. A purchase has a negative amount. A Reward has the amount zero.
