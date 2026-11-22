@@ -638,10 +638,10 @@ func averageCostHoldings(l Ledger) averageCost {
 		h.Volume = h.Volume.Add(op.Volume)
 		if op.Type == TypeCryptoPurchase {
 			h.Cost = h.Cost.Sub(op.Amount)
-			result.feeSum = result.feeSum.Add(l.feeValue(op))
+			result.feeSum = result.feeSum.Add(l.FeeValue(op))
 			continue
 		}
-		value, ok := l.rewardValue(op)
+		value, ok := l.RewardValue(op)
 		if !ok {
 			h.UnknownCost = true
 			result.rewards = decimal.NullDecimal{}
@@ -655,19 +655,19 @@ func averageCostHoldings(l Ledger) averageCost {
 	return result
 }
 
-// feeValue returns the fee of the crypto purchase in the Account currency. ADR 0009, rule 2.
+// FeeValue returns the fee of the crypto purchase in the Account currency. ADR 0009, rule 2.
 // A fee in the Account currency counts as it is. A fee in the crypto asset counts at the purchase price.
-func (l Ledger) feeValue(op CashOperation) decimal.Decimal {
+func (l Ledger) FeeValue(op CashOperation) decimal.Decimal {
 	if op.FeeCurrency == l.Currency {
 		return op.Fee
 	}
 	return op.Fee.Mul(op.Price.Decimal)
 }
 
-// rewardValue returns the value of the Reward in the Account currency: the volume × the close on or before
+// RewardValue returns the value of the Reward in the Account currency: the volume × the close on or before
 // the day of the Reward in UTC. ADR 0009, rule 3. It returns false if the Ledger has no such close,
 // or if the Quote Currency is not the Account currency. The Ledger has no Exchange Rates of past days.
-func (l Ledger) rewardValue(op CashOperation) (decimal.Decimal, bool) {
+func (l Ledger) RewardValue(op CashOperation) (decimal.Decimal, bool) {
 	if quote, ok := l.QuoteCurrencies[op.Ticker]; !ok || quote != l.Currency {
 		return decimal.Zero, false
 	}
