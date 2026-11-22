@@ -30,7 +30,11 @@ const today = "2026-06-15"
 
 // DataSet selects which data the fake backend answers with.
 export type DataSet =
-  "populated" | "nearEqualEnd" | "noAccounts" | "emptyAccounts"
+  | "populated"
+  | "nearEqualEnd"
+  | "benchmarkUnavailable"
+  | "noAccounts"
+  | "emptyAccounts"
 
 // The first Account is a regular Account. The second one is an IKZE Account.
 export const mainAccount: Account = {
@@ -575,7 +579,10 @@ function benchmarkRows(user: number): BenchmarkReturn[] {
 }
 
 // accountBenchmarks gives the Benchmarks of an Account for the period All, from the Time-Weighted Return of its Value History.
-function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
+function accountBenchmarks(
+  history: AccountValueHistory,
+  failed = false
+): AccountBenchmarks {
   const user = history.timeWeightedReturn.All
   return {
     accountId: history.accountId,
@@ -586,8 +593,19 @@ function accountBenchmarks(history: AccountValueHistory): AccountBenchmarks {
     baseDay: history.periodStarts.All,
     lastDay: history.points.at(-1)?.date ?? null,
     user: { return: user },
-    benchmarks: benchmarkRows(Number(user)),
+    benchmarks: failed
+      ? failedBenchmarkRows(Number(user))
+      : benchmarkRows(Number(user)),
   }
+}
+
+// failedBenchmarkRows is benchmarkRows with a failed price source for WIG20TR. Gold has no price for the whole period.
+function failedBenchmarkRows(user: number): BenchmarkReturn[] {
+  return benchmarkRows(user).map((row) =>
+    row.id === "wig20tr"
+      ? { ...row, status: "sourceFailure", return: null, difference: null }
+      : row
+  )
 }
 
 // emptyBenchmarks is the answer for an Account with no Value History.
@@ -840,7 +858,11 @@ export type ApiFixture = {
 
 // fixtureFor gives the answers of the fake backend for a data set.
 export function fixtureFor(dataSet: DataSet): ApiFixture {
-  if (dataSet === "populated" || dataSet === "nearEqualEnd") {
+  if (
+    dataSet === "populated" ||
+    dataSet === "nearEqualEnd" ||
+    dataSet === "benchmarkUnavailable"
+  ) {
     return {
       accounts: [ikzeAccount, mainAccount].sort((a, b) =>
         a.name.localeCompare(b.name)
@@ -855,7 +877,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
         2: ikzeHistory,
       },
       benchmarks: {
-        1: accountBenchmarks(mainHistory),
+        1: accountBenchmarks(mainHistory, dataSet === "benchmarkUnavailable"),
         2: accountBenchmarks(ikzeHistory),
       },
       holdings: { 1: mainHoldings, 2: ikzeHoldings },
