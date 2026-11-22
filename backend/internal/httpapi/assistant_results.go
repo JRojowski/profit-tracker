@@ -48,6 +48,11 @@ type resultsResult struct {
 	NetDividends     *string `json:"netDividends"`
 	NetInterest      *string `json:"netInterest"`
 	Fees             *string `json:"fees"`
+	// Rewards is the Rewards part of the Total Result (ADR 0009). FeeSum is the sum of the fees of the crypto
+	// purchases. It is a part of the cost of the Holdings, not of the Total Result. Only one Account at the
+	// Average Cost (Kraken) has them. Rewards is null if a Reward has no known value.
+	Rewards averageCostAmount `json:"rewards,omitzero"`
+	FeeSum  averageCostAmount `json:"feeSum,omitzero"`
 	// CurrencyResult exists only for all Accounts. The tool calculates it only in PLN (ADR 0004).
 	CurrencyResult   *string `json:"currencyResult,omitempty"`
 	PriceDate        *string `json:"priceDate"`
@@ -91,7 +96,9 @@ func (a *api) resultsFunction() assistant.Function {
 				"For all Accounts the amounts are in PLN. For one Account they are in the Account currency. " +
 				"With the arguments from and to (a period, both days included) it returns only the Total Result of the period " +
 				"and the values that give it: the value at the start and at the end, and the Net Deposits of the period. " +
-				"It has no returns and no parts of the Total Result then.",
+				"It has no returns and no parts of the Total Result then. " +
+				"For one Kraken Account, the result also has the Rewards part of the Total Result and feeSum. " +
+				"feeSum is the sum of the fees of the crypto purchases. It is a part of the cost of the Holdings, not of the Total Result.",
 			Parameters: json.RawMessage(resultsParameters),
 		},
 		Run: a.runResults,
@@ -130,7 +137,7 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 		return nil, err
 	}
 	s := a.summaryOf(view)
-	return resultsResult{
+	result := resultsResult{
 		Scope: scope, AccountID: &acc.ID, AccountName: acc.Name, Currency: acc.Currency, Available: true, Warnings: []string{},
 		Value: new(roundAmountText(s.Value)), Cash: new(roundAmountText(s.Cash)), NetDeposits: new(roundAmountText(s.NetDeposits)),
 		TotalResult: new(roundAmountText(s.TotalResult)), RealizedProfit: new(roundAmountText(s.RealizedProfit)),
@@ -140,7 +147,12 @@ func (a *api) runResults(ctx context.Context, arguments json.RawMessage) (any, e
 		AnnualReturn:       returnResult{Percent: s.AnnualReturn, Reason: s.AnnualReturnNote},
 		TimeWeightedReturn: timeWeightedOf(history.TimeWeightedReturn, ""),
 		ValuedAtCost:       tickersOf(history.ValuedAtCost),
-	}, nil
+	}
+	if usesAverageCost(acc) {
+		result.Rewards = averageCostAmountOf(roundAmountPointer(s.Rewards))
+		result.FeeSum = averageCostAmountOf(new(roundAmountText(s.FeeSum)))
+	}
+	return result, nil
 }
 
 // allAccountsResults returns the result of get_results for all Accounts, in PLN.
