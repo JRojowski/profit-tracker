@@ -1,4 +1,5 @@
 import type { Account } from "./api"
+import { periodParam } from "./benchmark-period"
 
 // accountPattern is the route pattern of the pages of one Account.
 export const accountPattern = "/accounts/:id"
@@ -23,6 +24,15 @@ export function parseAccountId(segment: string | undefined): number | null {
   return Number(segment)
 }
 
+// allSegment is the URL segment that names the view of all Accounts, in place of an Account id.
+const allSegment = "all"
+
+// isAllAccountsPath tells whether a path is in the view of all Accounts, for example the overview or the Benchmarks.
+export function isAllAccountsPath(pathname: string): boolean {
+  const parts = pathname.replace(/\/+$/, "").split("/")
+  return parts[1] === "accounts" && parts[2] === allSegment
+}
+
 // ViewTarget is a view of the view switch: all Accounts, or one Account with the data that decides its pages.
 export type ViewTarget =
   { kind: "all" } | { kind: "account"; account: Pick<Account, "id" | "type"> }
@@ -36,8 +46,9 @@ export function switchViewPath(
   search = ""
 ): string {
   const parts = pathname.replace(/\/+$/, "").split("/")
-  const period = new URLSearchParams(search).get("period")
-  const query = period === null ? "" : `?${new URLSearchParams({ period })}`
+  const period = new URLSearchParams(search).get(periodParam)
+  const query =
+    period === null ? "" : `?${new URLSearchParams({ [periodParam]: period })}`
   const onBenchmarks =
     parts[1] === "accounts" && parts[3] === "benchmarks" && parts.length === 4
   if (target.kind === "all") {

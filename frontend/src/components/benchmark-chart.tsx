@@ -18,12 +18,6 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { Toggle } from "@/components/ui/toggle"
-import {
-  axisDate,
-  dateTime,
-  dayMs,
-  monthTicks,
-} from "@/components/value-history-card"
 import { useBenchmarkSelection } from "@/hooks/use-benchmark-selection"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { BenchmarkPoint, Benchmarks } from "@/lib/api"
@@ -32,6 +26,7 @@ import {
   chartLineWidth,
   chartTooltipClass,
 } from "@/lib/chart-style"
+import { axisDate, dateTime, dayMs, monthTicks } from "@/lib/chart-time"
 import { tagWidth } from "@/lib/end-tags"
 import { formatCompact, formatDate, formatPercent } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -53,10 +48,7 @@ const benchmarkStyles: Record<string, LineStyle> = {
   sp500: { color: "var(--chart-4)", ink: "var(--chart-4-foreground)" },
   wig20tr: { color: "var(--chart-5)", ink: "var(--chart-5-foreground)" },
   mwig40tr: { color: "var(--chart-8)", ink: "var(--chart-8-foreground)" },
-  world: {
-    color: "var(--chart-other)",
-    ink: "var(--chart-other-foreground)",
-  },
+  world: { color: "var(--chart-3)", ink: "var(--chart-3-foreground)" },
   gold: { color: "var(--chart-7)", ink: "var(--chart-7-foreground)" },
 }
 const otherStyle = benchmarkStyles.world
@@ -66,7 +58,7 @@ function styleOf(key: string): LineStyle {
   return key === userKey ? userStyle : (benchmarkStyles[key] ?? otherStyle)
 }
 
-// Line is one line of the chart: the user or one Benchmark.
+// ChartLine is one line of the chart: the user or one Benchmark.
 type ChartLine = { key: string; label: string; series: BenchmarkPoint[] }
 
 // ChartRow is one day of the chart. The numbers are for the geometry only. The tooltip shows the exact texts.
@@ -79,17 +71,19 @@ type ChartRow = {
 
 type BenchmarkChartProps = {
   data: Benchmarks
+  // subjectLabel names the line of the user in the legend and in the tooltip, as the table does.
+  subjectLabel: string
 }
 
 // BenchmarkChart shows the cumulative return of the user and of the Benchmarks for each day of the period.
 // A toggle for each Benchmark shows or hides its line. The browser stores the selection.
 // A Benchmark that is not available has a disabled toggle and no line. The table is the text alternative.
-export function BenchmarkChart({ data }: BenchmarkChartProps) {
+export function BenchmarkChart({ data, subjectLabel }: BenchmarkChartProps) {
   const isMobile = useIsMobile()
   const { isSelected, toggle } = useBenchmarkSelection()
   const allIds = data.benchmarks.map((benchmark) => benchmark.id)
   const lines: ChartLine[] = [
-    { key: userKey, label: "Your Account", series: data.user.series },
+    { key: userKey, label: subjectLabel, series: data.user.series },
     ...data.benchmarks
       .filter(
         (benchmark) =>
