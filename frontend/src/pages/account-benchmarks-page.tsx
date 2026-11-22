@@ -20,6 +20,7 @@ import { useLoad, type Loaded } from "@/hooks/use-load"
 import {
   fetchAccountBenchmarks,
   type BenchmarkReturn,
+  type BenchmarkStatus,
   type Benchmarks,
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
@@ -179,6 +180,7 @@ function BenchmarkRow({ benchmark }: { benchmark: BenchmarkReturn }) {
           <ResultBadge value={benchmark.difference} unit="pp" />
         ) : undefined
       }
+      reason={REASONS[benchmark.status]}
     />
   )
 }
@@ -190,6 +192,8 @@ type FigureRowProps = {
   // Null means a figure that the row does not have.
   returnCell: ReactNode | undefined
   differenceCell: ReactNode | undefined
+  // reason tells why the row has no figures. The row shows it in place of the figures.
+  reason?: string
 }
 
 // FigureRow is one row of the table: the name with its detail and the two figures, in columns on a wide screen.
@@ -198,6 +202,7 @@ function FigureRow({
   detail,
   returnCell,
   differenceCell,
+  reason,
 }: FigureRowProps) {
   const missing = returnCell === undefined
   return (
@@ -209,7 +214,7 @@ function FigureRow({
         </span>
         <span className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-normal text-muted-foreground md:hidden">
           {missing ? (
-            NO_PRICE
+            reason
           ) : (
             <>
               <span className="flex items-center gap-1.5">
@@ -229,7 +234,7 @@ function FigureRow({
           colSpan={2}
           className="hidden text-right whitespace-normal text-muted-foreground md:table-cell"
         >
-          {NO_PRICE}
+          {reason}
         </TableCell>
       ) : (
         <>
@@ -245,5 +250,9 @@ function FigureRow({
   )
 }
 
-// NO_PRICE is the reason that a Benchmark has no figures.
-const NO_PRICE = "No price for the full period"
+// REASONS is the text of a row for each status. An available Benchmark has no reason.
+const REASONS: Record<BenchmarkStatus, string | undefined> = {
+  available: undefined,
+  noFullPeriod: "No price for the full period",
+  sourceFailure: "The price source failed",
+}
