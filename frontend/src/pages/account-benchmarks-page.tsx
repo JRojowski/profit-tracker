@@ -1,3 +1,4 @@
+import { TriangleAlertIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { useSearchParams } from "react-router"
 
@@ -5,6 +6,7 @@ import { LoadedView } from "@/components/loaded-view"
 import { PeriodPills } from "@/components/period-pills"
 import { ResultBadge } from "@/components/result-badge"
 import { SectionHeading } from "@/components/section-heading"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   Table,
@@ -14,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { useLoad } from "@/hooks/use-load"
+import { useLoad, type Loaded } from "@/hooks/use-load"
 import {
   fetchAccountBenchmarks,
   type BenchmarkReturn,
@@ -31,7 +33,7 @@ import { useAccount } from "@/pages/account-layout"
 export function AccountBenchmarksPage() {
   const account = useAccount()
   const { valuesVersion } = useAppState()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const period = parsePeriod(searchParams)
   const benchmarks = useLoad(
     `${account.id}:${period}`,
@@ -40,12 +42,37 @@ export function AccountBenchmarksPage() {
   )
 
   return (
+    <BenchmarksBody
+      loaded={benchmarks}
+      subject="Account"
+      emptyText="The Account has no Value History. The tool cannot compare it with the Benchmarks."
+    />
+  )
+}
+
+// BenchmarksBody is the body of the Benchmarks page of one Account and of all Accounts. It shows the period
+// pills, which write the period to the URL, and the comparison of the loaded answer.
+export function BenchmarksBody({
+  loaded,
+  subject,
+  emptyText,
+}: {
+  loaded: Loaded<Benchmarks>
+  // subject names the compared returns: "Account" or "Accounts".
+  subject: "Account" | "Accounts"
+  // emptyText tells why the tool has no comparison when the answer is not available.
+  emptyText: string
+}) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const period = parsePeriod(searchParams)
+
+  return (
     <div className="flex min-w-0 flex-col gap-6">
       <Card className="min-w-0">
         <CardHeader>
           <SectionHeading
             title="Benchmarks"
-            description="The return of the Account and of each Benchmark for the same days."
+            description={`The return of the ${subject} and of each Benchmark for the same days.`}
             action={
               <PeriodPills
                 value={period}
@@ -59,18 +86,29 @@ export function AccountBenchmarksPage() {
           />
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
-          <LoadedView
-            loaded={benchmarks}
-            errorTitle="Cannot load the Benchmarks"
-          >
+          <LoadedView loaded={loaded} errorTitle="Cannot load the Benchmarks">
             {(data) =>
               data.available ? (
-                <BenchmarkTable data={data} />
+                <BenchmarkTable data={data} subject={subject} />
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  The Account has no Value History. The tool cannot compare it
-                  with the Benchmarks.
-                </p>
+                <>
+                  <p className="text-sm text-muted-foreground">{emptyText}</p>
+                  {data.warnings.length > 0 && (
+                    <Alert className="border-warning/40 bg-warning/10 *:[svg]:text-warning">
+                      <TriangleAlertIcon />
+                      <AlertTitle>
+                        The tool cannot compare the returns
+                      </AlertTitle>
+                      <AlertDescription>
+                        <ul className="list-inside list-disc">
+                          {data.warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
               )
             }
           </LoadedView>
@@ -82,7 +120,13 @@ export function AccountBenchmarksPage() {
 
 // BenchmarkTable shows the days and the currency of the comparison, and a row for the user and for each Benchmark.
 // On a narrow screen the figures show under the name, because three columns do not fit.
-function BenchmarkTable({ data }: { data: Benchmarks }) {
+function BenchmarkTable({
+  data,
+  subject,
+}: {
+  data: Benchmarks
+  subject: "Account" | "Accounts"
+}) {
   return (
     <>
       {data.baseDay !== null && data.lastDay !== null && (
@@ -106,7 +150,7 @@ function BenchmarkTable({ data }: { data: Benchmarks }) {
         </TableHeader>
         <TableBody>
           <FigureRow
-            name="Your Account"
+            name={subject === "Account" ? "Your Account" : "All Accounts"}
             detail="Time-Weighted Return"
             returnCell={<ResultBadge value={data.user.return} />}
             differenceCell={null}

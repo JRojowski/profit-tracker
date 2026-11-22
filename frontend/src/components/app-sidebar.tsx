@@ -76,6 +76,11 @@ export function AppSidebar() {
           icon: LayoutDashboardIcon,
           label: "Overview",
         },
+        {
+          to: paths.allBenchmarks,
+          icon: ScaleIcon,
+          label: "Benchmarks",
+        },
       ]
   const importPages: NavEntry[] = [
     { to: paths.import, icon: UploadIcon, label: "Import" },

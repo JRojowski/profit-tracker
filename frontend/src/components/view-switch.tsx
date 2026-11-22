@@ -32,7 +32,7 @@ type ViewSwitchProps = {
 // ViewSwitch shows the selected view, All Accounts or one Account, and lists each view in a menu. A selection
 // opens the same page type in the new view when it exists there, otherwise the overview.
 export function ViewSwitch({ accounts, view }: ViewSwitchProps) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const navigate = useNavigate()
   const { setOpenMobile } = useSidebar()
 
@@ -50,7 +50,7 @@ export function ViewSwitch({ accounts, view }: ViewSwitchProps) {
     const target: ViewTarget = account
       ? { kind: "account", account }
       : { kind: "all" }
-    navigate(switchViewPath(pathname, target))
+    navigate(switchViewPath(pathname, target, search))
   }
 
   return (
