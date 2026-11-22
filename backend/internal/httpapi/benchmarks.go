@@ -47,7 +47,7 @@ type benchmarkResponse struct {
 	Fund          string `json:"fund"`
 	Ticker        string `json:"ticker"`
 	QuoteCurrency string `json:"quoteCurrency"`
-	// Status is "available" or "noFullPeriod".
+	// Status is "available", "noFullPeriod" or "sourceFailure".
 	Status string `json:"status"`
 	// Return is the Benchmark Return as a percentage, or nil unless the status is "available".
 	Return *string `json:"return"`
@@ -123,6 +123,15 @@ func (a *api) benchmarksBody(ctx context.Context, currency, period string, point
 	}
 	if in.Rates, err = a.benchmarkRates(ctx); err != nil {
 		return benchmarksBody{}, err
+	}
+
+	failures, err := a.store.BenchmarkRefreshFailures(ctx)
+	if err != nil {
+		return benchmarksBody{}, err
+	}
+	in.Failed = make(map[string]bool, len(failures))
+	for id := range failures {
+		in.Failed[id] = true
 	}
 
 	body.Available = true

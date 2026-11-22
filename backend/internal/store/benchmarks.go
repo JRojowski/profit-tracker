@@ -36,6 +36,7 @@ type BenchmarkPriceRange struct {
 
 // SaveBenchmarkPrices stores the closes that the tool got for the asked range of one Benchmark, in one transaction.
 // It never replaces a stored close. It adds the asked days to the stored range of the Benchmark.
+// A successful save clears the failure of the last refresh of the Benchmark.
 func (s *Store) SaveBenchmarkPrices(ctx context.Context, asked BenchmarkPriceRange, prices []BenchmarkPrice) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -57,6 +58,9 @@ func (s *Store) SaveBenchmarkPrices(ctx context.Context, asked BenchmarkPriceRan
 			return fmt.Errorf("save benchmark price of %s on %s: %w", p.BenchmarkID, p.Date.Format(dateLayout), err)
 		}
 	}
+	if err := q.DeleteBenchmarkRefreshFailure(ctx, asked.BenchmarkID); err != nil {
+		return fmt.Errorf("clear benchmark refresh failure of %s: %w", asked.BenchmarkID, err)
+	}
 	err = q.UpsertBenchmarkPriceRange(ctx, queries.UpsertBenchmarkPriceRangeParams{
 		BenchmarkID: asked.BenchmarkID,
 		FirstDay:    asked.FirstDay.Format(dateLayout),
@@ -70,6 +74,32 @@ func (s *Store) SaveBenchmarkPrices(ctx context.Context, asked BenchmarkPriceRan
 		return fmt.Errorf("commit benchmark price save of %s: %w", asked.BenchmarkID, err)
 	}
 	return nil
+}
+
+// SaveBenchmarkRefreshFailure records that the last refresh of the Benchmark failed. reason is the text of the
+// failure. A later call replaces the record. A later successful SaveBenchmarkPrices deletes it.
+func (s *Store) SaveBenchmarkRefreshFailure(ctx context.Context, benchmarkID, reason string, failedAt time.Time) error {
+	err := queries.New(s.db).UpsertBenchmarkRefreshFailure(ctx, queries.UpsertBenchmarkRefreshFailureParams{
+		BenchmarkID: benchmarkID, Reason: reason, FailedAt: failedAt.UTC().Format(timeLayout),
+	})
+	if err != nil {
+		return fmt.Errorf("save benchmark refresh failure of %s: %w", benchmarkID, err)
+	}
+	return nil
+}
+
+// BenchmarkRefreshFailures returns the reason of the failure of the last refresh, by Benchmark identifier.
+// A Benchmark whose last refresh succeeded, or that the tool never asked for, is not in the map.
+func (s *Store) BenchmarkRefreshFailures(ctx context.Context) (map[string]string, error) {
+	rows, err := queries.New(s.db).BenchmarkRefreshFailures(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read benchmark refresh failures: %w", err)
+	}
+	failures := make(map[string]string, len(rows))
+	for _, row := range rows {
+		failures[row.BenchmarkID] = row.Reason
+	}
+	return failures, nil
 }
 
 // BenchmarkPriceRanges returns the stored range of each Benchmark, by Benchmark identifier.
