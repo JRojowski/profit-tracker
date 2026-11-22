@@ -213,3 +213,30 @@ func TestNoData_OtherErrors_DoNotWrapErrNoData(t *testing.T) {
 		})
 	}
 }
+
+// TestAdjustedDailyCloses_SplitAfterDay_ReturnsCloseAsYahooGivesIt checks that the closes of a Benchmark keep
+// the split adjustment of Yahoo (ADR 0008). The close of 124.81 on 2020-08-28 stays 124.81.
+func TestAdjustedDailyCloses_SplitAfterDay_ReturnsCloseAsYahooGivesIt(t *testing.T) {
+	t.Parallel()
+	provider, _ := startHistory(t, http.StatusOK, recorded(t, "aapl_split.json"))
+
+	got, err := provider.AdjustedDailyCloses(t.Context(), "AAPL", day(2020, 8, 27), day(2020, 9, 1))
+
+	require.NoError(t, err)
+	assert.Equal(t, "USD", got.Currency)
+	assert.Equal(t, yahoo.Source, got.Source)
+	assert.Equal(t, []string{
+		"2020-08-27=125.01", "2020-08-28=124.81", "2020-08-31=129.04", "2020-09-01=134.18",
+	}, closes(got), "no close is multiplied by the split ratio")
+}
+
+func TestAdjustedDailyCloses_LondonPriceInPence_ReturnsPounds(t *testing.T) {
+	t.Parallel()
+	provider, _ := startHistory(t, http.StatusOK, recorded(t, "vusa_pence.json"))
+
+	got, err := provider.AdjustedDailyCloses(t.Context(), "VUSA.L", day(2026, 10, 20), day(2026, 10, 22))
+
+	require.NoError(t, err)
+	assert.Equal(t, "GBP", got.Currency)
+	assert.Equal(t, []string{"2026-10-20=82.345", "2026-10-21=83"}, closes(got))
+}

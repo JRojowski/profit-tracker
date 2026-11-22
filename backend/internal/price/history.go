@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/benchmark"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
@@ -36,20 +37,71 @@ func gap() time.Duration {
 	return minGap + rand.N(maxGap-minGap+1)
 }
 
-// historyRequest is one range of days that an Instrument needs from the price source.
+// benchmarkLeadDays is the number of days before the first Cash Operation where the Benchmark closes start.
+// Thus the base day of a period has a close on or before it, also after a weekend or a holiday.
+const benchmarkLeadDays = 7
+
+// historyRequest is one range of days that an Instrument or a Benchmark needs from the price source.
 type historyRequest struct {
-	// ticker is the broker ticker. priceTicker is the price ticker that the tool uses.
+	// ticker is the broker ticker of an Instrument, or the price ticker of a Benchmark.
+	// priceTicker is the price ticker that the tool uses.
 	ticker, priceTicker string
 	quoteCurrency       string
+	// benchmarkID is the identifier of the Benchmark. It is empty for an Instrument.
+	benchmarkID string
 	// from and to are at midnight UTC. The range includes both days.
 	from, to time.Time
 }
 
-// historyPlan returns the history requests of the refresh, in broker ticker order.
+// historyPlan returns the history requests of the refresh: the Instruments in broker ticker order,
+// then the Benchmarks in the order of the list.
 // The history of an Instrument goes from the day of its first Fill to yesterday, in UTC.
 // The tool asks only for the days that are not in the stored range of the Instrument.
 // An Instrument with no Quote Currency gets no history, because the tool cannot check its price.
 func (s *Service) historyPlan(ctx context.Context) ([]historyRequest, error) {
+	plan, err := s.instrumentPlan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	benchmarks, err := s.benchmarkPlan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return append(plan, benchmarks...), nil
+}
+
+// benchmarkPlan returns the history requests of the Benchmarks, in the order of the list.
+// The closes of a Benchmark go from 7 days before the first Cash Operation of all Accounts to yesterday, in UTC.
+// The tool asks only for the days that are not in the stored range of the Benchmark.
+// With no Cash Operation, the Benchmarks get no request.
+// Today has no request: the comparison uses the last earlier close for today.
+func (s *Service) benchmarkPlan(ctx context.Context) ([]historyRequest, error) {
+	first, ok, err := s.store.FirstCashOperationTime(ctx)
+	if err != nil || !ok {
+		return nil, err
+	}
+	ranges, err := s.store.BenchmarkPriceRanges(ctx)
+	if err != nil {
+		return nil, err
+	}
+	start := StartOfDay(first).AddDate(0, 0, -benchmarkLeadDays)
+	yesterday := StartOfDay(s.now()).AddDate(0, 0, -1)
+	var plan []historyRequest
+	for _, b := range benchmark.List() {
+		r, asked := ranges[b.ID]
+		stored := store.PriceRange{FirstDay: r.FirstDay, LastDay: r.LastDay}
+		for _, days := range missingDays(start, stored, asked, yesterday) {
+			plan = append(plan, historyRequest{
+				ticker: b.Ticker, priceTicker: b.Ticker, quoteCurrency: b.QuoteCurrency, benchmarkID: b.ID,
+				from: days[0], to: days[1],
+			})
+		}
+	}
+	return plan, nil
+}
+
+// instrumentPlan returns the history requests of the Instruments, in broker ticker order. See historyPlan.
+func (s *Service) instrumentPlan(ctx context.Context) ([]historyRequest, error) {
 	firstFills, err := s.store.FirstFillTimes(ctx)
 	if err != nil {
 		return nil, err
@@ -110,12 +162,12 @@ func missingDays(first time.Time, r store.PriceRange, asked bool, yesterday time
 // The Value History uses only the prices in the Quote Currency. Thus a correction uses the stored closes at once.
 func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, result *Result) error {
 	s.setProgress(func(p *Progress) { p.Total = len(plan) })
-	// failed are the Instruments with a failed request in this refresh. reported are the Instruments in
-	// result.HistoryFailures.
+	// failed are the Instruments and the Benchmarks with a failed request in this refresh. reported are
+	// the Instruments in result.HistoryFailures.
 	failed, reported := map[string]bool{}, map[string]bool{}
 	for i, req := range plan {
 		s.setProgress(func(p *Progress) { p.Done, p.Ticker = i, req.ticker })
-		// The second range of a failed Instrument would fail too.
+		// The second range of a failed Instrument or Benchmark would fail too.
 		if failed[req.ticker] {
 			continue
 		}
@@ -126,6 +178,14 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 			if err := s.pause(ctx); err != nil {
 				return fmt.Errorf("refresh price history: %w", err)
 			}
+		}
+		if req.benchmarkID != "" {
+			ok, err := s.refreshBenchmark(ctx, req, result)
+			if err != nil || result.TooManyRequests {
+				return err
+			}
+			failed[req.ticker] = !ok
+			continue
 		}
 		h, err := s.provider.DailyCloses(ctx, req.priceTicker, req.from, req.to)
 		if err != nil {
@@ -162,6 +222,39 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 		}
 	}
 	return nil
+}
+
+// refreshBenchmark gets and stores the closes of one history request of a Benchmark. It tells if the request
+// gave closes that the tool stored. A failure of the Benchmark does not stop the refresh, and the result does not
+// report it, because a Benchmark is not an Instrument.
+// ADR 0008: the closes are split-adjusted. The tool does not store closes in a currency that is not the Quote
+// Currency of the Benchmark, and it does not record their days. Thus the next refresh asks for them again.
+func (s *Service) refreshBenchmark(ctx context.Context, req historyRequest, result *Result) (bool, error) {
+	h, err := s.provider.AdjustedDailyCloses(ctx, req.priceTicker, req.from, req.to)
+	if err != nil {
+		stop, err := stopOn(ctx, err, result)
+		if stop {
+			return false, err
+		}
+		return false, nil
+	}
+	if len(h.Closes) > 0 && h.Currency != req.quoteCurrency {
+		return false, nil
+	}
+	now := s.now()
+	prices := make([]store.BenchmarkPrice, 0, len(h.Closes))
+	for _, c := range h.Closes {
+		prices = append(prices, store.BenchmarkPrice{
+			BenchmarkID: req.benchmarkID, Date: c.Date, Close: c.Close, Currency: h.Currency, Source: h.Source,
+			FetchedAt: now,
+		})
+	}
+	asked := store.BenchmarkPriceRange{BenchmarkID: req.benchmarkID, FirstDay: req.from, LastDay: req.to, FetchedAt: now}
+	if err := s.store.SaveBenchmarkPrices(ctx, asked, prices); err != nil {
+		return false, err
+	}
+	result.HistoryStored += len(h.Closes)
+	return true, nil
 }
 
 // saveHistory stores the daily closes of the history request and adds its days to the stored range.

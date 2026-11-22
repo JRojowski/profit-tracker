@@ -42,6 +42,11 @@ type Provider interface {
 	// when the price source blocks the requests, and an error that wraps ErrNoData when the price source
 	// has no data for the price ticker.
 	DailyCloses(ctx context.Context, ticker string, from, to time.Time) (History, error)
+	// AdjustedDailyCloses returns the split-adjusted daily closes of the price ticker from the day from to the
+	// day to. It obeys the same rules as DailyCloses, but it does not apply the raw-price conversion of ADR 0005.
+	// ADR 0008: the Benchmarks use these closes, because a Benchmark has no Lots and its return needs
+	// a continuous series.
+	AdjustedDailyCloses(ctx context.Context, ticker string, from, to time.Time) (History, error)
 }
 
 // History is the daily raw closes of one price ticker. ADR 0005: a raw close is the close of that day

@@ -18,6 +18,22 @@ type Account struct {
 	Currency      string
 }
 
+type BenchmarkPrice struct {
+	BenchmarkID string
+	Date        string
+	Close       decimal.Decimal
+	Currency    string
+	Source      string
+	FetchedAt   string
+}
+
+type BenchmarkPriceRange struct {
+	BenchmarkID string
+	FirstDay    string
+	LastDay     string
+	FetchedAt   string
+}
+
 type CashOperation struct {
 	ID           int64
 	AccountID    int64

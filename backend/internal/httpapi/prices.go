@@ -44,7 +44,8 @@ type progressResponse struct {
 	// Done and Total are the numbers of the completed and of all history requests of the running refresh.
 	Done  int `json:"done"`
 	Total int `json:"total"`
-	// Ticker is the broker ticker of the running history request, or nil.
+	// Ticker is the broker ticker of the Instrument or the price ticker of the Benchmark of the running history
+	// request, or nil.
 	Ticker *string `json:"ticker"`
 }
 

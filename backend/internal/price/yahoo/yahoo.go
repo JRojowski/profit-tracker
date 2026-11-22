@@ -165,14 +165,27 @@ func exchangeDate(unix, gmtOffset int64) time.Time {
 // It skips a row with no close and the row of today in UTC, because that row is a live price and not a close.
 // A London price in pence (GBp) comes back in pounds (GBP).
 func (p *Provider) DailyCloses(ctx context.Context, ticker string, from, to time.Time) (price.History, error) {
-	h, err := p.dailyCloses(ctx, ticker, from, to)
+	h, err := p.dailyCloses(ctx, ticker, from, to, true)
 	if err != nil {
 		return price.History{}, fmt.Errorf("yahoo daily prices of %s: %w", ticker, err)
 	}
 	return h, nil
 }
 
-func (p *Provider) dailyCloses(ctx context.Context, ticker string, from, to time.Time) (price.History, error) {
+// AdjustedDailyCloses returns the split-adjusted daily closes of the Yahoo symbol from the day from to the day to,
+// and their currency. It sends the same request as DailyCloses, but it keeps each close as Yahoo gives it.
+// ADR 0008: the closes of a Benchmark are split-adjusted.
+func (p *Provider) AdjustedDailyCloses(ctx context.Context, ticker string, from, to time.Time) (price.History, error) {
+	h, err := p.dailyCloses(ctx, ticker, from, to, false)
+	if err != nil {
+		return price.History{}, fmt.Errorf("yahoo adjusted daily prices of %s: %w", ticker, err)
+	}
+	return h, nil
+}
+
+// dailyCloses returns the daily closes of the Yahoo symbol. raw tells to multiply each close by the ratio
+// of each later split (ADR 0005).
+func (p *Provider) dailyCloses(ctx context.Context, ticker string, from, to time.Time, raw bool) (price.History, error) {
 	now := p.now()
 	// range=max gives monthly rows, so the request always has period1 and period2.
 	// period1 is one day early, because a session that opens before midnight UTC has a timestamp of the day before.
@@ -220,7 +233,7 @@ func (p *Provider) dailyCloses(ctx context.Context, ticker string, from, to time
 		}
 		// ADR 0005: multiply by the ratio of each split after the day.
 		for _, s := range splits {
-			if s.date.After(date) {
+			if raw && s.date.After(date) {
 				closePrice = closePrice.Mul(s.ratio)
 			}
 		}

@@ -70,6 +70,7 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/accounts/{id}/ikze-limit", a.accountIKZELimit)
 	mux.HandleFunc("GET /api/accounts/{id}/allocation", a.accountAllocation)
 	mux.HandleFunc("GET /api/accounts/{id}/value-history", a.accountValueHistory)
+	mux.HandleFunc("GET /api/accounts/{id}/benchmarks", a.accountBenchmarks)
 	mux.HandleFunc("GET /api/all-accounts/summary", a.allAccountsSummary)
 	mux.HandleFunc("GET /api/all-accounts/allocation", a.allAccountsAllocation)
 	mux.HandleFunc("GET /api/all-accounts/value-history", a.allAccountsValueHistory)

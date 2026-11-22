@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/benchmark"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
@@ -270,6 +271,9 @@ type neededCurrency struct {
 //   - the Account currency that is not PLN of each Account, for the view of all Accounts (ADR 0004)
 //   - the Quote Currency that is not PLN of each Instrument that an Account ever held.
 //     The value of its Holding today and in the Value History needs the rate.
+//   - the Quote Currency that is not PLN of each Benchmark, from the day of the first Cash Operation of all
+//     Accounts. The Benchmark Return in another currency needs the rate. With no Cash Operation, no Benchmark
+//     needs a rate.
 func (s *Service) neededCurrencies(ctx context.Context) ([]neededCurrency, error) {
 	accounts, err := s.store.Accounts(ctx)
 	if err != nil {
@@ -315,6 +319,15 @@ func (s *Service) neededCurrencies(ctx context.Context) ([]neededCurrency, error
 	}
 	for ticker, t := range firstFills {
 		addDay(instruments[ticker].QuoteCurrency, t)
+	}
+	firstOperation, ok, err := s.store.FirstCashOperationTime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		for _, b := range benchmark.List() {
+			addDay(b.QuoteCurrency, firstOperation)
+		}
 	}
 
 	needed := make([]neededCurrency, 0, len(first))
