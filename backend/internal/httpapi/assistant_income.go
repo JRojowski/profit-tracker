@@ -29,7 +29,7 @@ const incomeParameters = `{
 // The texts of incomeResult.LeftOut for a filter by Instrument.
 const (
 	leftOutInterest = "net interest: the broker does not tie interest to an Instrument, so the Instrument filter leaves it out"
-	leftOutFees     = "fees: only the fees that the broker ties to the Instrument are counted, fees with no Instrument (for example a Correction) are left out"
+	leftOutFees     = "fees: only the fees that the Provider ties to the Instrument are counted, fees with no Instrument (for example a Correction) are left out"
 )
 
 // incomeArguments are the arguments of get_income_and_fees.
@@ -87,7 +87,7 @@ func (a *api) incomeFunction() assistant.Function {
 			Description: "Returns the net dividends, the net interest and the fees of one Account or of all Accounts, " +
 				"optionally of one Instrument and of a period (first day and last day, both included, in Polish time). " +
 				"The result has one sum per currency. " +
-				"With an Instrument, the result has only the amounts that the broker ties to that Instrument. " +
+				"With an Instrument, the result has only the amounts that the Provider ties to that Instrument. " +
 				"The net interest is not tied to an Instrument, so the result leaves it out (leftOut tells this). " +
 				"For a Kraken Account and its currency, the result also has the Rewards and feeSum. " +
 				"feeSum is the sum of the fees of the crypto purchases. It is a part of the cost of the Holdings, not of the fees. " +

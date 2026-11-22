@@ -399,7 +399,7 @@ func (s *State) add(op CashOperation) {
 // IncomeFilter limits the Cash Operations that SumIncome counts. The zero filter counts each Cash Operation.
 type IncomeFilter struct {
 	// Ticker is the broker ticker of an Instrument. If it is not empty, SumIncome counts only the Cash Operations
-	// that the broker ties to that Instrument. A Cash Operation with no Instrument never matches.
+	// that the Provider ties to that Instrument. A Cash Operation with no Instrument never matches.
 	Ticker string
 	// From is the first instant that SumIncome counts. The zero time means no lower limit.
 	From time.Time
