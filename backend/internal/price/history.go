@@ -124,7 +124,7 @@ func (s *Service) instrumentPlan(ctx context.Context) ([]historyRequest, error) 
 		r, asked := ranges[ticker]
 		for _, days := range missingDays(StartOfDay(firstFills[ticker]), r, asked, yesterday) {
 			plan = append(plan, historyRequest{
-				ticker: ticker, priceTicker: EffectiveTicker(ticker, inst.PriceTicker), quoteCurrency: inst.QuoteCurrency,
+				ticker: ticker, priceTicker: EffectiveTicker(ticker, inst.DefaultPriceTicker, inst.PriceTicker), quoteCurrency: inst.QuoteCurrency,
 				from: days[0], to: days[1],
 			})
 		}

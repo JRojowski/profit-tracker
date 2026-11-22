@@ -89,7 +89,7 @@ func toInstrumentResponse(inst store.Instrument) instrumentResponse {
 
 func toPriceSourceResponse(inst store.Instrument) priceSourceResponse {
 	return priceSourceResponse{
-		PriceTicker:         price.EffectiveTicker(inst.Ticker, inst.PriceTicker),
+		PriceTicker:         price.EffectiveTicker(inst.Ticker, inst.DefaultPriceTicker, inst.PriceTicker),
 		PriceTickerManual:   inst.PriceTicker != "",
 		QuoteCurrency:       optional(inst.QuoteCurrency),
 		QuoteCurrencyManual: inst.QuoteCurrencyManual,

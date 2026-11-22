@@ -91,14 +91,22 @@ type CashOperation struct {
 	// QuoteCurrency is the Quote Currency of the Instrument, or empty if it is not known.
 	// The store sets it only when it adds the Instrument. Thus a later Import keeps a Quote Currency that the user set.
 	QuoteCurrency string
-	Time          time.Time
-	Amount        decimal.Decimal
-	Comment       string
+	// DefaultPriceTicker and DefaultQuoteCurrency are the defaults of the price source that the parser gives,
+	// for example "BTC-EUR" and "EUR" for a Kraken asset. They are empty for an XTB Instrument, which uses the
+	// mapping from the ticker suffix. The store sets them only when it adds the Instrument.
+	DefaultPriceTicker   string
+	DefaultQuoteCurrency string
+	Time                 time.Time
+	Amount               decimal.Decimal
+	Comment              string
 	// PositionID is the Lot ID. It is empty for an operation with no Lot.
 	PositionID string
 	// Volume and Price are the parsed volume and price. They are not valid for an operation with no volume.
 	Volume decimal.NullDecimal
 	Price  decimal.NullDecimal
+	// Fee is the fee of a crypto purchase in the crypto asset. It is not valid for an operation with no such fee.
+	// It is not a part of Data: the volume of a purchase is the amount after the fee, so a changed fee changes the volume.
+	Fee decimal.NullDecimal
 	// IsFill tells that the operation is a Fill of the Lot LotID.
 	IsFill bool
 	// LotID is the ID of the Lot of a Fill. ADR 0002: it can be the position ID of a different Fill
@@ -411,6 +419,7 @@ func (w *ledgerWriter) insert(ctx context.Context, op CashOperation) error {
 		PositionID:   sql.NullString{String: op.PositionID, Valid: op.PositionID != ""},
 		Volume:       op.Volume,
 		Price:        op.Price,
+		Fee:          op.Fee,
 		ImportID:     w.importID,
 	})
 	if err != nil {
@@ -434,6 +443,7 @@ func (w *ledgerWriter) replace(ctx context.Context, opID int64, op CashOperation
 		PositionID:   sql.NullString{String: op.PositionID, Valid: op.PositionID != ""},
 		Volume:       op.Volume,
 		Price:        op.Price,
+		Fee:          op.Fee,
 		ImportID:     w.importID,
 		ID:           opID,
 	})
@@ -517,10 +527,12 @@ func (w *ledgerWriter) instrument(ctx context.Context, op CashOperation) (sql.Nu
 		return sql.NullInt64{Int64: id, Valid: true}, nil
 	}
 	id, err := w.q.UpsertInstrument(ctx, queries.UpsertInstrumentParams{
-		Ticker:        op.Ticker,
-		Name:          op.InstrumentName,
-		Category:      op.Category,
-		QuoteCurrency: sql.NullString{String: op.QuoteCurrency, Valid: op.QuoteCurrency != ""},
+		Ticker:               op.Ticker,
+		Name:                 op.InstrumentName,
+		Category:             op.Category,
+		QuoteCurrency:        sql.NullString{String: op.QuoteCurrency, Valid: op.QuoteCurrency != ""},
+		DefaultPriceTicker:   sql.NullString{String: op.DefaultPriceTicker, Valid: op.DefaultPriceTicker != ""},
+		DefaultQuoteCurrency: sql.NullString{String: op.DefaultQuoteCurrency, Valid: op.DefaultQuoteCurrency != ""},
 	})
 	if err != nil {
 		return sql.NullInt64{}, fmt.Errorf("save instrument %s: %w", op.Ticker, err)

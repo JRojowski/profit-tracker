@@ -54,6 +54,7 @@ type CashOperation struct {
 	Volume       decimal.NullDecimal
 	Price        decimal.NullDecimal
 	ImportID     int64
+	Fee          decimal.NullDecimal
 }
 
 type ExchangeRate struct {
@@ -112,16 +113,18 @@ type ImportConflict struct {
 }
 
 type Instrument struct {
-	ID                  int64
-	Ticker              string
-	Name                string
-	Category            string
-	QuoteCurrency       sql.NullString
-	PriceTicker         sql.NullString
-	QuoteCurrencyManual int64
-	SourceCurrency      sql.NullString
-	PriceNoData         int64
-	PriceConfirmed      int64
+	ID                   int64
+	Ticker               string
+	Name                 string
+	Category             string
+	QuoteCurrency        sql.NullString
+	PriceTicker          sql.NullString
+	QuoteCurrencyManual  int64
+	SourceCurrency       sql.NullString
+	PriceNoData          int64
+	PriceConfirmed       int64
+	DefaultPriceTicker   sql.NullString
+	DefaultQuoteCurrency sql.NullString
 }
 
 type Lot struct {

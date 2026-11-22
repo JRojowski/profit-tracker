@@ -30,6 +30,9 @@ const (
 	TypeCorrection     = "Correction"
 	// TypeTransfer is a Transfer between two Accounts. See ADR 0003.
 	TypeTransfer = "IKZE deposit"
+	// TypeCryptoPurchase is a purchase of a crypto asset on an Account with no Lots, for example a Kraken Account.
+	// Its Holding uses the Average Cost (ADR 0009). The type is not an XTB type, so no XTB Account has it.
+	TypeCryptoPurchase = "Crypto purchase"
 )
 
 // Errors of Calculate. Each error that Calculate returns wraps one of them.
@@ -122,7 +125,7 @@ type CashOperation struct {
 	// PositionID is the Lot ID. It is empty for an operation with no Lot.
 	PositionID string
 	// Volume is the parsed volume. For a Stock sell, it is the closed volume of the Lot.
-	// It is zero for an operation with no volume.
+	// For a crypto purchase, it is the volume after the fee. It is zero for an operation with no volume.
 	Volume decimal.Decimal
 	// Price is the stored price of one unit. It is not valid for an operation with no price.
 	Price decimal.NullDecimal
@@ -538,9 +541,10 @@ func openLots(l Ledger, states map[string]*lotState) []OpenLot {
 }
 
 // holdings adds the open part of the Lots per Instrument. A fully closed Lot adds nothing.
+// It also adds each crypto purchase to the Holding of its Instrument by the Average Cost rule (ADR 0009).
 // A Holding with a value gets its Unrealized Profit.
 func holdings(l Ledger, states map[string]*lotState) []Holding {
-	byTicker := map[string]*Holding{}
+	byTicker := averageCostHoldings(l.CashOperations)
 	for _, lot := range l.Lots {
 		st := states[lot.PositionID]
 		if !st.openVolume().IsPositive() {
@@ -563,6 +567,27 @@ func holdings(l Ledger, states map[string]*lotState) []Holding {
 	}
 	slices.SortFunc(result, func(a, b Holding) int { return cmp.Compare(a.Instrument.Ticker, b.Instrument.Ticker) })
 	return result
+}
+
+// averageCostHoldings returns the Holdings of the crypto purchases, by ticker. ADR 0009: each purchase adds
+// its volume after the fee and its full EUR amount, so the cost includes the fee.
+// The Average Cost is Holding.AverageCost: the sum of the costs divided by the sum of the volumes.
+func averageCostHoldings(ops []CashOperation) map[string]*Holding {
+	byTicker := map[string]*Holding{}
+	for _, op := range ops {
+		if op.Type != TypeCryptoPurchase {
+			continue
+		}
+		h, ok := byTicker[op.Ticker]
+		if !ok {
+			// The asset code is also the name of a crypto Instrument.
+			h = &Holding{Instrument: Instrument{Ticker: op.Ticker, Name: op.Ticker}, Volume: decimal.Zero, Cost: decimal.Zero}
+			byTicker[op.Ticker] = h
+		}
+		h.Volume = h.Volume.Add(op.Volume)
+		h.Cost = h.Cost.Sub(op.Amount)
+	}
+	return byTicker
 }
 
 // setValue sets the value of the Holding in the Account currency from its price and, if necessary,

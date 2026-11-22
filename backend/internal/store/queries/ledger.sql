@@ -14,7 +14,7 @@ WHERE c.account_id = ? AND c.xtb_id = ?;
 
 -- name: UpdateCashOperation :exec
 UPDATE cash_operations
-SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, import_id = ?
+SET type = ?, instrument_id = ?, time = ?, amount = ?, comment = ?, position_id = ?, volume = ?, price = ?, fee = ?, import_id = ?
 WHERE id = ?;
 
 -- name: DeleteLotFill :exec
@@ -32,14 +32,14 @@ DELETE FROM lots
 WHERE account_id = ? AND id NOT IN (SELECT lot_id FROM lot_fills);
 
 -- name: UpsertInstrument :one
-INSERT INTO instruments (ticker, name, category, quote_currency)
-VALUES (?, ?, ?, ?)
+INSERT INTO instruments (ticker, name, category, quote_currency, default_price_ticker, default_quote_currency)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT (ticker) DO UPDATE SET ticker = excluded.ticker
 RETURNING id;
 
 -- name: InsertCashOperation :one
-INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, import_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO cash_operations (account_id, xtb_id, type, instrument_id, time, amount, comment, position_id, volume, price, fee, import_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (account_id, xtb_id) DO NOTHING
 RETURNING id;
 

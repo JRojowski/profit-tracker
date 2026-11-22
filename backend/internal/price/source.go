@@ -1,6 +1,7 @@
 package price
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -44,7 +45,7 @@ func (s *Service) SetPriceTicker(ctx context.Context, brokerTicker, priceTicker 
 	if err != nil {
 		return store.Instrument{}, err
 	}
-	changed := EffectiveTicker(brokerTicker, old.PriceTicker) != EffectiveTicker(brokerTicker, priceTicker)
+	changed := EffectiveTicker(brokerTicker, old.DefaultPriceTicker, old.PriceTicker) != EffectiveTicker(brokerTicker, old.DefaultPriceTicker, priceTicker)
 	return s.store.SetPriceTicker(ctx, brokerTicker, priceTicker, changed)
 }
 
@@ -61,15 +62,19 @@ func checkPriceTicker(priceTicker string) error {
 
 // SetQuoteCurrency sets the manual Quote Currency of the Instrument with the broker ticker and returns the Instrument.
 // It removes the whitespace at the start and at the end and changes the letters to upper case.
-// An empty value removes the manual Quote Currency. Then the Quote Currency comes from the ticker suffix again,
-// and it is not known for an unknown suffix.
+// An empty value removes the manual Quote Currency. Then the Quote Currency is the default Quote Currency that the
+// parser of the Provider gave, or else the Quote Currency from the ticker suffix. It is not known for an unknown suffix.
 //
 // SetQuoteCurrency keeps the stored prices. The Holdings use only a price in the Quote Currency of the Instrument.
 // It returns ErrInvalidQuoteCurrency for a value that is not valid, and store.ErrNotFound for an unknown Instrument.
 func (s *Service) SetQuoteCurrency(ctx context.Context, brokerTicker, quoteCurrency string) (store.Instrument, error) {
 	quoteCurrency = strings.ToUpper(strings.TrimSpace(quoteCurrency))
 	if quoteCurrency == "" {
-		return s.store.SetQuoteCurrency(ctx, brokerTicker, QuoteCurrency(brokerTicker), false)
+		inst, err := s.store.Instrument(ctx, brokerTicker)
+		if err != nil {
+			return store.Instrument{}, err
+		}
+		return s.store.SetQuoteCurrency(ctx, brokerTicker, cmp.Or(inst.DefaultQuoteCurrency, QuoteCurrency(brokerTicker)), false)
 	}
 	if !isCurrencyCode(quoteCurrency) {
 		return store.Instrument{}, fmt.Errorf("%w: %q is not three letters A to Z", ErrInvalidQuoteCurrency, quoteCurrency)
