@@ -20,6 +20,7 @@ import {
 } from "@/lib/api"
 import type { Loaded } from "@/hooks/use-load"
 import { useAppState } from "@/lib/app-state"
+import { isKraken } from "@/lib/provider"
 import { paths } from "@/lib/routes"
 
 // AllAccountsPage is the Overview of all Accounts, in PLN by ADR 0004.
@@ -58,7 +59,7 @@ export function AllAccountsPage() {
           summary={data}
           allocation={allocation}
           history={history}
-          hasKraken={accounts.some((a) => a.provider === "kraken")}
+          hasKraken={accounts.some((a) => isKraken(a.provider))}
         />
       )}
     </LoadedView>
@@ -66,7 +67,7 @@ export function AllAccountsPage() {
 }
 
 // AllAccountsOverview shows the totals of all Accounts in PLN, the Value History, the parts of the Total Result and one row for each Account.
-// When an Account has the Provider "kraken", the parts also have the Rewards part (ADR 0009).
+// When a Kraken Account exists, the parts also have the Rewards part (ADR 0009).
 function AllAccountsOverview({
   summary,
   allocation,

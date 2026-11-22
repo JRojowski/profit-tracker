@@ -201,17 +201,11 @@ const bitcoin: Holding = {
 }
 
 // bitcoinRewardUnknown is the Bitcoin Holding when a Reward has no stored close on or before its day.
-// Then the cost, the Average Cost and the value are not known.
+// Then the cost, the Average Cost and the Unrealized Profit are not known. The value comes from the price.
 const bitcoinRewardUnknown: Holding = {
   ...bitcoin,
   cost: null,
   averageCost: null,
-  price: null,
-  priceDate: null,
-  exchangeRate: null,
-  exchangeRateCurrency: null,
-  exchangeRateDate: null,
-  value: null,
   unrealizedProfit: null,
   unrealizedProfitPercent: null,
   note: "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history.",
@@ -383,20 +377,13 @@ const krakenSummary: AccountSummary = {
   annualReturnNote: null,
 }
 
-// krakenRewardUnknownSummary is the Kraken summary when a Reward has no stored close.
-// The Rewards part and the Holding have no known value, so they add nothing to the Total Result.
+// krakenRewardUnknownSummary is the Kraken summary when a Reward has no stored close (ADR 0009, rule 3).
+// The Holding keeps its value from the price, so the value and the Total Result stay known.
+// The tool cannot split the Total Result into the Unrealized Profit and the Rewards part.
 const krakenRewardUnknownSummary: AccountSummary = {
   ...krakenSummary,
-  value: "500.26",
-  totalResult: "0.00",
-  unrealizedProfit: "0.00",
+  unrealizedProfit: null,
   rewards: null,
-  priceDate: null,
-  stalePrices: true,
-  exchangeRateDate: null,
-  unpricedHoldings: 1,
-  simpleReturn: "0.00",
-  annualReturn: "0.00",
 }
 
 // emptySummary is the summary of an Account with no Cash Operations.
@@ -1203,22 +1190,8 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     const kraken = fixtureFor("kraken")
     return {
       ...kraken,
+      // The Holding has a value, so the Allocation is the same as in the data set "kraken".
       summary: { ...kraken.summary, 3: krakenRewardUnknownSummary },
-      // The Holding with no value is not in the Allocation. The cash counts in the Account currency.
-      allocation: {
-        ...kraken.allocation,
-        3: {
-          ...allocationOf([], krakenRewardUnknownSummary.cash, "EUR"),
-          byQuoteCurrency: [
-            {
-              currency: "EUR",
-              value: krakenRewardUnknownSummary.cash,
-              share: "100.0000000000",
-            },
-          ],
-          unpricedHoldings: 1,
-        },
-      },
       holdings: { ...kraken.holdings, 3: [bitcoinRewardUnknown] },
     }
   }

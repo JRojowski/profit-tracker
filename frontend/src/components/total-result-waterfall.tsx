@@ -58,6 +58,8 @@ const chartConfig = {
 const gridColumns: Record<number, string> = {
   6: "lg:grid-cols-6",
   7: "lg:grid-cols-7",
+  // All Accounts with a Kraken Account have 7 parts and the Total Result. Two rows of 4 boxes fit them.
+  8: "lg:grid-cols-4",
 }
 
 // TotalResultWaterfall shows how each part adds to the Total Result. Each bar starts at the sum of the bars before it.

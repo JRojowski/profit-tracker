@@ -26,14 +26,21 @@ const confirmFormId = "import-confirm"
 
 // ImportError is the error of a failed action. unsupportedEntries lists the entries of a Kraken export
 // that the tool does not support. The list is empty for each other error.
+// title is the heading of the alert. A known error code has its own title.
 type ImportError = {
+  title: string
   message: string
   unsupportedEntries: UnsupportedEntry[]
 }
 
 // importError reads the error of a failed action.
 function importError(err: unknown): ImportError {
+  const code = err instanceof ApiError ? err.code : null
   return {
+    title:
+      code === "kraken-currency-not-eur"
+        ? "A Kraken Account must have the currency EUR"
+        : "The Import failed",
     message: errorMessage(err),
     unsupportedEntries: err instanceof ApiError ? err.unsupportedEntries : [],
   }
@@ -134,7 +141,7 @@ export function ImportPage({ onImported }: ImportPageProps) {
       )}
       {error && error.unsupportedEntries.length === 0 && (
         <Alert variant="destructive">
-          <AlertTitle>The Import failed</AlertTitle>
+          <AlertTitle>{error.title}</AlertTitle>
           <AlertDescription className="break-words">
             {error.message}
           </AlertDescription>

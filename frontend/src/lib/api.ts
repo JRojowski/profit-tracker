@@ -6,6 +6,8 @@ export const accountTypes = ["regular", "IKE", "IKZE"] as const
 
 export type AccountType = (typeof accountTypes)[number]
 
+// Provider is the company that holds an Account. The rules of a Kraken Account are different (ADR 0009).
+// Use isKraken from "@/lib/provider" to test for these rules.
 export type Provider = "xtb" | "kraken"
 
 export type Account = {

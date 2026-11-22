@@ -116,7 +116,6 @@ export function AccountHoldingsPage() {
                 holdings={data}
                 columns={columns}
                 currency={account.currency}
-                showAverageCost={account.provider === "kraken"}
                 view={view.props}
                 onOpenOverview={overview.open}
               />
