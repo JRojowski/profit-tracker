@@ -116,7 +116,7 @@ func TestCompare_EachBenchmarkOfTheListInOrder(t *testing.T) {
 		ids = append(ids, r.ID)
 		assert.Equal(t, benchmark.StatusNoFullPeriod, r.Status)
 	}
-	assert.Equal(t, []string{"sp500", "wig20tr", "mwig40tr", "world", "gold"}, ids)
+	assert.Equal(t, []string{"sp500", "wig20tr", "mwig40tr", "world", "gold", "bitcoin"}, ids)
 }
 
 // TestCompare_Series checks the Benchmark Return of each calendar day from the base day 2026-10-01 to the last
