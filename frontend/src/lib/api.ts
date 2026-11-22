@@ -678,6 +678,8 @@ export type AllAccountsAmounts = {
   netDividends: string | null
   netInterest: string | null
   fees: string | null
+  // rewards is the sum of the values of the Rewards on their days, in PLN (ADR 0009). It is "0.00" for no Rewards.
+  rewards: string | null
   // currencyResult is the part of the Total Result that comes from the change of the Exchange Rates.
   currencyResult: string | null
 }

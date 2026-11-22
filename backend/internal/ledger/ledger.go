@@ -641,7 +641,7 @@ func averageCostHoldings(l Ledger) averageCost {
 			result.feeSum = result.feeSum.Add(l.feeValue(op))
 			continue
 		}
-		value, ok := l.rewardValue(op)
+		value, ok := l.RewardValue(op)
 		if !ok {
 			h.UnknownCost = true
 			result.rewards = decimal.NullDecimal{}
@@ -664,10 +664,10 @@ func (l Ledger) feeValue(op CashOperation) decimal.Decimal {
 	return op.Fee.Mul(op.Price.Decimal)
 }
 
-// rewardValue returns the value of the Reward in the Account currency: the volume × the close on or before
+// RewardValue returns the value of the Reward in the Account currency: the volume × the close on or before
 // the day of the Reward in UTC. ADR 0009, rule 3. It returns false if the Ledger has no such close,
 // or if the Quote Currency is not the Account currency. The Ledger has no Exchange Rates of past days.
-func (l Ledger) rewardValue(op CashOperation) (decimal.Decimal, bool) {
+func (l Ledger) RewardValue(op CashOperation) (decimal.Decimal, bool) {
 	if quote, ok := l.QuoteCurrencies[op.Ticker]; !ok || quote != l.Currency {
 		return decimal.Zero, false
 	}
@@ -705,24 +705,58 @@ func (h *Holding) setValue(l Ledger) {
 		return
 	}
 	h.ExchangeRateCurrency = currency
-	closePrice, ok := l.Prices[h.Instrument.Ticker]
-	if !ok {
-		h.NoValueReason = ReasonNoPrice
+	m := l.marketValue(h.Instrument.Ticker, quote, currency, h.Volume)
+	if m.reason != ReasonNone {
+		h.NoValueReason = m.reason
 		return
 	}
-	value := h.Volume.Mul(closePrice)
-	if currency != "" {
-		rate, ok := l.ExchangeRates[currency]
-		// A rate of zero or less is not valid. It would give a wrong value or a division by zero.
-		if !ok || !rate.Rate.IsPositive() {
-			h.NoValueReason = ReasonNoExchangeRate
-			return
-		}
-		value = Convert(value, quote, rate.Rate)
-		h.ExchangeRate = rate
+	h.Price, h.Value, h.ExchangeRate = m.price, m.value, m.rate
+	h.UnrealizedProfit = m.value.Sub(h.Cost)
+}
+
+// MarketValue returns the value of the volume of the Instrument in the Account currency, from the current price
+// and, if necessary, the latest Exchange Rate. It uses the same arithmetic as the value of a Holding, but it does not
+// need the cost. It returns false if the Instrument has no such value.
+func (l Ledger) MarketValue(ticker string, volume decimal.Decimal) (decimal.Decimal, bool) {
+	quote, ok := l.QuoteCurrencies[ticker]
+	if !ok || quote == "" {
+		return decimal.Zero, false
 	}
-	h.Price, h.Value = closePrice, value
-	h.UnrealizedProfit = value.Sub(h.Cost)
+	currency, ok := RateCurrency(quote, l.Currency)
+	if !ok {
+		return decimal.Zero, false
+	}
+	m := l.marketValue(ticker, quote, currency, volume)
+	return m.value, m.reason == ReasonNone
+}
+
+// market is the result of marketValue.
+type market struct {
+	price, value decimal.Decimal
+	// rate is the Exchange Rate that value uses. It is zero if value uses no rate.
+	rate ExchangeRate
+	// reason tells why there is no value. It is ReasonNone if there is a value.
+	reason NoValueReason
+}
+
+// marketValue returns the value of the volume in the Account currency. quote is the Quote Currency of the Instrument.
+// currency is the currency of the Exchange Rate from RateCurrency, or "" if no conversion is necessary.
+func (l Ledger) marketValue(ticker, quote, currency string, volume decimal.Decimal) market {
+	closePrice, ok := l.Prices[ticker]
+	if !ok {
+		return market{reason: ReasonNoPrice}
+	}
+	m := market{price: closePrice, value: volume.Mul(closePrice)}
+	if currency == "" {
+		return m
+	}
+	rate, ok := l.ExchangeRates[currency]
+	// A rate of zero or less is not valid. It would give a wrong value or a division by zero.
+	if !ok || !rate.Rate.IsPositive() {
+		return market{reason: ReasonNoExchangeRate}
+	}
+	m.value, m.rate = Convert(m.value, quote, rate.Rate), rate
+	return m
 }
 
 // Convert converts the amount in the currency from to the other currency of the rate.

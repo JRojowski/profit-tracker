@@ -26,7 +26,10 @@ type plnAmountsResponse struct {
 	NetDividends     *string `json:"netDividends"`
 	NetInterest      *string `json:"netInterest"`
 	Fees             *string `json:"fees"`
-	CurrencyResult   *string `json:"currencyResult"`
+	// Rewards is the sum of the values of the Rewards on their days (ADR 0009). It is "0.00" for no Rewards.
+	// A Reward with no known value adds nothing, as in the Total Result of the Account.
+	Rewards        *string `json:"rewards"`
+	CurrencyResult *string `json:"currencyResult"`
 }
 
 // allAccountsResponse is the body of GET /api/all-accounts/summary. ADR 0004.
@@ -182,7 +185,7 @@ func toPLNAmounts(a allaccounts.Amounts) plnAmountsResponse {
 		Value: new(formatAmount(a.Value)), Cash: new(formatAmount(a.Cash)), NetDeposits: new(formatAmount(a.NetDeposits)),
 		TotalResult: new(formatAmount(a.TotalResult)), RealizedProfit: new(formatAmount(a.RealizedProfit)),
 		UnrealizedProfit: new(formatAmount(a.UnrealizedProfit)), NetDividends: new(formatAmount(a.NetDividends)),
-		NetInterest: new(formatAmount(a.NetInterest)), Fees: new(formatAmount(a.Fees)),
+		NetInterest: new(formatAmount(a.NetInterest)), Fees: new(formatAmount(a.Fees)), Rewards: new(formatAmount(a.Rewards)),
 		CurrencyResult: new(formatAmount(a.CurrencyResult)),
 	}
 }
