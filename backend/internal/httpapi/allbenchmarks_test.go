@@ -67,6 +67,14 @@ func allBenchmarksServerWith(t *testing.T, provider *fakeProvider) *testServer {
 	return srv
 }
 
+// TestAllBenchmarks_PLNAndUSDAccounts_ReturnInPLNAndDifference checks the comparison in PLN. See allBenchmarksServer.
+// The series in PLN:
+//
+//	User:     2000 until 2026-10-14. 2026-10-15: 1000 + 250 × 3.90 = 1975 → −1.25 %.
+//	          2026-10-20: 1010 + 975 = 1985 → −0.75 %. 2026-10-23: 1960 → −2 %.
+//	S&P 500:  2000 until 2026-10-14. 2026-10-15: 520 × 3.90 = 2028 → 1.4 %. 2026-10-22: 540 × 3.90 = 2106 → 5.3 %.
+//	          2026-10-23: 540 × 3.80 = 2052 → 2.6 %.
+//	WIG20TR:  0 % until 2026-10-21. 2026-10-22: 12.5 %.
 func TestAllBenchmarks_PLNAndUSDAccounts_ReturnInPLNAndDifference(t *testing.T) {
 	t.Parallel()
 	srv := allBenchmarksServer(t)
@@ -75,15 +83,18 @@ func TestAllBenchmarks_PLNAndUSDAccounts_ReturnInPLNAndDifference(t *testing.T) 
 
 	assert.Equal(t, allBenchmarksResponse{
 		Period: "All", Currency: "PLN", Available: true, Warnings: []string{},
-		BaseDay: ptr("2026-10-01"), LastDay: ptr("2026-10-23"), User: userReturnDTO{Return: ptr("-2")},
+		BaseDay: ptr("2026-10-01"), LastDay: ptr("2026-10-23"),
+		User: userReturnDTO{Return: ptr("-2"), Series: octoberSeries(map[int]string{15: "-1.25", 20: "-0.75", 23: "-2"})},
 		Benchmarks: []benchmarkDTO{
 			{
 				ID: "sp500", Name: "S&P 500", Fund: "iShares Core S&P 500 UCITS ETF USD (Acc)", Ticker: "CSPX.L",
 				QuoteCurrency: "USD", Status: "available", Return: ptr("2.6"), Difference: ptr("-4.6"),
+				Series: octoberSeries(map[int]string{15: "1.4", 22: "5.3", 23: "2.6"}),
 			},
 			{
 				ID: "wig20tr", Name: "WIG20TR", Fund: "Beta ETF WIG20TR Portfelowy FIZ", Ticker: "ETFBW20TR.WA",
 				QuoteCurrency: "PLN", Status: "available", Return: ptr("12.5"), Difference: ptr("-14.5"),
+				Series: octoberSeries(map[int]string{22: "12.5"}),
 			},
 			noFullPeriod("mwig40tr", "mWIG40TR", "Beta ETF mWIG40TR Portfelowy FIZ", "ETFBM40TR.WA", "PLN"),
 			noFullPeriod("world", "World equities", "iShares Core MSCI World UCITS ETF USD (Acc)", "IWDA.L", "USD"),
@@ -151,7 +162,7 @@ func TestAllBenchmarks_ValueHistoryNotAvailable_ReturnsTheWarnings(t *testing.T)
 	require.Equal(t, http.StatusOK, status)
 	assert.JSONEq(t, `{
 		"period": "1Y", "currency": "PLN", "available": false, "warnings": ["No Exchange Rate for USD. Refresh the prices."],
-		"baseDay": null, "lastDay": null, "user": {"return": null}, "benchmarks": []
+		"baseDay": null, "lastDay": null, "user": {"return": null, "series": []}, "benchmarks": []
 	}`, body)
 }
 
@@ -162,7 +173,8 @@ func TestAllBenchmarks_NoAccounts_NotAvailable(t *testing.T) {
 	got := srv.allBenchmarks(t, "All")
 
 	assert.Equal(t, allBenchmarksResponse{
-		Period: "All", Currency: "PLN", Warnings: got.Warnings, Benchmarks: []benchmarkDTO{},
+		Period: "All", Currency: "PLN", Warnings: got.Warnings, User: userReturnDTO{Series: []seriesPointDTO{}},
+		Benchmarks: []benchmarkDTO{},
 	}, got)
 	assert.NotNil(t, got.Warnings, "the list is empty, not null")
 }
