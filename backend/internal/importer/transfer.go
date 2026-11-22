@@ -9,7 +9,6 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
-	"github.com/jrojowski/profit-tracker/backend/internal/xtb"
 )
 
 // transferWindow is the largest time difference between the two sides of one Transfer, inclusive.
@@ -26,7 +25,7 @@ type Warning struct {
 	XTBID string
 	Time  time.Time
 	// Direction is the direction of the Transfer.
-	Direction xtb.TransferDirection
+	Direction TransferDirection
 	// Amount has the sign of the export.
 	Amount decimal.Decimal
 }
@@ -37,17 +36,13 @@ type Warning struct {
 // the other sides in time order and then in XTB ID order, so the result does not depend on the file order.
 // A nil account is a new Account, so all stored Accounts are other Accounts.
 // The warnings are in the same order. The result is empty, not nil, if there are no warnings.
-func (s *Service) transferWarnings(ctx context.Context, account *store.Account, ops []xtb.CashOperation) ([]Warning, error) {
-	var transfers []xtb.CashOperation
-	for _, op := range ops {
-		if op.Transfer != "" {
-			transfers = append(transfers, op)
-		}
-	}
+func (s *Service) transferWarnings(ctx context.Context, account *store.Account, transfers []transfer) ([]Warning, error) {
 	if len(transfers) == 0 {
 		return []Warning{}, nil
 	}
-	slices.SortFunc(transfers, func(a, b xtb.CashOperation) int {
+	// The sort must not change the slice of the export.
+	transfers = slices.Clone(transfers)
+	slices.SortFunc(transfers, func(a, b transfer) int {
 		return cmp.Or(a.Time.Compare(b.Time), cmp.Compare(a.ID, b.ID))
 	})
 
@@ -68,7 +63,7 @@ func (s *Service) transferWarnings(ctx context.Context, account *store.Account, 
 			continue
 		}
 		warnings = append(warnings, Warning{
-			Kind: WarningTransferWithoutOtherSide, XTBID: op.ID, Time: op.Time, Direction: op.Transfer, Amount: op.Amount,
+			Kind: WarningTransferWithoutOtherSide, XTBID: op.ID, Time: op.Time, Direction: op.Direction, Amount: op.Amount,
 		})
 	}
 	return warnings, nil
@@ -76,7 +71,7 @@ func (s *Service) transferWarnings(ctx context.Context, account *store.Account, 
 
 // otherSide returns the index of the first Transfer in others that is not used and is the other side of op,
 // or -1 if there is none.
-func otherSide(op xtb.CashOperation, others []store.Transfer, used []bool) int {
+func otherSide(op transfer, others []store.Transfer, used []bool) int {
 	for i, other := range others {
 		if used[i] || !other.Amount.Equal(op.Amount.Neg()) {
 			continue

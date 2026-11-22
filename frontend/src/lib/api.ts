@@ -6,12 +6,15 @@ export const accountTypes = ["regular", "IKE", "IKZE"] as const
 
 export type AccountType = (typeof accountTypes)[number]
 
+export type Provider = "xtb" | "kraken"
+
 export type Account = {
   id: number
   accountNumber: string
   name: string
   type: AccountType
   currency: string
+  provider: Provider
 }
 
 export type NewAccount = {
