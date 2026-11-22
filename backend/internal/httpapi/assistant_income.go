@@ -11,6 +11,7 @@ import (
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
+	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
 // incomeParameters is the JSON Schema of the arguments of get_income_and_fees.
@@ -18,7 +19,7 @@ const incomeParameters = `{
   "type": "object",
   "properties": {
     "accountId": {"type": "integer", "description": "The ID of the Account. Omit it for all Accounts."},
-    "instrument": {"type": "string", "description": "The broker ticker of the Instrument, for example \"NVDA.US\". Omit it for all Instruments. Interest is not tied to an Instrument, so the result leaves it out."},
+    "instrument": {"type": "string", "description": "The ticker or the asset code of the Instrument, for example \"NVDA.US\" or \"BTC\". Omit it for all Instruments. Interest is not tied to an Instrument, so the result leaves it out."},
     "from": {"type": "string", "description": "The first day of the period, as YYYY-MM-DD. The day is included. Omit it for no first day."},
     "to": {"type": "string", "description": "The last day of the period, as YYYY-MM-DD. The day is included. Omit it for no last day."}
   },
@@ -49,6 +50,11 @@ type incomeSums struct {
 	// NetInterest is nil when the Instrument filter leaves interest out. See incomeResult.LeftOut.
 	NetInterest *string `json:"netInterest"`
 	Fees        string  `json:"fees"`
+	// Rewards and FeeSum exist only for an Account at the Average Cost (Kraken), and for its currency in the totals.
+	// FeeSum is the sum of the fees of the crypto purchases. It is a part of the cost of the Holdings, not of Fees.
+	// Rewards is null if a Reward has no known value.
+	Rewards averageCostAmount `json:"rewards,omitzero"`
+	FeeSum  averageCostAmount `json:"feeSum,omitzero"`
 }
 
 // incomeAccountResult is the part of the get_income_and_fees result for one Account. Its currency is the Account currency.
@@ -82,7 +88,10 @@ func (a *api) incomeFunction() assistant.Function {
 				"optionally of one Instrument and of a period (first day and last day, both included, in Polish time). " +
 				"The result has one sum per currency. " +
 				"With an Instrument, the result has only the amounts that the broker ties to that Instrument. " +
-				"The net interest is not tied to an Instrument, so the result leaves it out (leftOut tells this).",
+				"The net interest is not tied to an Instrument, so the result leaves it out (leftOut tells this). " +
+				"For a Kraken Account and its currency, the result also has the Rewards and feeSum. " +
+				"feeSum is the sum of the fees of the crypto purchases. It is a part of the cost of the Holdings, not of the fees. " +
+				"The Rewards are null if a Reward has no known value.",
 			Parameters: json.RawMessage(incomeParameters),
 		},
 		Run: a.runIncome,
@@ -118,15 +127,20 @@ func (a *api) runIncome(ctx context.Context, arguments json.RawMessage) (any, er
 		result.LeftOut = []string{leftOutInterest, leftOutFees}
 	}
 	totals := map[string]ledger.Income{}
+	cryptoTotals := map[string]ledger.RewardsAndFees{}
 	for _, acc := range accounts {
-		l, err := a.store.Ledger(ctx, acc.ID)
+		l, err := a.incomeLedger(ctx, acc)
 		if err != nil {
 			return nil, err
 		}
 		income := ledger.SumIncome(l.CashOperations, filter)
-		result.Accounts = append(result.Accounts, incomeAccountResult{
-			AccountID: acc.ID, AccountName: acc.Name, incomeSums: incomeSumsOf(acc.Currency, income, filter.Ticker != ""),
-		})
+		sums := incomeSumsOf(acc.Currency, income, filter.Ticker != "")
+		if usesAverageCost(acc) {
+			crypto := ledger.SumRewardsAndFees(l, filter)
+			setRewardsAndFees(&sums, crypto)
+			cryptoTotals[acc.Currency] = addRewardsAndFees(cryptoTotals, acc.Currency, crypto)
+		}
+		result.Accounts = append(result.Accounts, incomeAccountResult{AccountID: acc.ID, AccountName: acc.Name, incomeSums: sums})
 		sum, ok := totals[acc.Currency]
 		if !ok {
 			sum = ledger.Income{NetDividends: decimal.Zero, NetInterest: decimal.Zero, Fees: decimal.Zero}
@@ -143,9 +157,53 @@ func (a *api) runIncome(ctx context.Context, arguments json.RawMessage) (any, er
 	}
 	slices.Sort(currencies)
 	for _, currency := range currencies {
-		result.Totals = append(result.Totals, incomeSumsOf(currency, totals[currency], filter.Ticker != ""))
+		sums := incomeSumsOf(currency, totals[currency], filter.Ticker != "")
+		if crypto, ok := cryptoTotals[currency]; ok {
+			setRewardsAndFees(&sums, crypto)
+		}
+		result.Totals = append(result.Totals, sums)
 	}
 	return result, nil
+}
+
+// incomeLedger returns the Ledger of the Account for get_income_and_fees. An Account at the Average Cost also
+// needs the closes and the Quote Currencies, because the value of a Reward comes from them (ADR 0009).
+func (a *api) incomeLedger(ctx context.Context, acc store.Account) (ledger.Ledger, error) {
+	if !usesAverageCost(acc) {
+		return a.store.Ledger(ctx, acc.ID)
+	}
+	in, err := a.readHeroInput(ctx, acc)
+	if err != nil {
+		return ledger.Ledger{}, err
+	}
+	return in.ledger, nil
+}
+
+// addRewardsAndFees returns the sums of the currency in totals plus sum. A Rewards part with no known value
+// makes the total Rewards not known.
+func addRewardsAndFees(totals map[string]ledger.RewardsAndFees, currency string, sum ledger.RewardsAndFees) ledger.RewardsAndFees {
+	total, ok := totals[currency]
+	if !ok {
+		return sum
+	}
+	total.FeeSum = total.FeeSum.Add(sum.FeeSum)
+	if !sum.Rewards.Valid {
+		total.Rewards = decimal.NullDecimal{}
+	}
+	if total.Rewards.Valid {
+		total.Rewards.Decimal = total.Rewards.Decimal.Add(sum.Rewards.Decimal)
+	}
+	return total
+}
+
+// setRewardsAndFees sets the Rewards and the sum of the fees of the sums, rounded to 2 decimal places.
+func setRewardsAndFees(sums *incomeSums, crypto ledger.RewardsAndFees) {
+	var rewards *string
+	if crypto.Rewards.Valid {
+		rewards = new(formatRoundedAmount(crypto.Rewards.Decimal))
+	}
+	sums.Rewards = averageCostAmountOf(rewards)
+	sums.FeeSum = averageCostAmountOf(new(formatRoundedAmount(crypto.FeeSum)))
 }
 
 // incomeSumsOf returns the sums as decimal text. If interestLeftOut is true, the net interest is nil.
