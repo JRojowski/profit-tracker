@@ -40,6 +40,9 @@ const (
 	// StatusNoFullPeriod tells that the Benchmark has no close or no Exchange Rate on or before the base day,
 	// or on or before the last day. The tool does not shorten the period for one Benchmark.
 	StatusNoFullPeriod Status = "noFullPeriod"
+	// StatusSourceFailure tells that the last refresh of the closes of the Benchmark failed. It wins over the
+	// other statuses, because the stored closes can be incomplete.
+	StatusSourceFailure Status = "sourceFailure"
 )
 
 // Input is the data of one comparison.
@@ -54,6 +57,8 @@ type Input struct {
 	Closes map[string][]Close
 	// Rates are the Exchange Rates of each currency, in date order, by currency.
 	Rates map[string][]Rate
+	// Failed has the identifier of each Benchmark whose last refresh of the closes failed.
+	Failed map[string]bool
 }
 
 // Result is the comparison of one Benchmark.
@@ -72,12 +77,18 @@ type Result struct {
 // The value of a Benchmark on a day, in the currency of the comparison, is the close × the rate of the Quote
 // Currency / the rate of the comparison currency. The rate of PLN is 1. A day with no close uses the last earlier
 // close. A day with no Exchange Rate uses the last earlier rate, as the Value History does. A rate of 0 or less is
-// not valid. The Benchmark Return is the value on the last day / the value on the base day − 1.
+// not valid. A Benchmark whose last refresh failed has the status StatusSourceFailure and no return.
+// The Benchmark Return is the value on the last day / the value on the base day − 1.
 func Compare(in Input) []Result {
 	list := List()
 	results := make([]Result, 0, len(list))
 	for _, b := range list {
 		r := Result{Benchmark: b, Status: StatusNoFullPeriod}
+		if in.Failed[b.ID] {
+			r.Status = StatusSourceFailure
+			results = append(results, r)
+			continue
+		}
 		if ret, ok := benchmarkReturn(in, b); ok {
 			r.Status, r.Return, r.Difference = StatusAvailable, ret, in.UserReturn.Sub(ret)
 		}
