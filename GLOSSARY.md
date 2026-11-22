@@ -89,7 +89,7 @@ The sale amount of a closed part of a Lot minus the cost of that part, in the Ac
 _Avoid_: P/L, gain, return
 
 **Unrealized Profit**:
-The current value of the open part of a Lot minus the cost of that part, in the Account currency.
+The current value of the open part of a Lot minus the cost of that part, in the Account currency. On an Account with no Lots, it is the current value of a Holding minus its cost.
 _Avoid_: Paper profit, open P/L
 
 **Total Result**:
