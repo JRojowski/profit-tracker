@@ -11,6 +11,7 @@ export const paths = {
   holdings: (id: number) => `/accounts/${id}/holdings`,
   closedPositions: (id: number) => `/accounts/${id}/closed-positions`,
   benchmarks: (id: number) => `/accounts/${id}/benchmarks`,
+  allBenchmarks: "/accounts/all/benchmarks",
   ikze: (id: number) => `/accounts/${id}/ikze`,
   import: "/import",
   imports: "/imports",
@@ -28,17 +29,27 @@ export type ViewTarget =
 
 // switchViewPath gives the URL that opens when the user changes the view. The same page type opens when the new
 // view has it, otherwise the overview opens. The query string is dropped, because filters and the Instrument
-// Overview name data of the old view.
-export function switchViewPath(pathname: string, target: ViewTarget): string {
-  if (target.kind === "all") return paths.allAccounts
-  const { id, type } = target.account
+// Overview name data of the old view. The Benchmarks page keeps the period of the query string.
+export function switchViewPath(
+  pathname: string,
+  target: ViewTarget,
+  search = ""
+): string {
   const parts = pathname.replace(/\/+$/, "").split("/")
+  const period = new URLSearchParams(search).get("period")
+  const query = period === null ? "" : `?${new URLSearchParams({ period })}`
+  const onBenchmarks =
+    parts[1] === "accounts" && parts[3] === "benchmarks" && parts.length === 4
+  if (target.kind === "all") {
+    return onBenchmarks ? `${paths.allBenchmarks}${query}` : paths.allAccounts
+  }
+  const { id, type } = target.account
+  if (onBenchmarks) return `${paths.benchmarks(id)}${query}`
   const onAccountPage =
     parts[1] === "accounts" && parseAccountId(parts[2]) !== null
   const page = onAccountPage ? parts[3] : undefined
   if (page === "holdings") return paths.holdings(id)
   if (page === "closed-positions") return paths.closedPositions(id)
-  if (page === "benchmarks") return paths.benchmarks(id)
   if (page === "ikze" && type === "IKZE") return paths.ikze(id)
   return paths.account(id)
 }

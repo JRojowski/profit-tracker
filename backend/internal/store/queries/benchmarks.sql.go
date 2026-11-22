@@ -86,6 +86,45 @@ func (q *Queries) BenchmarkPrices(ctx context.Context) ([]BenchmarkPricesRow, er
 	return items, nil
 }
 
+const benchmarkRefreshFailures = `-- name: BenchmarkRefreshFailures :many
+SELECT benchmark_id, reason, failed_at
+FROM benchmark_refresh_failures
+ORDER BY benchmark_id
+`
+
+func (q *Queries) BenchmarkRefreshFailures(ctx context.Context) ([]BenchmarkRefreshFailure, error) {
+	rows, err := q.db.QueryContext(ctx, benchmarkRefreshFailures)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BenchmarkRefreshFailure
+	for rows.Next() {
+		var i BenchmarkRefreshFailure
+		if err := rows.Scan(&i.BenchmarkID, &i.Reason, &i.FailedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deleteBenchmarkRefreshFailure = `-- name: DeleteBenchmarkRefreshFailure :exec
+DELETE FROM benchmark_refresh_failures
+WHERE benchmark_id = ?1
+`
+
+func (q *Queries) DeleteBenchmarkRefreshFailure(ctx context.Context, benchmarkID string) error {
+	_, err := q.db.ExecContext(ctx, deleteBenchmarkRefreshFailure, benchmarkID)
+	return err
+}
+
 const firstCashOperationTime = `-- name: FirstCashOperationTime :one
 SELECT CAST(COALESCE(MIN(time), '') AS TEXT) AS first_time
 FROM cash_operations
@@ -153,5 +192,24 @@ func (q *Queries) UpsertBenchmarkPriceRange(ctx context.Context, arg UpsertBench
 		arg.LastDay,
 		arg.FetchedAt,
 	)
+	return err
+}
+
+const upsertBenchmarkRefreshFailure = `-- name: UpsertBenchmarkRefreshFailure :exec
+INSERT INTO benchmark_refresh_failures (benchmark_id, reason, failed_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT (benchmark_id) DO UPDATE
+SET reason    = excluded.reason,
+    failed_at = excluded.failed_at
+`
+
+type UpsertBenchmarkRefreshFailureParams struct {
+	BenchmarkID string
+	Reason      string
+	FailedAt    string
+}
+
+func (q *Queries) UpsertBenchmarkRefreshFailure(ctx context.Context, arg UpsertBenchmarkRefreshFailureParams) error {
+	_, err := q.db.ExecContext(ctx, upsertBenchmarkRefreshFailure, arg.BenchmarkID, arg.Reason, arg.FailedAt)
 	return err
 }
