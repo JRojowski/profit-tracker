@@ -242,9 +242,9 @@ func TestAskAssistant_Instructions_HoldTheRulesTheDateAndTheAccounts(t *testing.
 		"Total Result:", "Holding:", "Unrealized Profit:",
 		// Today in Polish time
 		"Today is 2026-10-23.",
-		// The Accounts: ID, name, type and currency
-		fmt.Sprintf(`- ID %d: "XTB USD", type regular, currency USD`, usdID),
-		fmt.Sprintf(`- ID %d: "XTB IKZE", type IKZE, currency PLN`, ikzeID),
+		// The Accounts: ID, name, Provider, type and currency
+		fmt.Sprintf(`- ID %d: "XTB USD", Provider XTB, type regular, currency USD`, usdID),
+		fmt.Sprintf(`- ID %d: "XTB IKZE", Provider XTB, type IKZE, currency PLN`, ikzeID),
 	} {
 		assert.Contains(t, instructions.Content, want)
 	}

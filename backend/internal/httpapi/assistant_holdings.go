@@ -12,7 +12,7 @@ const holdingsParameters = `{
   "type": "object",
   "properties": {
     "accountId": {"type": "integer", "description": "The ID of the Account. Omit it for all Accounts."},
-    "instrument": {"type": "string", "description": "The broker ticker of the Instrument, for example \"NVDA.US\". Omit it for all Instruments."}
+    "instrument": {"type": "string", "description": "The ticker or the asset code of the Instrument, for example \"NVDA.US\" or \"BTC\". Omit it for all Instruments."}
   },
   "additionalProperties": false
 }`
@@ -50,8 +50,11 @@ type holdingResult struct {
 	// Currency is the currency of Cost, Value and UnrealizedProfit: the Account currency.
 	Currency string `json:"currency"`
 	// Cost is nil if a Reward of the Holding has no known value (ADR 0009).
-	Cost     *string `json:"cost"`
-	HasValue bool    `json:"hasValue"`
+	Cost *string `json:"cost"`
+	// AverageCost is the cost of one unit, rounded to 2 decimal places. Only a Holding on an Account at the
+	// Average Cost (Kraken) has it. It is null if Cost is null.
+	AverageCost averageCostAmount `json:"averageCost,omitzero"`
+	HasValue    bool              `json:"hasValue"`
 	// Price is the close price in QuoteCurrency.
 	Price                   *string `json:"price"`
 	QuoteCurrency           *string `json:"quoteCurrency"`
@@ -69,7 +72,8 @@ func (a *api) holdingsFunction() assistant.Function {
 			Name: "get_holdings",
 			Description: "Returns the Holdings of one Account or of all Accounts, optionally of one Instrument. " +
 				"For each Holding: the volume, the cost, the price, the value and the Unrealized Profit. " +
-				"A Holding with no known value has hasValue false and the reason.",
+				"A Holding with no known value has hasValue false and the reason. " +
+				"A Holding on a Kraken Account also has the Average Cost. It is null if the cost is not known.",
 			Parameters: json.RawMessage(holdingsParameters),
 		},
 		Run: a.runHoldings,
@@ -106,12 +110,16 @@ func (a *api) runHoldings(ctx context.Context, arguments json.RawMessage) (any, 
 			}
 			// The Price Warnings are not a part of the result.
 			row := view.holdingRow(h, nil)
-			part.Holdings = append(part.Holdings, holdingResult{
+			holding := holdingResult{
 				Ticker: row.Ticker, Name: row.Name, Volume: row.Volume, Currency: acc.Currency, Cost: roundAmountPointer(row.Cost),
 				HasValue: row.Value != nil, Price: row.Price, QuoteCurrency: row.QuoteCurrency, PriceDate: row.PriceDate,
 				Value: roundAmountPointer(row.Value), UnrealizedProfit: roundAmountPointer(row.UnrealizedProfit), UnrealizedProfitPercent: row.UnrealizedProfitPercent,
 				NoValueReason: row.Note,
-			})
+			}
+			if usesAverageCost(acc) {
+				holding.AverageCost = averageCostAmountOf(roundAmountPointer(row.AverageCost))
+			}
+			part.Holdings = append(part.Holdings, holding)
 		}
 		result.Accounts = append(result.Accounts, part)
 	}

@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
+	"github.com/jrojowski/profit-tracker/backend/internal/importer"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
@@ -22,6 +24,34 @@ func (a *api) assistantFunctions() []assistant.Function {
 		a.closedPositionsFunction(),
 		a.incomeFunction(),
 	}
+}
+
+// averageCostAmount is an amount of a function result that only an Account at the Average Cost has (ADR 0009):
+// the Average Cost, the Rewards and the sum of the fees. Use it with the omitzero option. The zero value is not set,
+// and JSON leaves it out, so the result of an XTB Account does not change. A set amount with no known value is JSON null.
+type averageCostAmount struct {
+	set    bool
+	amount *string
+}
+
+// averageCostAmountOf returns the set amount. amount is nil if the amount has no known value.
+func averageCostAmountOf(amount *string) averageCostAmount {
+	return averageCostAmount{set: true, amount: amount}
+}
+
+// IsZero tells that the amount is not set. The omitzero option calls it.
+func (a averageCostAmount) IsZero() bool {
+	return !a.set
+}
+
+// MarshalJSON writes the amount as a JSON string, or null if it has no known value.
+func (a averageCostAmount) MarshalJSON() ([]byte, error) {
+	return json.Marshal(a.amount)
+}
+
+// usesAverageCost tells that the Account keeps its Holdings at the Average Cost, not in Lots (ADR 0009).
+func usesAverageCost(acc store.Account) bool {
+	return acc.Provider == importer.ProviderKraken
 }
 
 // allAccountsScope is the scope of a result for all Accounts.
@@ -61,7 +91,7 @@ func (a *api) unknownAccount(ctx context.Context, id int64) error {
 		id, strings.Join(known, ", "))
 }
 
-// assistantInstrument returns the broker ticker of the Instrument. The match ignores the case of the letters.
+// assistantInstrument returns the ticker of the Instrument. The match ignores the case of the letters.
 // An unknown Instrument is an ArgumentError.
 func (a *api) assistantInstrument(ctx context.Context, ticker string) (string, error) {
 	instruments, err := a.store.Instruments(ctx)
@@ -76,6 +106,6 @@ func (a *api) assistantInstrument(ctx context.Context, ticker string) (string, e
 		known = append(known, t)
 	}
 	slices.Sort(known)
-	return "", assistant.Argumentf("unknown Instrument %q. Use the broker ticker. The known Instruments are: %s.",
+	return "", assistant.Argumentf("unknown Instrument %q. Use the ticker or the asset code. The known Instruments are: %s.",
 		ticker, strings.Join(known, ", "))
 }

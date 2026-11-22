@@ -343,9 +343,9 @@ func Calculate(l Ledger) (State, error) {
 		return State{}, err
 	}
 	s.ClosedPositions = closedPositions
-	crypto := averageCostHoldings(l)
-	s.Rewards, s.FeeSum = crypto.rewards, crypto.feeSum
-	s.Holdings = holdings(l, crypto.holdings, lots)
+	crypto := SumRewardsAndFees(l, IncomeFilter{})
+	s.Rewards, s.FeeSum = crypto.Rewards, crypto.FeeSum
+	s.Holdings = holdings(l, averageCostHoldings(l), lots)
 	s.OpenLots = openLots(l, lots)
 	s.RealizedProfit = SumRealizedProfit(closedPositions)
 	s.UnrealizedProfit, s.Value = decimal.Zero, s.Cash
@@ -607,52 +607,69 @@ func holdings(l Ledger, byTicker map[string]*Holding, states map[string]*lotStat
 	return result
 }
 
-// averageCost is the result of averageCostHoldings.
-type averageCost struct {
-	// holdings are the Holdings at the Average Cost, by ticker.
-	holdings map[string]*Holding
-	// rewards is the sum of the values of the Rewards. It is not valid if a Reward has no known value.
-	rewards decimal.NullDecimal
-	// feeSum is the sum of the crypto fees × the purchase prices.
-	feeSum decimal.Decimal
-}
-
 // averageCostHoldings returns the Holdings of the crypto purchases and the Rewards, by ticker (ADR 0009).
 // Each purchase adds its volume after the fee and its full EUR amount, so the cost includes the fee.
 // Each Reward adds its volume and its value on its day. The Average Cost is Holding.AverageCost:
 // the sum of the costs divided by the sum of the volumes.
-func averageCostHoldings(l Ledger) averageCost {
-	result := averageCost{
-		holdings: map[string]*Holding{}, rewards: decimal.NewNullDecimal(decimal.Zero), feeSum: decimal.Zero,
-	}
+func averageCostHoldings(l Ledger) map[string]*Holding {
+	holdings := map[string]*Holding{}
 	for _, op := range l.CashOperations {
 		if op.Type != TypeCryptoPurchase && op.Type != TypeReward {
 			continue
 		}
-		h, ok := result.holdings[op.Ticker]
+		h, ok := holdings[op.Ticker]
 		if !ok {
 			// The asset code is also the name of a crypto Instrument.
 			h = &Holding{Instrument: Instrument{Ticker: op.Ticker, Name: op.Ticker}, Volume: decimal.Zero, Cost: decimal.Zero}
-			result.holdings[op.Ticker] = h
+			holdings[op.Ticker] = h
 		}
 		h.Volume = h.Volume.Add(op.Volume)
 		if op.Type == TypeCryptoPurchase {
 			h.Cost = h.Cost.Sub(op.Amount)
-			result.feeSum = result.feeSum.Add(l.feeValue(op))
 			continue
 		}
 		value, ok := l.RewardValue(op)
 		if !ok {
 			h.UnknownCost = true
-			result.rewards = decimal.NullDecimal{}
 			continue
 		}
 		h.Cost = h.Cost.Add(value)
-		if result.rewards.Valid {
-			result.rewards.Decimal = result.rewards.Decimal.Add(value)
+	}
+	return holdings
+}
+
+// RewardsAndFees are the sums of an Account at the Average Cost (ADR 0009), in the Account currency.
+type RewardsAndFees struct {
+	// Rewards is the sum of the values of the Rewards on their days. It is not valid if a Reward has no known value.
+	Rewards decimal.NullDecimal
+	// FeeSum is the sum of the fees of the crypto purchases.
+	FeeSum decimal.Decimal
+}
+
+// SumRewardsAndFees returns the Rewards and the sum of the fees of the Cash Operations that the filter counts.
+// It is the one rule for these sums: Calculate uses it with the zero filter for the totals of an Account.
+// ADR 0009, rules 2 and 3.
+func SumRewardsAndFees(l Ledger, f IncomeFilter) RewardsAndFees {
+	sum := RewardsAndFees{Rewards: decimal.NewNullDecimal(decimal.Zero), FeeSum: decimal.Zero}
+	for _, op := range l.CashOperations {
+		if !f.matches(op) {
+			continue
+		}
+		switch op.Type {
+		case TypeCryptoPurchase:
+			sum.FeeSum = sum.FeeSum.Add(l.feeValue(op))
+		case TypeReward:
+			value, ok := l.rewardValue(op)
+			if !ok {
+				sum.Rewards = decimal.NullDecimal{}
+				continue
+			}
+			if sum.Rewards.Valid {
+				sum.Rewards.Decimal = sum.Rewards.Decimal.Add(value)
+			}
 		}
 	}
-	return result
+	return sum
 }
 
 // feeValue returns the fee of the crypto purchase in the Account currency. ADR 0009, rule 2.

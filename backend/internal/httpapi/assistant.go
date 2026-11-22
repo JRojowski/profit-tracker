@@ -13,6 +13,7 @@ import (
 
 	"github.com/jrojowski/profit-tracker/backend/internal/assistant"
 	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
+	"github.com/jrojowski/profit-tracker/backend/internal/importer"
 	"github.com/jrojowski/profit-tracker/backend/internal/store"
 )
 
@@ -214,7 +215,7 @@ func (q questionRequest) validate() error {
 }
 
 // assistantInstructions returns the instructions for the model, with the date of today in Polish time and
-// the Accounts. The Accounts have no broker account number.
+// the Accounts. The Accounts have no account number.
 func (a *api) assistantInstructions(ctx context.Context, page *assistant.Page) (string, error) {
 	accounts, err := a.store.Accounts(ctx)
 	if err != nil {
@@ -222,9 +223,22 @@ func (a *api) assistantInstructions(ctx context.Context, page *assistant.Page) (
 	}
 	list := make([]assistant.Account, 0, len(accounts))
 	for _, acc := range accounts {
-		list = append(list, assistant.Account{ID: acc.ID, Name: acc.Name, Type: acc.Type, Currency: acc.Currency})
+		list = append(list, assistantAccountOf(acc))
 	}
 	return assistant.Instructions(exchange.StartOfDayInWarsaw(a.now()), list, page), nil
+}
+
+// providerNames are the names of the Providers for the user, by the Provider value of an Account.
+var providerNames = map[string]string{importer.ProviderXTB: "XTB", importer.ProviderKraken: "Kraken"}
+
+// assistantAccountOf returns the Account for the instructions. It has no account number.
+// An unknown Provider value keeps its text.
+func assistantAccountOf(acc store.Account) assistant.Account {
+	provider, ok := providerNames[acc.Provider]
+	if !ok {
+		provider = acc.Provider
+	}
+	return assistant.Account{ID: acc.ID, Name: acc.Name, Provider: provider, Type: acc.Type, Currency: acc.Currency}
 }
 
 // assistantPage resolves the page context of the request. It returns nil if the request has no page context.
@@ -243,7 +257,7 @@ func (a *api) assistantPage(ctx context.Context, c *pageContext) (*assistant.Pag
 		if err != nil {
 			return nil, "", err
 		}
-		page.Account = &assistant.Account{ID: acc.ID, Name: acc.Name, Type: acc.Type, Currency: acc.Currency}
+		page.Account = new(assistantAccountOf(acc))
 	}
 	if c.Instrument != nil && *c.Instrument != "" {
 		ticker, err := a.assistantInstrument(ctx, *c.Instrument)

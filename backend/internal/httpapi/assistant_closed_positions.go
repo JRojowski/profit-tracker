@@ -30,7 +30,7 @@ const closedPositionsParameters = `{
   "type": "object",
   "properties": {
     "accountId": {"type": "integer", "description": "The ID of the Account. Omit it for all Accounts."},
-    "instrument": {"type": "string", "description": "The broker ticker of the Instrument, for example \"NVDA.US\". Omit it for all Instruments."},
+    "instrument": {"type": "string", "description": "The ticker or the asset code of the Instrument, for example \"NVDA.US\" or \"BTC\". Omit it for all Instruments."},
     "from": {"type": "string", "description": "The first day of the period, as YYYY-MM-DD. The day is included. The day of a Closed Position is its close day in Polish time."},
     "to": {"type": "string", "description": "The last day of the period, as YYYY-MM-DD. The day is included."},
     "order": {"type": "string", "enum": ["profit_asc", "profit_desc"], "description": "profit_desc gives the best Closed Positions first, profit_asc gives the worst first. Omit it for the newest first."},

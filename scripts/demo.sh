@@ -32,8 +32,13 @@ done
 curl -fsS "$base/api/health" >/dev/null || { echo "server did not start, see $work/server.log" >&2; exit 1; }
 
 import_file() {
-	local name="$1" type="$2" currency="$3" file="$4" preview id
-	preview="$(curl -fsS -F "file=@$file" "$base/api/imports")"
+	local name="$1" type="$2" currency="$3" file="$4"
+	import_preview "$name" "$type" "$currency" "$(curl -fsS -F "file=@$file" "$base/api/imports")"
+}
+
+# import_preview confirms the Import of the preview $4 into a new Account with the name, type and currency $1, $2 and $3.
+import_preview() {
+	local name="$1" type="$2" currency="$3" preview="$4" id
 	id="$(printf '%s' "$preview" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)"
 	[ -n "$id" ] || { echo "no import id for $name: $preview" >&2; exit 1; }
 	if ! printf '%s' "$preview" | grep -q '"conflicts":\(null\|\[\]\)'; then
@@ -46,9 +51,23 @@ import_file() {
 	echo "imported $name"
 }
 
+# field prints the text value of the JSON field $1 in the JSON text $2.
+field() {
+	printf '%s' "$2" | grep -o "\"$1\":\"[^\"]*\"" | head -1 | cut -d'"' -f4
+}
+
+# import_kraken imports the Kraken export with the Account values that the preview proposes.
+import_kraken() {
+	local file="$1" preview
+	preview="$(curl -fsS -F "file=@$file" "$base/api/imports")"
+	[ "$(field provider "$preview")" = kraken ] || { echo "not a Kraken preview: $preview" >&2; exit 1; }
+	import_preview "$(field suggestedName "$preview")" "$(field suggestedType "$preview")" "$(field suggestedCurrency "$preview")" "$preview"
+}
+
 import_file "XTB USD" regular USD "$(ls "$exports"/USD_56100001_*.xlsx)"
 import_file "XTB PLN" regular PLN "$(ls "$exports"/PLN_56100002_*.xlsx)"
 import_file "XTB IKZE" IKZE PLN "$(ls "$exports"/PLN_56100003_*.xlsx)"
+import_kraken "$(ls "$exports"/kraken_spot_ledgers_*.csv)"
 
 # The refresh can fail for the ticker ZZQX.US. That is expected.
 curl -sS -X POST "$base/api/prices/refresh" >/dev/null || echo "price refresh failed (expected for ZZQX.US)"
