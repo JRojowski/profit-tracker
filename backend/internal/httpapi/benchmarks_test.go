@@ -95,6 +95,14 @@ func noFullPeriod(id, name, fund, ticker, quoteCurrency string) benchmarkDTO {
 	}
 }
 
+// sourceFailure is a Benchmark of the list with no Benchmark Return, because the last refresh of its closes failed.
+func sourceFailure(id, name, fund, ticker, quoteCurrency string) benchmarkDTO {
+	return benchmarkDTO{
+		ID: id, Name: name, Fund: fund, Ticker: ticker, QuoteCurrency: quoteCurrency, Status: "sourceFailure",
+		Series: []seriesPointDTO{},
+	}
+}
+
 // plnInterestExport is a PLN Account with a Deposit of 1000.00 on 2026-10-01 and 10.00 of interest on 2026-10-20.
 // The clock is at 2026-10-23, so the Time-Weighted Return of each period is 1010 / 1000 − 1 = 1 %.
 // Each period starts at the first day, 2026-10-01, and ends today, 2026-10-23.
@@ -418,12 +426,57 @@ func TestBenchmarks_OneBenchmarkFails_OthersAreAvailable(t *testing.T) {
 
 	got := srv.benchmarks(t, id, "All")
 
-	assert.Equal(t, "noFullPeriod", benchmarkByID(t, got, "sp500").Status)
+	assert.Equal(t, sourceFailure("sp500", "S&P 500", "iShares Core S&P 500 UCITS ETF USD (Acc)", "CSPX.L", "USD"),
+		benchmarkByID(t, got, "sp500"))
 	assert.Equal(t, ptr("12.5"), benchmarkByID(t, got, "wig20tr").Return)
+	assert.Equal(t, "noFullPeriod", benchmarkByID(t, got, "mwig40tr").Status, "no failure, only no closes")
+}
+
+// TestBenchmarks_BenchmarkFailsWithInstrument_InstrumentClosesAreStored checks that the failure of one Benchmark
+// does not stop the refresh of the Instruments or of the other Benchmarks. The response is a success.
+func TestBenchmarks_BenchmarkFailsWithInstrument_InstrumentClosesAreStored(t *testing.T) {
+	t.Parallel()
+	provider := historyProvider(t)
+	provider.failHistory("CSPX.L", errors.New("connection reset"))
+	provider.setHistory(t, "ETFBW20TR.WA", "PLN", "2026-10-01=104", "2026-10-22=117")
+	srv := startServerWithPrices(t, provider)
+	id := srv.importAccount(t, historyExport(), "XTB USD")
+	srv.refreshHistory(t)
+
+	got := srv.benchmarks(t, id, "All")
+
+	assert.Equal(t, "sourceFailure", benchmarkByID(t, got, "sp500").Status)
+	assert.Equal(t, benchmarkRequests("2026-09-24", "2026-10-22"), provider.adjustedRequests(), "each Benchmark is asked")
+	assert.Equal(t, []string{"2026-10-19=101", "2026-10-20=103", "2026-10-21=105", "2026-10-22=104"}, srv.storedCloses(t, "ABC.US"))
+	assert.Equal(t, []string{"2026-10-20=50.5", "2026-10-21=51", "2026-10-22=52"}, srv.storedCloses(t, "XYZ.US"))
+}
+
+// TestBenchmarks_FailureWinsOverNoFullPeriod_AndLaterSuccessMakesItAvailable checks that a failure of the last
+// refresh wins, and that the next successful refresh clears it. WIG20TR: 117 / 104 − 1 = 12.5 %.
+func TestBenchmarks_FailureWinsOverNoFullPeriod_AndLaterSuccessMakesItAvailable(t *testing.T) {
+	t.Parallel()
+	provider := newFakeProvider()
+	provider.failHistory("ETFBW20TR.WA", errors.New("connection reset"))
+	srv := startServerWithPrices(t, provider)
+	id := srv.importAccount(t, plnInterestExport(), "XTB PLN")
+	srv.refreshHistory(t)
+	failed := benchmarkByID(t, srv.benchmarks(t, id, "All"), "wig20tr")
+
+	provider.failHistory("ETFBW20TR.WA", nil)
+	provider.setHistory(t, "ETFBW20TR.WA", "PLN", "2026-10-01=104", "2026-10-22=117")
+	srv.refreshHistory(t)
+	recovered := benchmarkByID(t, srv.benchmarks(t, id, "All"), "wig20tr")
+
+	assert.Equal(t, "sourceFailure", failed.Status)
+	assert.Nil(t, failed.Return)
+	assert.Nil(t, failed.Difference)
+	assert.Equal(t, "available", recovered.Status)
+	assert.Equal(t, ptr("12.5"), recovered.Return)
+	assert.Equal(t, ptr("-11.5"), recovered.Difference)
 }
 
 // TestBenchmarks_CloseInOtherCurrency_NotStoredAndAskedAgain checks a price source that gives GBP for a USD
-// Benchmark. The tool does not guess, so the Benchmark has no return. It does not record the days, so the next
+// Benchmark. The tool does not guess, so the Benchmark has the status "sourceFailure" and no return. It does not record the days, so the next
 // refresh asks for them again.
 func TestBenchmarks_CloseInOtherCurrency_NotStoredAndAskedAgain(t *testing.T) {
 	t.Parallel()
@@ -436,8 +489,9 @@ func TestBenchmarks_CloseInOtherCurrency_NotStoredAndAskedAgain(t *testing.T) {
 	got := benchmarkByID(t, srv.benchmarks(t, id, "All"), "sp500")
 	srv.refreshHistory(t)
 
-	assert.Equal(t, "noFullPeriod", got.Status)
+	assert.Equal(t, "sourceFailure", got.Status)
 	assert.Nil(t, got.Return)
+	assert.Nil(t, got.Difference)
 	var cspx []historyRequest
 	for _, r := range provider.adjustedRequests() {
 		if r.Ticker == "CSPX.L" {

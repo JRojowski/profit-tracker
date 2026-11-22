@@ -34,6 +34,12 @@ type BenchmarkPriceRange struct {
 	FetchedAt   string
 }
 
+type BenchmarkRefreshFailure struct {
+	BenchmarkID string
+	Reason      string
+	FailedAt    string
+}
+
 type CashOperation struct {
 	ID           int64
 	AccountID    int64

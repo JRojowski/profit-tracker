@@ -848,3 +848,17 @@ export async function fetchAccountBenchmarks(
   )
   return readJSON<AccountBenchmarks>(response)
 }
+
+// fetchAllAccountsBenchmarks gets the Benchmark Returns of all Accounts in PLN for one period.
+export async function fetchAllAccountsBenchmarks(
+  period: HistoryPeriod,
+  signal?: AbortSignal
+): Promise<Benchmarks> {
+  const response = await fetch(
+    `/api/all-accounts/benchmarks?period=${period}`,
+    {
+      signal,
+    }
+  )
+  return readJSON<Benchmarks>(response)
+}

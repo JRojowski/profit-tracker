@@ -24,6 +24,22 @@ SELECT benchmark_id, date, close, currency
 FROM benchmark_prices
 ORDER BY benchmark_id, date;
 
+-- name: UpsertBenchmarkRefreshFailure :exec
+INSERT INTO benchmark_refresh_failures (benchmark_id, reason, failed_at)
+VALUES (sqlc.arg(benchmark_id), sqlc.arg(reason), sqlc.arg(failed_at))
+ON CONFLICT (benchmark_id) DO UPDATE
+SET reason    = excluded.reason,
+    failed_at = excluded.failed_at;
+
+-- name: DeleteBenchmarkRefreshFailure :exec
+DELETE FROM benchmark_refresh_failures
+WHERE benchmark_id = sqlc.arg(benchmark_id);
+
+-- name: BenchmarkRefreshFailures :many
+SELECT benchmark_id, reason, failed_at
+FROM benchmark_refresh_failures
+ORDER BY benchmark_id;
+
 -- name: FirstCashOperationTime :one
 -- The time of the first Cash Operation of all Accounts, as RFC 3339 text in UTC, or an empty text if there is none.
 -- The text has no fraction of a second, so the text order is the time order.

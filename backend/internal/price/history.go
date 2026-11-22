@@ -226,7 +226,8 @@ func (s *Service) refreshHistory(ctx context.Context, plan []historyRequest, res
 
 // refreshBenchmark gets and stores the closes of one history request of a Benchmark. It tells if the request
 // gave closes that the tool stored. A failure of the Benchmark does not stop the refresh, and the result does not
-// report it, because a Benchmark is not an Instrument.
+// report it, because a Benchmark is not an Instrument. The store keeps the failure, so that the comparison shows the
+// status "sourceFailure". A successful request clears the failure.
 // ADR 0008: the closes are split-adjusted. The tool does not store closes in a currency that is not the Quote
 // Currency of the Benchmark, and it does not record their days. Thus the next refresh asks for them again.
 func (s *Service) refreshBenchmark(ctx context.Context, req historyRequest, result *Result) (bool, error) {
@@ -236,10 +237,11 @@ func (s *Service) refreshBenchmark(ctx context.Context, req historyRequest, resu
 		if stop {
 			return false, err
 		}
-		return false, nil
+		return false, s.store.SaveBenchmarkRefreshFailure(ctx, req.benchmarkID, err.Error(), s.now())
 	}
 	if len(h.Closes) > 0 && h.Currency != req.quoteCurrency {
-		return false, nil
+		reason := (&CurrencyError{Got: h.Currency, Want: req.quoteCurrency}).Error()
+		return false, s.store.SaveBenchmarkRefreshFailure(ctx, req.benchmarkID, reason, s.now())
 	}
 	now := s.now()
 	prices := make([]store.BenchmarkPrice, 0, len(h.Closes))

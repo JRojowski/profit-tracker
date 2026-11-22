@@ -11,7 +11,12 @@ const ike: ViewTarget = { kind: "account", account: { id: 3, type: "IKE" } }
 const ikze: ViewTarget = { kind: "account", account: { id: 2, type: "IKZE" } }
 
 // Each case is one change of the view: the page that is open, the new view and the page that must open.
-const cases: { from: string; to: ViewTarget; expected: string }[] = [
+const cases: {
+  from: string
+  search?: string
+  to: ViewTarget
+  expected: string
+}[] = [
   { from: "/accounts/1", to: all, expected: "/accounts/all" },
   { from: "/accounts/1/holdings", to: all, expected: "/accounts/all" },
   { from: "/accounts/1/closed-positions", to: all, expected: "/accounts/all" },
@@ -36,7 +41,42 @@ const cases: { from: string; to: ViewTarget; expected: string }[] = [
     to: standard,
     expected: "/accounts/1/benchmarks",
   },
-  { from: "/accounts/1/benchmarks", to: all, expected: "/accounts/all" },
+  {
+    from: "/accounts/1/benchmarks",
+    to: all,
+    expected: "/accounts/all/benchmarks",
+  },
+  {
+    from: "/accounts/all/benchmarks",
+    to: standard,
+    expected: "/accounts/1/benchmarks",
+  },
+  {
+    from: "/accounts/all/benchmarks",
+    to: ikze,
+    expected: "/accounts/2/benchmarks",
+  },
+  // The period of the query string stays on the Benchmarks page.
+  {
+    from: "/accounts/1/benchmarks",
+    search: "?period=1Y",
+    to: all,
+    expected: "/accounts/all/benchmarks?period=1Y",
+  },
+  {
+    from: "/accounts/all/benchmarks",
+    search: "?period=3M",
+    to: ikze,
+    expected: "/accounts/2/benchmarks?period=3M",
+  },
+  // Other pages drop the query string.
+  {
+    from: "/accounts/1/closed-positions",
+    search: "?period=1Y",
+    to: all,
+    expected: "/accounts/all",
+  },
+  { from: "/accounts/all", to: all, expected: "/accounts/all" },
   // The IKZE page exists only in an IKZE Account.
   { from: "/accounts/2/ikze", to: standard, expected: "/accounts/1" },
   { from: "/accounts/1/", to: ikze, expected: "/accounts/2" },
@@ -49,8 +89,8 @@ const cases: { from: string; to: ViewTarget; expected: string }[] = [
   { from: "/no-such-page", to: ikze, expected: "/accounts/2" },
 ]
 
-for (const { from, to, expected } of cases) {
-  test(`view switch from ${from} to ${JSON.stringify(to)}`, () => {
-    expect(switchViewPath(from, to)).toBe(expected)
+for (const { from, search, to, expected } of cases) {
+  test(`view switch from ${from}${search ?? ""} to ${JSON.stringify(to)}`, () => {
+    expect(switchViewPath(from, to, search)).toBe(expected)
   })
 }
