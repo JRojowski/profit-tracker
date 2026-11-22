@@ -1,5 +1,5 @@
 // Package kraken reads the ledger export (CSV) of the Provider Kraken.
-// It returns the Cash Operations of the spot wallet: the EUR deposits and the crypto purchases.
+// It returns the Cash Operations of the spot wallet: the EUR deposits, the crypto purchases and the Rewards.
 // Each other entry is an unsupported entry. One unsupported entry stops the read.
 package kraken
 
@@ -63,7 +63,7 @@ const (
 	ReasonUnknownEntry    = "unknown entry"
 	ReasonSale            = "sale"
 	ReasonWithdrawal      = "withdrawal"
-	ReasonFee             = "fee that is not in the crypto asset"
+	ReasonFee             = "fee that the tool does not support"
 	ReasonDepositNotEUR   = "deposit that is not EUR"
 	ReasonWallet          = "wallet that is not spot / main"
 	ReasonIncompleteTrade = "trade that is not one EUR row and one crypto row"
@@ -73,6 +73,8 @@ const (
 const (
 	KindDeposit  = "deposit"
 	KindPurchase = "purchase"
+	// KindReward is a Reward: an amount of a crypto asset that Kraken pays for a balance, for example Auto Earn.
+	KindReward = "reward"
 )
 
 // Export is the content of a Kraken ledger export.
@@ -81,23 +83,25 @@ type Export struct {
 	CashOperations []CashOperation
 }
 
-// CashOperation is one deposit or one crypto purchase.
+// CashOperation is one deposit, one crypto purchase or one Reward.
 type CashOperation struct {
 	// RefID is the Kraken reference ID. It is the Provider ID of the Cash Operation.
 	RefID string
 	// Kind is KindDeposit or KindPurchase.
 	Kind string
 	Time time.Time
-	// Amount is in EUR. A purchase has a negative amount.
+	// Amount is in EUR. A purchase has a negative amount. A Reward has the amount zero.
 	Amount decimal.Decimal
-	// Asset is the asset code of the crypto asset of a purchase, for example "BTC". It is empty for a deposit.
+	// Asset is the asset code of the crypto asset of a purchase or a Reward, for example "BTC". It is empty for a deposit.
 	Asset string
 	// Volume is the crypto amount after the fee. It is zero for a deposit.
 	Volume decimal.Decimal
-	// Price is the EUR amount divided by the crypto amount before the fee. It is zero for a deposit.
+	// Price is the EUR amount divided by the crypto amount before the fee. It is zero for a deposit and a Reward.
 	Price decimal.Decimal
-	// Fee is the fee in the crypto asset. It is zero for a deposit.
+	// Fee is the fee of a purchase in FeeCurrency. It is zero for a deposit.
 	Fee decimal.Decimal
+	// FeeCurrency is the currency of the fee of a purchase: EUR or the crypto asset. It is empty for a deposit and a Reward.
+	FeeCurrency string
 }
 
 // Entry is one row of the ledger that the tool does not support.
@@ -260,6 +264,8 @@ func cashOperation(rows []row) (CashOperation, []Entry) {
 		return CashOperation{}, entries(rows, ReasonWithdrawal)
 	case first.typ == "trade" && first.subtype == "tradespot":
 		return purchase(rows)
+	case len(rows) == 1 && first.typ == "earn" && first.subtype == "reward":
+		return reward(first)
 	}
 	return CashOperation{}, entries(rows, ReasonUnknownEntry)
 }
@@ -278,7 +284,9 @@ func deposit(r row) (CashOperation, []Entry) {
 }
 
 // purchase returns the crypto purchase of the two rows of a spot trade: a EUR row with a negative amount
-// and a crypto row with a positive amount. The fee must be in the crypto asset.
+// and a crypto row with a positive amount. ADR 0009: the fee is on one of the two rows, in the asset of that row.
+// A fee in EUR decreases the cash and adds to the cost. A fee in the crypto asset decreases the volume.
+// The price is the EUR amount divided by the crypto amount, both before the fee.
 func purchase(rows []row) (CashOperation, []Entry) {
 	if len(rows) != 2 {
 		return CashOperation{}, entries(rows, ReasonIncompleteTrade)
@@ -299,21 +307,49 @@ func purchase(rows []row) (CashOperation, []Entry) {
 		return CashOperation{}, entries(rows, ReasonSale)
 	case !eur.amount.IsNegative() || !crypto.amount.IsPositive():
 		return CashOperation{}, entries(rows, ReasonIncompleteTrade)
-	case !eur.fee.IsZero():
+	case !eur.fee.IsZero() && !crypto.fee.IsZero():
+		return CashOperation{}, entries(rows, ReasonFee)
+	case !eur.fee.IsZero() && eur.feeCurrency != "" && eur.feeCurrency != Currency:
 		return CashOperation{}, entries(rows, ReasonFee)
 	case !crypto.fee.IsZero() && crypto.feeCurrency != "" && crypto.feeCurrency != crypto.asset:
 		return CashOperation{}, entries(rows, ReasonFee)
 	}
-	return CashOperation{
-		RefID:  crypto.refID,
-		Kind:   KindPurchase,
-		Time:   crypto.time,
-		Amount: eur.amount,
-		Asset:  crypto.asset,
-		Volume: crypto.amount.Sub(crypto.fee),
+	op := CashOperation{
+		RefID: crypto.refID,
+		Kind:  KindPurchase,
+		Time:  crypto.time,
+		Asset: crypto.asset,
 		// The division keeps decimal.DivisionPrecision (16) decimal places.
 		Price: eur.amount.Neg().Div(crypto.amount),
-		Fee:   crypto.fee,
+	}
+	if !eur.fee.IsZero() {
+		op.Amount, op.Volume = eur.amount.Sub(eur.fee), crypto.amount
+		op.Fee, op.FeeCurrency = eur.fee, Currency
+		return op, nil
+	}
+	op.Amount, op.Volume = eur.amount, crypto.amount.Sub(crypto.fee)
+	op.Fee, op.FeeCurrency = crypto.fee, crypto.asset
+	return op, nil
+}
+
+// reward returns the Reward of the row: a positive amount of a crypto asset. The fee must be in that asset.
+// The volume is the amount after the fee, like the volume of a purchase.
+func reward(r row) (CashOperation, []Entry) {
+	switch {
+	case r.asset == Currency || !r.amount.IsPositive():
+		return CashOperation{}, []Entry{r.entry(ReasonUnknownEntry)}
+	case !r.fee.IsZero() && r.feeCurrency != "" && r.feeCurrency != r.asset:
+		return CashOperation{}, []Entry{r.entry(ReasonFee)}
+	}
+	return CashOperation{
+		RefID:  r.refID,
+		Kind:   KindReward,
+		Time:   r.time,
+		Amount: decimal.Zero,
+		Asset:  r.asset,
+		Volume: r.amount.Sub(r.fee),
+		Price:  decimal.Zero,
+		Fee:    r.fee,
 	}, nil
 }
 

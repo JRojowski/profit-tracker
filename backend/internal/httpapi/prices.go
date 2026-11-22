@@ -220,14 +220,16 @@ func (v accountView) holdingRow(h ledger.Holding, warnings priceWarnings) holdin
 	inst := v.instruments[ticker]
 	inst.Ticker = ticker
 	row := holdingResponse{
-		Ticker: ticker,
-		Name:   h.Instrument.Name,
-		Volume: h.Volume.String(),
-		Cost:   formatAmount(h.Cost),
-		// The frontend rounds for display. ADR 0001: the tool rounds only for display.
-		AverageCost:         h.AverageCost().String(),
+		Ticker:              ticker,
+		Name:                h.Instrument.Name,
+		Volume:              h.Volume.String(),
 		priceSourceResponse: toPriceSourceResponse(inst),
 		PriceWarnings:       warnings.of(ticker),
+	}
+	if !h.UnknownCost {
+		row.Cost = new(formatAmount(h.Cost))
+		// The frontend rounds for display. ADR 0001: the tool rounds only for display.
+		row.AverageCost = new(h.AverageCost().String())
 	}
 	if !h.HasValue() {
 		row.Note = new(v.noValueNote(h))
@@ -258,6 +260,8 @@ func (v accountView) noValueNote(h ledger.Holding) string {
 		return fmt.Sprintf("The Instrument is quoted in %s. The tool has no Exchange Rate between %s and %s.", qc, qc, account)
 	case ledger.ReasonNoExchangeRate:
 		return fmt.Sprintf("There is no Exchange Rate for %s. Refresh the prices.", h.ExchangeRateCurrency)
+	case ledger.ReasonNoRewardClose:
+		return "A Reward has no close of its day or an earlier day. Refresh the prices to get the price history."
 	default:
 		return "There is no price for the Instrument. Refresh the prices."
 	}

@@ -10,8 +10,11 @@ The Kraken export has no Lots and no position IDs. Thus the tool cannot use the 
 
 ## The rule
 
-1. Each purchase adds its quantity and its cost to the Holding. The quantity is the crypto amount after the fee. The cost is the full EUR amount that the user paid.
-2. A fee in the crypto asset is part of the cost. The Total Result of a Kraken Account has no separate fee part. The tool shows the sum of the fees, in EUR on the day of each purchase, as information.
+1. Each purchase adds its quantity and its cost to the Holding. The cost is the full EUR amount that the user paid. Kraken takes the fee of a purchase in the crypto asset or in EUR. The fee rate is the same in both currencies.
+   - A fee in the crypto asset decreases the quantity. The quantity is the crypto amount after the fee. The cost is the EUR amount.
+   - A fee in EUR decreases the EUR cash. The quantity is the full crypto amount. The cost is the EUR amount plus the EUR fee.
+   - A purchase with a fee on both rows, or with a fee in a different currency, stops the Import.
+2. The fee is part of the cost. The Total Result of a Kraken Account has no separate fee part. The tool shows the sum of the fees in EUR as information. A fee in EUR adds its amount. A fee in the crypto asset adds the fee times the purchase price.
 3. A Reward adds its quantity to the Holding. Its cost is its value in EUR on the day that the user got it. The tool uses the `<ASSET>-EUR` close of that day.
 4. The value of each Reward on its day is the Rewards part of the Total Result. A later change of the price of these units is part of the Unrealized Profit.
 5. The Average Cost is the sum of the costs divided by the sum of the quantities.
@@ -22,7 +25,7 @@ The Kraken export has no Lots and no position IDs. Thus the tool cannot use the 
 - **FIFO.** It gives a cost for each sold unit. We rejected it because the user does not need this detail, and the Polish tax does not use it.
 - **One synthetic Lot for each purchase.** It reuses the Lot views of XTB. We rejected it because the Lots are not real, and the user cannot close one of them.
 - **A Reward with a cost of zero.** We rejected it because the Total Result then counts the value of the Reward two times: one time as a Reward and one time as Unrealized Profit.
-- **A separate fee part in the Total Result.** We rejected it because the fee is in the crypto asset and decreases the quantity. Its value in EUR is only an estimate on the day of the purchase.
+- **A separate fee part in the Total Result.** We rejected it because a fee in the crypto asset decreases the quantity. Its value in EUR is only an estimate on the day of the purchase. One rule for both fee currencies is more simple.
 
 ## Consequences
 

@@ -360,10 +360,18 @@ function HoldingSection({
       <InsetSurface as="dl" className="flex flex-col divide-y px-3 text-sm">
         <DetailRow label="Volume">{formatVolume(holding.volume)}</DetailRow>
         <DetailRow label="Average cost">
-          {formatAmount(holding.averageCost, currency)}
+          {holding.averageCost !== null ? (
+            formatAmount(holding.averageCost, currency)
+          ) : (
+            <NoValue />
+          )}
         </DetailRow>
         <DetailRow label="Cost">
-          {formatAmount(holding.cost, currency)}
+          {holding.cost !== null ? (
+            formatAmount(holding.cost, currency)
+          ) : (
+            <NoValue />
+          )}
         </DetailRow>
         <DetailRow label="Price">
           {holding.price !== null && holding.priceDate !== null ? (

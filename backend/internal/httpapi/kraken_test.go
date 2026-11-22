@@ -240,19 +240,29 @@ func TestKrakenImport_UnsupportedEntry_StopsTheImportAndListsTheEntry(t *testing
 			want:    []unsupportedEntry{{Type: "withdrawal", Subtype: "", Asset: "BTC", Time: atText, Reason: "withdrawal"}},
 		},
 		{
-			name:    "fee in EUR on a purchase",
+			name:    "fee on both rows of a purchase",
 			entries: purchase(func(eur, _ *krakentest.Entry) { eur.Fee = "0.40" }),
 			want: []unsupportedEntry{
-				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that is not in the crypto asset"},
-				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that is not in the crypto asset"},
+				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that the tool does not support"},
+				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that the tool does not support"},
 			},
 		},
 		{
-			name:    "fee currency that is not the crypto asset",
+			name: "fee on the EUR row in a third currency",
+			entries: purchase(func(eur, crypto *krakentest.Entry) {
+				eur.Fee, eur.FeeCurrency, crypto.Fee = "0.40", "USD", "0"
+			}),
+			want: []unsupportedEntry{
+				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that the tool does not support"},
+				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that the tool does not support"},
+			},
+		},
+		{
+			name:    "fee on the crypto row that is not in the crypto asset",
 			entries: purchase(func(_, crypto *krakentest.Entry) { crypto.FeeCurrency = "EUR" }),
 			want: []unsupportedEntry{
-				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that is not in the crypto asset"},
-				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that is not in the crypto asset"},
+				{Type: "trade", Subtype: "tradespot", Asset: "EUR", Time: atText, Reason: "fee that the tool does not support"},
+				{Type: "trade", Subtype: "tradespot", Asset: "BTC", Time: atText, Reason: "fee that the tool does not support"},
 			},
 		},
 		{
@@ -266,8 +276,13 @@ func TestKrakenImport_UnsupportedEntry_StopsTheImportAndListsTheEntry(t *testing
 			want:    []unsupportedEntry{{Type: "deposit", Subtype: "", Asset: "EUR", Time: atText, Reason: "wallet that is not spot / main"}},
 		},
 		{
-			name:    "reward",
-			entries: []krakentest.Entry{{RefID: "ERN-0099", Time: at, Type: "earn", Subtype: "reward", Asset: "BTC", Amount: "0.00000110"}},
+			name:    "reward in EUR",
+			entries: []krakentest.Entry{{RefID: "ERN-0099", Time: at, Type: "earn", Subtype: "reward", Asset: "EUR", Amount: "0.10"}},
+			want:    []unsupportedEntry{{Type: "earn", Subtype: "reward", Asset: "EUR", Time: atText, Reason: "unknown entry"}},
+		},
+		{
+			name:    "reward with a negative amount",
+			entries: []krakentest.Entry{{RefID: "ERN-0099", Time: at, Type: "earn", Subtype: "reward", Asset: "BTC", Amount: "-0.00000110"}},
 			want:    []unsupportedEntry{{Type: "earn", Subtype: "reward", Asset: "BTC", Time: atText, Reason: "unknown entry"}},
 		},
 		{

@@ -253,6 +253,12 @@ export type AccountSummary = {
   netDividends: string
   netInterest: string
   fees: string
+  // rewards is the sum of the values of the Rewards on their days, a part of totalResult (ADR 0009).
+  // It is null when a Reward has no stored close on or before its day. It is "0.00" for an Account with no Rewards.
+  rewards: string | null
+  // feeSum is the sum of the crypto fees in the Account currency: for each crypto purchase, the fee × the purchase
+  // price. It is information only and not a part of totalResult. It is "0.00" for an XTB Account.
+  feeSum: string
   // priceDate is the oldest price date of the priced Holdings, as YYYY-MM-DD. It is null when no Holding has a price.
   priceDate: string | null
   // stalePrices tells that a Holding with a known Quote Currency has no price, or that its price is not from today.
@@ -282,8 +288,10 @@ export type Holding = {
   ticker: string
   name: string
   volume: string
-  cost: string
-  averageCost: string
+  // cost and averageCost are null when a Reward of the Holding has no stored close on or before its day (ADR 0009).
+  // Then the Holding has no value, and note tells the user why.
+  cost: string | null
+  averageCost: string | null
   price: string | null
   // priceDate is YYYY-MM-DD.
   priceDate: string | null

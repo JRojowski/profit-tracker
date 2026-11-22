@@ -208,6 +208,7 @@ func (s *Store) DailyPrices(ctx context.Context, ticker string) ([]Price, error)
 
 // FirstFillTimes returns the time of the first Fill of each Instrument on any Account, by broker ticker.
 // The map has each Instrument that an Account ever held, also an Instrument that the Account sold.
+// On an Account with no Lots, a crypto purchase or a Reward counts as a Fill (ADR 0009).
 func (s *Store) FirstFillTimes(ctx context.Context) (map[string]time.Time, error) {
 	rows, err := queries.New(s.db).FirstFillTimes(ctx)
 	if err != nil {

@@ -1,14 +1,20 @@
 import { LoadedView } from "@/components/loaded-view"
 import { OverviewHero } from "@/components/overview-hero"
-import { TotalResultWaterfall } from "@/components/total-result-waterfall"
+import {
+  TotalResultWaterfall,
+  type WaterfallPart,
+} from "@/components/total-result-waterfall"
 import { ValueHistoryCard } from "@/components/value-history-card"
 import { useLoad } from "@/hooks/use-load"
 import {
   fetchAccountAllocation,
   fetchAccountSummary,
   fetchAccountValueHistory,
+  type AccountSummary,
+  type Provider,
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
+import { formatAmount } from "@/lib/format"
 import { useAccount } from "@/pages/account-layout"
 
 // AccountOverviewPage shows the values and the results of one Account, in the Account currency.
@@ -44,16 +50,33 @@ export function AccountOverviewPage() {
           <TotalResultWaterfall
             currency={data.currency}
             totalResult={data.totalResult}
-            parts={[
-              { label: "Realized Profit", amount: data.realizedProfit },
-              { label: "Unrealized Profit", amount: data.unrealizedProfit },
-              { label: "Net dividends", amount: data.netDividends },
-              { label: "Net interest", amount: data.netInterest },
-              { label: "Fees", amount: data.fees },
-            ]}
+            parts={totalResultParts(data, account.provider)}
+            totalNote={
+              account.provider === "kraken"
+                ? `including fees: ${formatAmount(data.feeSum, data.currency)}`
+                : undefined
+            }
           />
         </div>
       )}
     </LoadedView>
   )
+}
+
+// totalResultParts gives the parts of the Total Result of an Account in the order of the bars.
+// An Account with the Provider "kraken" also has the Rewards part (ADR 0009).
+function totalResultParts(
+  summary: AccountSummary,
+  provider: Provider
+): WaterfallPart[] {
+  return [
+    { label: "Realized Profit", amount: summary.realizedProfit },
+    { label: "Unrealized Profit", amount: summary.unrealizedProfit },
+    { label: "Net dividends", amount: summary.netDividends },
+    { label: "Net interest", amount: summary.netInterest },
+    ...(provider === "kraken"
+      ? [{ label: "Rewards", amount: summary.rewards }]
+      : []),
+    { label: "Fees", amount: summary.fees },
+  ]
 }
