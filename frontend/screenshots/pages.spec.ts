@@ -12,6 +12,8 @@ type PageCase = {
   charts: boolean
   // panel tells that the page opens the Instrument Overview panel.
   panel?: boolean
+  // panelEnd scrolls the body of the panel to its end before the screenshot, to show the lists at the bottom.
+  panelEnd?: boolean
   // populatedSet is the data set of the populated state. The default is "populated".
   populatedSet?: DataSet
 }
@@ -99,6 +101,26 @@ const pageCases: PageCase[] = [
     populatedSet: "kraken",
   },
   {
+    // The Instrument Overview of Bitcoin shows the Average Cost, the purchases, the Rewards and the sum of the fees.
+    // It has no Lot section and no Closed Position section.
+    name: "kraken-instrument-overview",
+    url: "/accounts/3/holdings?overview=BTC",
+    empty: null,
+    charts: true,
+    panel: true,
+    populatedSet: "kraken",
+  },
+  {
+    // The end of the Bitcoin panel: the sum of the fees, the purchases with the fee in BTC or EUR, and the Rewards.
+    name: "kraken-instrument-overview-end",
+    url: "/accounts/3/holdings?overview=BTC",
+    empty: null,
+    charts: true,
+    panel: true,
+    panelEnd: true,
+    populatedSet: "kraken",
+  },
+  {
     // A Reward has no stored close. The Rewards part and the Bitcoin Holding have no known value.
     name: "kraken-overview-reward-unknown",
     url: "/accounts/3",
@@ -139,6 +161,12 @@ async function waitForRenderedPage(
   }
   if (pageCase.charts && populated) {
     await expect(page.locator(".recharts-surface").first()).toBeVisible()
+  }
+  if (pageCase.panelEnd && populated) {
+    // The panel body is the element that scrolls. The page itself does not scroll.
+    await page
+      .locator("[data-overview-body]")
+      .evaluate((body) => body.scrollTo(0, body.scrollHeight))
   }
   await page.evaluate(() => document.fonts.ready)
 }
