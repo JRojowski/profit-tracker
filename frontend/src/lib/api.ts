@@ -413,7 +413,26 @@ export type OverviewFill = {
   time: string
   volume: string
   price: string | null
+  // positionId is empty for a crypto purchase, because it has no Lot.
   positionId: string
+  // cost, fee and feeCurrency are set only for a crypto purchase (ADR 0009). They are null for a Fill of a Lot.
+  // cost is the full amount in the Account currency, with a fee in the Account currency.
+  cost: string | null
+  // fee is in feeCurrency: the Account currency (for example "EUR") or the crypto asset (for example "BTC").
+  fee: string | null
+  feeCurrency: string | null
+}
+
+// OverviewReward is one Reward of a crypto Instrument.
+export type OverviewReward = {
+  // xtbId is the ID of the Reward at the Provider, for example the Kraken refid.
+  xtbId: string
+  // time is an RFC 3339 time in UTC.
+  time: string
+  volume: string
+  // value is the value on the day of the Reward in the Account currency (ADR 0009).
+  // It is null when the backend has no stored close on or before that day.
+  value: string | null
 }
 
 // OverviewLot is one open Lot of the Instrument. volume and cost are the open part of the Lot.
@@ -436,13 +455,19 @@ export type InstrumentOverview = NamedPriceSource & {
   fills: OverviewFill[]
   // holding is null when the Account has no open volume of the Instrument.
   holding: Holding | null
-  // openLots is empty exactly when holding is null.
+  // openLots is empty when holding is null. It is always empty for a crypto Instrument, which has no Lots.
+  // For a crypto Instrument, holding.averageCost is the Average Cost.
   openLots: OverviewLot[]
   // realizedProfitSum is the sum of the Realized Profit of the closedPositions, in the Account currency.
   // The backend adds the amounts. It is null exactly when closedPositions is empty.
   realizedProfitSum: string | null
   // closedPositions are in close time order, oldest first.
   closedPositions: ClosedPosition[]
+  // rewards are in ascending time order. It is empty for an Instrument with Lots.
+  rewards: OverviewReward[]
+  // feeSum is the sum of the fees of the crypto purchases in the Account currency. It is information only.
+  // It is null for an Instrument with Lots, and not null for a crypto Instrument.
+  feeSum: string | null
 }
 
 // fetchInstrumentOverview loads the Instrument Overview of one Instrument on one Account.

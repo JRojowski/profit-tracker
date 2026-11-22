@@ -657,7 +657,7 @@ func SumRewardsAndFees(l Ledger, f IncomeFilter) RewardsAndFees {
 		}
 		switch op.Type {
 		case TypeCryptoPurchase:
-			sum.FeeSum = sum.FeeSum.Add(l.feeValue(op))
+			sum.FeeSum = sum.FeeSum.Add(l.FeeValue(op))
 		case TypeReward:
 			value, ok := l.RewardValue(op)
 			if !ok {
@@ -672,9 +672,9 @@ func SumRewardsAndFees(l Ledger, f IncomeFilter) RewardsAndFees {
 	return sum
 }
 
-// feeValue returns the fee of the crypto purchase in the Account currency. ADR 0009, rule 2.
+// FeeValue returns the fee of the crypto purchase in the Account currency. ADR 0009, rule 2.
 // A fee in the Account currency counts as it is. A fee in the crypto asset counts at the purchase price.
-func (l Ledger) feeValue(op CashOperation) decimal.Decimal {
+func (l Ledger) FeeValue(op CashOperation) decimal.Decimal {
 	if op.FeeCurrency == l.Currency {
 		return op.Fee
 	}

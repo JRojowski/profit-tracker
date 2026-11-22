@@ -29,15 +29,19 @@ export function formatAmount(
 }
 
 // formatNumber shows a decimal amount with 2 decimal places and no currency, for example a label on a chart.
+// The option fractionDigits sets another number of decimal places, for example 0 for a large axis label.
 // The conversion to a float is for display only. A value below zero always shows "−" (U+2212).
 export function formatNumber(
   amount: string,
-  { signed = false }: FormatOptions = {}
+  {
+    signed = false,
+    fractionDigits = 2,
+  }: FormatOptions & { fractionDigits?: number } = {}
 ): string {
   return withMinusSign(
     new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
       signDisplay: signed ? "exceptZero" : "auto",
     }).format(Number(amount))
   )

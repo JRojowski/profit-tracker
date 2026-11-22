@@ -171,6 +171,18 @@ export function InstrumentPriceChart({
   const span = last === first ? 86_400_000 * 15 : 0
   const domain: [number, number] = [first - span, last + span]
   const { ticks, step } = monthTicks(domain[0], domain[1], isMobile ? 3 : 5)
+  // A price of 1000 or more, for example of a crypto asset, needs no decimal places on the axis.
+  // Without them the label fits the width of the axis.
+  const axisDigits =
+    Math.max(Math.abs(lowest), Math.abs(highest)) >= 1000 ? 0 : 2
+  // A long label, for example 103,713, gets a wider axis. About 7 px for each character of the 12 px label.
+  const longestLabel = Math.max(
+    ...[lowest - pad, highest + pad].map(
+      (value) =>
+        formatNumber(String(value), { fractionDigits: axisDigits }).length
+    )
+  )
+  const axisWidth = Math.max(isMobile ? 50 : 58, longestLabel * 7 + 8)
 
   return (
     <ChartContainer
@@ -207,8 +219,10 @@ export function InstrumentPriceChart({
           tickCount={5}
           tickLine={false}
           axisLine={false}
-          width={isMobile ? 50 : 58}
-          tickFormatter={(value: number) => formatNumber(String(value))}
+          width={axisWidth}
+          tickFormatter={(value: number) =>
+            formatNumber(String(value), { fractionDigits: axisDigits })
+          }
         />
         <ChartTooltip
           cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.5 }}

@@ -25,7 +25,9 @@ import {
   type ClosedPosition,
   type Holding,
   type InstrumentOverview,
+  type OverviewFill,
   type OverviewLot,
+  type OverviewReward,
   type PriceWarning,
 } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
@@ -44,8 +46,11 @@ import {
 import { cn } from "@/lib/utils"
 import { buildChartModel, type MarkerKind } from "@/lib/overview-markers"
 
-// markerKinds are the kinds of markers that the chart draws.
+// markerKinds are the kinds of markers that the chart draws for an Instrument with Lots.
 const markerKinds: MarkerKind[] = ["buy", "sell"]
+
+// cryptoMarkerKinds are the kinds of markers for a crypto Instrument. It has purchases only, with no sale.
+const cryptoMarkerKinds: MarkerKind[] = ["buy"]
 
 type InstrumentOverviewPanelProps = {
   accountId: number
@@ -141,7 +146,10 @@ export function InstrumentOverviewPanel({
             </Button>
           )}
         </SheetHeader>
-        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-4">
+        <div
+          data-overview-body=""
+          className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-4"
+        >
           {loaded.status === "ok" && loaded.data === null ? (
             <UnknownInstrument ticker={ticker} />
           ) : (
@@ -218,6 +226,7 @@ function PriceSourceLine({
 
 // OverviewBody shows the price chart, the Holding and the open Lots of the Instrument.
 // A fully sold Instrument has no Holding and no open Lots, so it shows the chart and the Closed Positions.
+// A crypto Instrument has no Lots. It shows the Average Cost, the purchases, the Rewards and the sum of the fees.
 function OverviewBody({
   overview,
   currency: accountCurrency,
@@ -243,6 +252,8 @@ function OverviewBody({
     [prices, quoteCurrency, fills, closedPositions, highlight]
   )
   const { currency, mismatch } = model
+  // The backend sends the sum of the fees exactly for a crypto Instrument, which uses the Average Cost (ADR 0009).
+  const crypto = overview.feeSum !== null
   return (
     <>
       <section className="flex flex-col gap-3">
@@ -260,11 +271,16 @@ function OverviewBody({
               <span aria-hidden className="text-chart-7">
                 ▲
               </span>{" "}
-              Buy{" "}
-              <span aria-hidden className="text-chart-8">
-                ◆
-              </span>{" "}
-              Sell
+              Buy
+              {!crypto && (
+                <>
+                  {" "}
+                  <span aria-hidden className="text-chart-8">
+                    ◆
+                  </span>{" "}
+                  Sell
+                </>
+              )}
             </span>
           }
         />
@@ -294,19 +310,44 @@ function OverviewBody({
           <InstrumentPriceChart
             model={model}
             currency={currency}
-            kinds={markerKinds}
+            kinds={crypto ? cryptoMarkerKinds : markerKinds}
           />
         )}
         {model.unplaced > 0 && (
           <p className="text-xs text-muted-foreground">
-            {model.unplaced === 1
-              ? "1 buy or sell operation has no price and no marker."
-              : `${model.unplaced} buy or sell operations have no price and no marker.`}
+            {crypto
+              ? model.unplaced === 1
+                ? "1 purchase has no price and no marker."
+                : `${model.unplaced} purchases have no price and no marker.`
+              : model.unplaced === 1
+                ? "1 buy or sell operation has no price and no marker."
+                : `${model.unplaced} buy or sell operations have no price and no marker.`}
           </p>
         )}
       </section>
       {overview.holding && (
-        <HoldingSection holding={overview.holding} currency={accountCurrency} />
+        <HoldingSection
+          holding={overview.holding}
+          currency={accountCurrency}
+          averageCostLabel={crypto ? "Average Cost" : "Average cost"}
+        />
+      )}
+      {overview.feeSum !== null && (
+        <FeeSumSection sum={overview.feeSum} currency={accountCurrency} />
+      )}
+      {crypto && overview.fills.length > 0 && (
+        <PurchaseList
+          purchases={overview.fills}
+          ticker={overview.ticker}
+          currency={accountCurrency}
+        />
+      )}
+      {crypto && overview.rewards.length > 0 && (
+        <RewardList
+          rewards={overview.rewards}
+          ticker={overview.ticker}
+          currency={accountCurrency}
+        />
       )}
       {overview.openLots.length > 0 && (
         <LotList lots={overview.openLots} currency={accountCurrency} />
@@ -350,16 +391,19 @@ function DetailRow({
 function HoldingSection({
   holding,
   currency,
+  averageCostLabel,
 }: {
   holding: Holding
   currency: string
+  // averageCostLabel is "Average Cost" for a crypto Holding, the glossary term. The XTB panel keeps its label.
+  averageCostLabel: string
 }) {
   return (
     <section className="flex flex-col gap-2">
       <SectionHeading level="h3" title="Holding" />
       <InsetSurface as="dl" className="flex flex-col divide-y px-3 text-sm">
         <DetailRow label="Volume">{formatVolume(holding.volume)}</DetailRow>
-        <DetailRow label="Average cost">
+        <DetailRow label={averageCostLabel}>
           {holding.averageCost !== null ? (
             formatAmount(holding.averageCost, currency)
           ) : (
@@ -447,6 +491,139 @@ function RealizedProfitSection({
             {formatAmount(sum, currency, { signed: true })}
           </span>
         </DetailRow>
+      </InsetSurface>
+    </section>
+  )
+}
+
+// FeeSumSection shows the sum of the fees of the crypto purchases in the Account currency.
+// The fees are already in the cost, so the sum is information only.
+function FeeSumSection({ sum, currency }: { sum: string; currency: string }) {
+  return (
+    <section>
+      <InsetSurface as="dl" className="flex flex-col px-3 text-sm">
+        <DetailRow label="Sum of the fees">
+          <span data-fee-sum="">{formatAmount(sum, currency)}</span>
+        </DetailRow>
+      </InsetSurface>
+    </section>
+  )
+}
+
+// ListHeading is the heading of a list in the panel: the title and the number of items.
+function ListHeading({ title, count }: { title: string; count: number }) {
+  return (
+    <SectionHeading
+      level="h3"
+      title={
+        <>
+          {title} <span className="num text-muted-foreground">{count}</span>
+        </>
+      }
+    />
+  )
+}
+
+// purchaseFee gives the text of the fee of a crypto purchase in its currency: the Account currency or the crypto asset.
+// A fee in the crypto asset shows with up to 8 decimal places, like a volume, and with the asset code.
+function purchaseFee(fill: OverviewFill, currency: string): string | null {
+  if (fill.fee === null || fill.feeCurrency === null) return null
+  if (fill.feeCurrency === currency) return formatAmount(fill.fee, currency)
+  return `${formatVolume(fill.fee)} ${fill.feeCurrency}`
+}
+
+// PurchaseList lists the crypto purchases, newest first, with the time, the volume, the price, the cost and the fee.
+// The cost is the full amount in the Account currency and includes a fee in that currency.
+function PurchaseList({
+  purchases,
+  ticker,
+  currency,
+}: {
+  purchases: OverviewFill[]
+  ticker: string
+  currency: string
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <ListHeading title="Purchases" count={purchases.length} />
+      <InsetSurface as="ul" className="flex flex-col divide-y text-sm">
+        {purchases.toReversed().map((purchase) => {
+          const fee = purchaseFee(purchase, currency)
+          return (
+            <li
+              key={purchase.xtbId}
+              className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-3 py-2"
+            >
+              <span className="num">
+                {formatPolishDate(purchase.time)}{" "}
+                <span className="text-muted-foreground">
+                  {formatPolishTime(purchase.time)}
+                </span>
+              </span>
+              <span className="text-right num">
+                {purchase.cost === null ? (
+                  <NoValue />
+                ) : (
+                  formatAmount(purchase.cost, currency)
+                )}
+              </span>
+              {/* On a narrow screen the fee goes to its own line, so no figure is cut. */}
+              <span className="col-span-2 flex flex-wrap justify-between gap-x-3 text-xs text-muted-foreground">
+                <span className="num">
+                  {formatVolume(purchase.volume)} {ticker} ×{" "}
+                  {purchase.price === null ? "—" : formatPrice(purchase.price)}
+                </span>
+                <span className="ml-auto num">Fee {fee ?? "—"}</span>
+              </span>
+            </li>
+          )
+        })}
+      </InsetSurface>
+    </section>
+  )
+}
+
+// RewardList lists the Rewards, newest first, with the time, the volume and the value on the day of the Reward.
+// A Reward with no stored close of its day has no known value and shows a dash.
+function RewardList({
+  rewards,
+  ticker,
+  currency,
+}: {
+  rewards: OverviewReward[]
+  ticker: string
+  currency: string
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <ListHeading title="Rewards" count={rewards.length} />
+      <InsetSurface as="ul" className="flex flex-col divide-y text-sm">
+        {rewards.toReversed().map((reward) => (
+          <li
+            key={reward.xtbId}
+            className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 px-3 py-2"
+          >
+            <span className="num">
+              {formatPolishDate(reward.time)}{" "}
+              <span className="text-muted-foreground">
+                {formatPolishTime(reward.time)}
+              </span>
+            </span>
+            <span className="text-right num">
+              {reward.value === null ? (
+                <NoValue />
+              ) : (
+                formatAmount(reward.value, currency)
+              )}
+            </span>
+            <span className="num text-xs text-muted-foreground">
+              {formatVolume(reward.volume)} {ticker}
+            </span>
+            <span className="text-right text-xs text-muted-foreground">
+              Value
+            </span>
+          </li>
+        ))}
       </InsetSurface>
     </section>
   )

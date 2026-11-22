@@ -20,6 +20,7 @@ import type {
   ImportPreview,
   ImportSummary,
   InstrumentOverview,
+  OverviewFill,
   PriceWarning,
   UnsupportedEntry,
   ValueHistoryPoint,
@@ -1000,6 +1001,9 @@ const betaOverview: InstrumentOverview = {
       volume: "10",
       price: "100.00",
       positionId: "94101",
+      cost: null,
+      fee: null,
+      feeCurrency: null,
     },
     {
       xtbId: "4102",
@@ -1007,6 +1011,9 @@ const betaOverview: InstrumentOverview = {
       volume: "30",
       price: "122.50",
       positionId: "94102",
+      cost: null,
+      fee: null,
+      feeCurrency: null,
     },
     {
       xtbId: "4103",
@@ -1014,6 +1021,9 @@ const betaOverview: InstrumentOverview = {
       volume: "10",
       price: "134.00",
       positionId: "94103",
+      cost: null,
+      fee: null,
+      feeCurrency: null,
     },
   ],
   holding: beta,
@@ -1031,6 +1041,9 @@ const betaOverview: InstrumentOverview = {
           volume: "30",
           price: "122.50",
           positionId: "94102",
+          cost: null,
+          fee: null,
+          feeCurrency: null,
         },
       ],
     },
@@ -1047,12 +1060,122 @@ const betaOverview: InstrumentOverview = {
           volume: "10",
           price: "134.00",
           positionId: "94103",
+          cost: null,
+          fee: null,
+          feeCurrency: null,
         },
       ],
     },
   ],
   realizedProfitSum: "900.00",
   closedPositions: [mainClosed[1]],
+  rewards: [],
+  feeSum: null,
+}
+
+// bitcoinPrices builds the daily closes of BTC-EUR for the 150 days before the fixed date. Crypto has weekend closes.
+function bitcoinPrices(): { date: string; close: string }[] {
+  const series: { date: string; close: string }[] = []
+  const end = Date.UTC(2026, 5, 15)
+  const days = 150
+  for (let back = days; back >= 0; back--) {
+    const time = end - back * 86_400_000
+    const step = days - back
+    const close = 52000 + step * 260 + 2600 * Math.sin(step / 11)
+    series.push({
+      date: new Date(time).toISOString().slice(0, 10),
+      close: close.toFixed(2),
+    })
+  }
+  series[series.length - 1].close = bitcoin.price ?? "0"
+  return series
+}
+
+// cryptoPurchase builds one Kraken purchase as a Fill. A crypto purchase has no Lot, so positionId is empty.
+function cryptoPurchase(
+  xtbId: string,
+  time: string,
+  volume: string,
+  price: string,
+  cost: string,
+  fee: string,
+  feeCurrency: string
+): OverviewFill {
+  return { xtbId, time, volume, price, positionId: "", cost, fee, feeCurrency }
+}
+
+// bitcoinOverview is the Instrument Overview of Bitcoin on the Kraken Account.
+// Two purchases have the fee in BTC and one has the fee in EUR. The fees add to the feeSum of the summary.
+// The purchases cost 1999.74 EUR, and the Rewards have 36.52 EUR of value at the closes of their days.
+const bitcoinOverview: InstrumentOverview = {
+  ticker: "BTC",
+  name: "BTC",
+  priceTicker: "BTC-EUR",
+  priceTickerManual: false,
+  quoteCurrency: "EUR",
+  quoteCurrencyManual: false,
+  priceConfirmed: false,
+  prices: { currency: "EUR", series: bitcoinPrices() },
+  fills: [
+    cryptoPurchase(
+      "TQ7GA2-K1",
+      "2026-01-20T09:14:00Z",
+      "0.01294663",
+      "53960.00",
+      "700.00",
+      "0.00002594",
+      "BTC"
+    ),
+    cryptoPurchase(
+      "TQ7GA2-K2",
+      "2026-03-10T10:02:00Z",
+      "0.01024529",
+      "63190.00",
+      "650.00",
+      "2.60",
+      "EUR"
+    ),
+    cryptoPurchase(
+      "TQ7GA2-K3",
+      "2026-05-05T08:47:00Z",
+      "0.00814823",
+      "79130.00",
+      "649.74",
+      "0.00006281",
+      "BTC"
+    ),
+  ],
+  holding: bitcoin,
+  openLots: [],
+  realizedProfitSum: null,
+  closedPositions: [],
+  rewards: [
+    {
+      xtbId: "ST3RW1-R1",
+      time: "2026-03-02T01:05:00Z",
+      volume: "0.00012000",
+      value: "7.39",
+    },
+    {
+      xtbId: "ST3RW1-R2",
+      time: "2026-04-06T01:05:00Z",
+      volume: "0.00012000",
+      value: "9.00",
+    },
+    {
+      xtbId: "ST3RW1-R3",
+      time: "2026-05-04T01:05:00Z",
+      volume: "0.00011990",
+      value: "9.48",
+    },
+    {
+      xtbId: "ST3RW1-R4",
+      time: "2026-06-08T01:05:00Z",
+      volume: "0.00011800",
+      value: "10.65",
+    },
+  ],
+  feeSum: krakenSummary.feeSum,
 }
 
 // ApiFixture is the set of answers of the fake backend for one data set.
@@ -1116,6 +1239,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       },
       holdings: { ...populated.holdings, 3: [bitcoin] },
       closedPositions: { ...populated.closedPositions, 3: [] },
+      overview: { ...populated.overview, "3:BTC": bitcoinOverview },
     }
   }
   if (
