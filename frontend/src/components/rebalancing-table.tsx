@@ -118,7 +118,7 @@ type PartRowProps = {
   strong?: boolean
   // indent marks a part inside a Tier.
   indent?: boolean
-  // chevronGap shifts the label right by the empty edge of the chevron icon.
+  // chevronGap shifts the label right by the chevron and its gap, so it starts where the Shared Part text starts.
   chevronGap?: boolean
 }
 
@@ -136,7 +136,7 @@ function PartRow({
       <TableCell
         className={cn(
           "whitespace-normal",
-          indent && (chevronGap ? "pl-9" : "pl-8")
+          indent && (chevronGap ? "pl-13" : "pl-8")
         )}
       >
         {label}
