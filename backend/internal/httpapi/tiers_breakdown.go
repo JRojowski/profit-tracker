@@ -69,7 +69,22 @@ type breakdownClosedResponse struct {
 	// LastSaleDate is the date of the latest sale in UTC, as YYYY-MM-DD.
 	LastSaleDate string `json:"lastSaleDate"`
 	// Positions are the single Closed Positions, in time order.
-	Positions []closedPositionResponse `json:"positions"`
+	Positions []breakdownPositionResponse `json:"positions"`
+}
+
+// breakdownPositionResponse is one Closed Position of the expanded list. It has the fields of a row of the Closed
+// Positions page.
+type breakdownPositionResponse struct {
+	closedPositionResponse
+	// Account is the Account of the Closed Position. It is only in the Tiers Breakdown of all Accounts.
+	Account *breakdownAccountResponse `json:"account,omitempty"`
+}
+
+// breakdownAccountResponse is the Account of a Closed Position.
+type breakdownAccountResponse struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Currency string `json:"currency"`
 }
 
 // breakdownSumResponse is a sum row. A Holding with no price adds nothing to it. Dividends and interest are not in it.
@@ -100,14 +115,30 @@ func (a *api) accountTiersBreakdown(w http.ResponseWriter, r *http.Request) {
 		a.writeInternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tiersBreakdownOf(acc.Currency, tiers, view.state.Holdings, view.state.ClosedPositions))
+	writeJSON(w, http.StatusOK, tiersBreakdownOf(acc.Currency, tiers, view.state.Holdings, withAccount(view.state.ClosedPositions, nil)))
+}
+
+// accountClosedPosition is a Closed Position with the Account that the expanded list shows.
+type accountClosedPosition struct {
+	ledger.ClosedPosition
+	// account is nil in the Tiers Breakdown of one Account.
+	account *breakdownAccountResponse
+}
+
+// withAccount returns the Closed Positions with the Account acc.
+func withAccount(closed []ledger.ClosedPosition, acc *breakdownAccountResponse) []accountClosedPosition {
+	out := make([]accountClosedPosition, 0, len(closed))
+	for _, c := range closed {
+		out = append(out, accountClosedPosition{ClosedPosition: c, account: acc})
+	}
+	return out
 }
 
 // tiersBreakdownOf groups the results of the Instruments by Tier. All amounts of the Holdings and the Closed Positions
 // must be in currency. The function does not convert. The Tiers Breakdown of all Accounts calls it with Holdings and
 // Closed Positions that it converted to PLN. Several Holdings of one Instrument, for example one on each Account,
 // make one Holding part. The same holds for the Closed Positions.
-func tiersBreakdownOf(currency string, tiers []tier.Tier, holdings []ledger.Holding, closed []ledger.ClosedPosition) tiersBreakdownResponse {
+func tiersBreakdownOf(currency string, tiers []tier.Tier, holdings []ledger.Holding, closed []accountClosedPosition) tiersBreakdownResponse {
 	tierOf := map[string]int{}
 	for i, t := range tiers {
 		for _, in := range t.Instruments {
@@ -194,11 +225,11 @@ func (g *groupBuilder) build() (breakdownGroupResponse, sumBuilder) {
 type instrumentBuilder struct {
 	instrument ledger.Instrument
 	holdings   []ledger.Holding
-	closed     []ledger.ClosedPosition
+	closed     []accountClosedPosition
 }
 
 func (b *instrumentBuilder) addHolding(h ledger.Holding)       { b.holdings = append(b.holdings, h) }
-func (b *instrumentBuilder) addClosed(c ledger.ClosedPosition) { b.closed = append(b.closed, c) }
+func (b *instrumentBuilder) addClosed(c accountClosedPosition) { b.closed = append(b.closed, c) }
 
 // sum returns the amounts of the Instrument for the sum rows.
 func (b *instrumentBuilder) sum() sumBuilder {
@@ -256,12 +287,12 @@ func (b *instrumentBuilder) holdingPart() *breakdownHoldingResponse {
 // closedPart returns the Closed Positions part, with the Closed Positions in time order and then in XTB ID order.
 func (b *instrumentBuilder) closedPart() *breakdownClosedResponse {
 	closed := slices.Clone(b.closed)
-	slices.SortStableFunc(closed, func(x, y ledger.ClosedPosition) int {
+	slices.SortStableFunc(closed, func(x, y accountClosedPosition) int {
 		return cmp.Or(x.Time.Compare(y.Time), cmp.Compare(x.XTBID, y.XTBID))
 	})
 	var cost, amount, profit decimal.Decimal
 	var last time.Time
-	positions := make([]closedPositionResponse, 0, len(closed))
+	positions := make([]breakdownPositionResponse, 0, len(closed))
 	for _, c := range closed {
 		cost = cost.Add(c.Cost)
 		amount = amount.Add(c.Amount)
@@ -269,7 +300,7 @@ func (b *instrumentBuilder) closedPart() *breakdownClosedResponse {
 		if c.Time.After(last) {
 			last = c.Time
 		}
-		positions = append(positions, toClosedPositionResponse(c))
+		positions = append(positions, breakdownPositionResponse{closedPositionResponse: toClosedPositionResponse(c.ClosedPosition), Account: c.account})
 	}
 	return &breakdownClosedResponse{
 		Count: len(closed), Cost: formatAmount(cost), SaleAmount: formatAmount(amount),

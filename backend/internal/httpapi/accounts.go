@@ -307,7 +307,7 @@ func viewOf(acc store.Account, in heroInput) (accountView, error) {
 	if err != nil {
 		return accountView{}, fmt.Errorf("calculate the state of account %d: %w", acc.ID, err)
 	}
-	return accountView{account: acc, state: state, instruments: in.instruments, prices: in.prices, rates: in.rates}, nil
+	return accountView{account: acc, state: state, lots: in.ledger.Lots, instruments: in.instruments, prices: in.prices, rates: in.rates}, nil
 }
 
 // heroInput is the input of the state of one Account, with the price data that it comes from.

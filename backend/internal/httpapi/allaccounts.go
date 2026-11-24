@@ -152,18 +152,28 @@ type allAccountsHero struct {
 // calculateAllAccounts reads the Exchange Rates and calculates the view of all Accounts in PLN from the states
 // of the Accounts. ADR 0004.
 func (a *api) calculateAllAccounts(ctx context.Context, views []accountView) (allAccountsHero, error) {
-	series, err := a.rates.Series(ctx)
+	rates, latest, err := a.rateLookups(ctx)
 	if err != nil {
-		return allAccountsHero{}, fmt.Errorf("read the exchange rate series: %w", err)
+		return allAccountsHero{}, err
 	}
-	latest, err := a.rates.LatestRates(ctx)
-	if err != nil {
-		return allAccountsHero{}, fmt.Errorf("read the latest exchange rates: %w", err)
-	}
-
 	input := make([]allaccounts.Account, 0, len(views))
 	for _, v := range views {
 		input = append(input, allaccounts.Account{ID: v.account.ID, Currency: v.account.Currency, State: v.state})
+	}
+	today := exchange.StartOfDayInWarsaw(a.now())
+	return allAccountsHero{result: allaccounts.Calculate(input, rates, today), rates: rates, latest: latest, today: today}, nil
+}
+
+// rateLookups reads the Exchange Rate series and the latest Exchange Rates. It returns the lookups of both,
+// and the latest rates by currency.
+func (a *api) rateLookups(ctx context.Context) (allaccounts.Rates, map[string]exchange.Latest, error) {
+	series, err := a.rates.Series(ctx)
+	if err != nil {
+		return allaccounts.Rates{}, nil, fmt.Errorf("read the exchange rate series: %w", err)
+	}
+	latest, err := a.rates.LatestRates(ctx)
+	if err != nil {
+		return allaccounts.Rates{}, nil, fmt.Errorf("read the latest exchange rates: %w", err)
 	}
 	rates := allaccounts.Rates{
 		On: func(currency string, t time.Time) (decimal.Decimal, bool) {
@@ -175,8 +185,7 @@ func (a *api) calculateAllAccounts(ctx context.Context, views []accountView) (al
 			return rate.Mid, ok
 		},
 	}
-	today := exchange.StartOfDayInWarsaw(a.now())
-	return allAccountsHero{result: allaccounts.Calculate(input, rates, today), rates: rates, latest: latest, today: today}, nil
+	return rates, latest, nil
 }
 
 // toPLNAmounts returns the amounts as decimal text.

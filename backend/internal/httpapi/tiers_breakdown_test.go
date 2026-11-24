@@ -47,13 +47,27 @@ type breakdownHoldingDTO struct {
 
 // breakdownClosedDTO is the Closed Positions part of an Instrument.
 type breakdownClosedDTO struct {
-	Count          int                      `json:"count"`
-	Cost           string                   `json:"cost"`
-	SaleAmount     string                   `json:"saleAmount"`
-	RealizedProfit string                   `json:"realizedProfit"`
-	ReturnOnCost   *string                  `json:"returnOnCost"`
-	LastSaleDate   string                   `json:"lastSaleDate"`
-	Positions      []closedPositionResponse `json:"positions"`
+	Count          int                    `json:"count"`
+	Cost           string                 `json:"cost"`
+	SaleAmount     string                 `json:"saleAmount"`
+	RealizedProfit string                 `json:"realizedProfit"`
+	ReturnOnCost   *string                `json:"returnOnCost"`
+	LastSaleDate   string                 `json:"lastSaleDate"`
+	Positions      []breakdownPositionDTO `json:"positions"`
+}
+
+// breakdownPositionDTO is one Closed Position of the expanded list.
+type breakdownPositionDTO struct {
+	closedPositionResponse
+	// Account is only in the Tiers Breakdown of all Accounts.
+	Account *breakdownAccountDTO `json:"account"`
+}
+
+// breakdownAccountDTO is the Account of a Closed Position.
+type breakdownAccountDTO struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Currency string `json:"currency"`
 }
 
 // breakdownSumDTO is a sum row.
@@ -189,7 +203,8 @@ func TestTiersBreakdown_ClosedPositions_ShowsCountCostSaleAmountAndLastSale(t *t
 	assert.Equal(t, "-10.00", closed.RealizedProfit)
 	assert.Equal(t, ptr("-20"), closed.ReturnOnCost)
 	assert.Equal(t, "2026-10-09", closed.LastSaleDate)
-	assert.Equal(t, srv.closedPositions(t, id)[1:], closed.Positions, "the single Closed Positions are the rows of the Closed Positions page")
+	want := []breakdownPositionDTO{{closedPositionResponse: srv.closedPositions(t, id)[1]}}
+	assert.Equal(t, want, closed.Positions, "the single Closed Positions are the rows of the Closed Positions page, with no Account")
 }
 
 // TestTiersBreakdown_OpenAndSold_HasBothParts
