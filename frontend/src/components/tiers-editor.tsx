@@ -38,6 +38,7 @@ import {
   removeTier,
   sortedInstruments,
   toRequest,
+  validateOrders,
   type DraftTier,
   type TiersDraft,
 } from "@/lib/tiers-draft"
@@ -68,6 +69,12 @@ export function TiersEditor({ saved, onSaved, onCancel }: TiersEditorProps) {
     setBusy(true)
     setErrors([])
     setFailure(null)
+    const invalid = validateOrders(draft)
+    if (invalid.length > 0) {
+      setErrors(invalid)
+      setBusy(false)
+      return
+    }
     try {
       onSaved(await saveTiers(toRequest(draft)))
     } catch (err) {

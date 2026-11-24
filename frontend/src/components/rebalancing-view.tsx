@@ -36,13 +36,16 @@ export function RebalancingView() {
   const [sent, setSent] = useState<Record<number, string>>({})
   useEffect(() => {
     const timer = setTimeout(() => {
-      const valid: Record<number, string> = {}
-      for (const [id, text] of Object.entries(typed)) {
-        if (amountPattern.test(text.trim())) {
-          valid[Number(id)] = text.trim().replace(",", ".")
+      // An invalid text keeps the last valid amount of its Account.
+      setSent((previous) => {
+        const valid: Record<number, string> = { ...previous }
+        for (const [id, text] of Object.entries(typed)) {
+          if (amountPattern.test(text.trim())) {
+            valid[Number(id)] = text.trim().replace(",", ".")
+          }
         }
-      }
-      setSent(valid)
+        return valid
+      })
     }, typingDelayMs)
     return () => clearTimeout(timer)
   }, [typed])

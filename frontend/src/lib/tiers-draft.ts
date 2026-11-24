@@ -1,4 +1,4 @@
-import type { TierInstrument, Tiers, TiersRequest } from "./api"
+import type { TierError, TierInstrument, Tiers, TiersRequest } from "./api"
 
 // DraftTier is one Tier in the local copy of the "Edit targets" mode. The key identifies the Tier while the user
 // changes its order number. The fields are the text of the inputs.
@@ -34,6 +34,15 @@ export function draftFromTiers(saved: Tiers): TiersDraft {
     }
   })
   const assignments: Record<string, DraftAssignment> = {}
+  // The Tiers list each assigned ticker, so an assignment never drops out of a save.
+  for (const tier of saved.tiers) {
+    const tierKey = keyByOrder.get(tier.order)
+    if (tierKey === undefined) continue
+    for (const target of tier.instrumentTargets)
+      assignments[target.ticker] = { tierKey, targetShare: target.targetShare }
+    for (const shared of tier.sharedInstruments)
+      assignments[shared.ticker] = { tierKey, targetShare: "" }
+  }
   for (const instrument of saved.instruments) {
     const tierKey =
       instrument.tierOrder === null
@@ -81,22 +90,41 @@ export function instrumentsOfTier(draft: TiersDraft, key: number): string[] {
     .sort()
 }
 
+// decimalText changes a decimal comma to a dot and trims the text.
+function decimalText(text: string): string {
+  return text.trim().replace(",", ".")
+}
+
+// validateOrders gives an error for each Tier whose order number is not a whole number of 1 or more.
+export function validateOrders(draft: TiersDraft): TierError[] {
+  const errors: TierError[] = []
+  draft.tiers.forEach((tier, index) => {
+    if (!/^[1-9]\d*$/.test(tier.order.trim()))
+      errors.push({
+        tierIndex: index,
+        ticker: "",
+        message: "Enter an order number that is a whole number of 1 or more.",
+      })
+  })
+  return errors
+}
+
 // toRequest turns the draft into the body of PUT /api/tiers. The Tiers keep the order of the draft, so the
-// tierIndex of an error is the index in the draft. Text that is not a number goes as it is, and the backend
-// answers with a message.
+// tierIndex of an error is the index in the draft. Call validateOrders first. A Target Share goes with a dot.
 export function toRequest(draft: TiersDraft): TiersRequest {
   return {
     tiers: draft.tiers.map((tier) => ({
-      order: Number(tier.order),
+      order: Number(tier.order.trim()),
       name: tier.name.trim(),
-      targetShare: tier.targetShare.trim() === "" ? "0" : tier.targetShare,
+      targetShare:
+        tier.targetShare.trim() === "" ? "0" : decimalText(tier.targetShare),
       sharedPartName: tier.sharedPartName.trim(),
       instruments: instrumentsOfTier(draft, tier.key).map((ticker) => ({
         ticker,
         targetShare:
           draft.assignments[ticker].targetShare.trim() === ""
             ? null
-            : draft.assignments[ticker].targetShare,
+            : decimalText(draft.assignments[ticker].targetShare),
       })),
     })),
   }
