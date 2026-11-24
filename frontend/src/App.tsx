@@ -6,6 +6,7 @@ import { accountPattern, paths } from "@/lib/routes"
 import { AccountHoldingsPage } from "@/pages/account-holdings-page"
 import { AccountBenchmarksPage } from "@/pages/account-benchmarks-page"
 import { AccountIkzePage } from "@/pages/account-ikze-page"
+import { AllAccountsTiersBreakdownPage } from "@/pages/all-accounts-tiers-breakdown-page"
 import { AccountTiersBreakdownPage } from "@/pages/account-tiers-breakdown-page"
 import { AccountLayout } from "@/pages/account-layout"
 import { AccountOverviewPage } from "@/pages/account-overview-page"
@@ -25,6 +26,10 @@ const router = createBrowserRouter([
       { path: paths.root, element: <AllAccountsPage /> },
       { path: paths.allAccounts, element: <AllAccountsPage /> },
       { path: paths.allBenchmarks, element: <AllAccountsBenchmarksPage /> },
+      {
+        path: paths.allTiersBreakdown,
+        element: <AllAccountsTiersBreakdownPage />,
+      },
       { path: paths.rebalancing, element: <RebalancingPage /> },
       {
         path: accountPattern,

@@ -15,6 +15,7 @@ export const paths = {
   tiersBreakdown: (id: number) => `/accounts/${id}/tiers-breakdown`,
   benchmarks: (id: number) => `/accounts/${id}/benchmarks`,
   allBenchmarks: "/accounts/all/benchmarks",
+  allTiersBreakdown: "/accounts/all/tiers-breakdown",
   rebalancing: "/accounts/all/rebalancing",
   ikze: (id: number) => `/accounts/${id}/ikze`,
   import: "/import",
@@ -58,18 +59,21 @@ export function switchViewPath(
     period === null ? "" : `?${new URLSearchParams({ [periodParam]: period })}`
   const onBenchmarks =
     parts[1] === "accounts" && parts[3] === "benchmarks" && parts.length === 4
+  const onTiersBreakdown =
+    parts[1] === "accounts" && parts[3] === "tiers-breakdown"
   if (target.kind === "all") {
-    return onBenchmarks ? `${paths.allBenchmarks}${query}` : paths.allAccounts
+    if (onBenchmarks) return `${paths.allBenchmarks}${query}`
+    return onTiersBreakdown ? paths.allTiersBreakdown : paths.allAccounts
   }
   const { id, type } = target.account
   if (onBenchmarks) return `${paths.benchmarks(id)}${query}`
   const onAccountPage =
     parts[1] === "accounts" && parseAccountId(parts[2]) !== null
   const page = onAccountPage ? parts[3] : undefined
+  if (onTiersBreakdown && isTierAccount(target.account))
+    return paths.tiersBreakdown(id)
   if (page === "holdings") return paths.holdings(id)
   if (page === "closed-positions") return paths.closedPositions(id)
-  if (page === "tiers-breakdown" && isTierAccount(target.account))
-    return paths.tiersBreakdown(id)
   if (page === "ikze" && type === "IKZE") return paths.ikze(id)
   return paths.account(id)
 }

@@ -25,6 +25,8 @@ import type {
   Rebalancing,
   Tiers,
   TiersBreakdown,
+  AllAccountsTiersBreakdown,
+  BreakdownGroup,
   UnsupportedEntry,
   ValueHistoryPoint,
 } from "../src/lib/api"
@@ -40,6 +42,7 @@ export type DataSet =
   | "populated"
   | "nearEqualEnd"
   | "benchmarkUnavailable"
+  | "tiersBreakdownUnavailable"
   | "noAccounts"
   | "emptyAccounts"
   | "kraken"
@@ -1348,6 +1351,40 @@ const mainTiersBreakdown: TiersBreakdown = {
   },
 }
 
+// allTiersBreakdown is the Tiers Breakdown of all Accounts: the main Breakdown, with the Account on each single Closed Position.
+const allTiersBreakdown: AllAccountsTiersBreakdown = {
+  ...mainTiersBreakdown,
+  available: true,
+  warnings: [],
+  tiers: mainTiersBreakdown.tiers.map(withAccount),
+  noTier: mainTiersBreakdown.noTier && withAccount(mainTiersBreakdown.noTier),
+}
+
+// withAccount gives each single Closed Position of a group the main Account.
+function withAccount(group: BreakdownGroup): BreakdownGroup {
+  return {
+    ...group,
+    instruments: group.instruments.map((instrument) => ({
+      ...instrument,
+      closedPositions: instrument.closedPositions && {
+        ...instrument.closedPositions,
+        positions: instrument.closedPositions.positions.map((position) => ({
+          ...position,
+          account: { id: 1, name: mainAccount.name, currency: "PLN" },
+        })),
+      },
+    })),
+  }
+}
+
+// allTiersBreakdownUnavailable is the answer when an Exchange Rate is missing.
+const allTiersBreakdownUnavailable: AllAccountsTiersBreakdown = {
+  available: false,
+  warnings: [
+    "The tool has no Exchange Rate of USD for 2026-03-02. It cannot convert the amounts of the USD Account to PLN.",
+  ],
+}
+
 // emptyTiers is the configuration before the user creates a Tier.
 const emptyTiers: Tiers = {
   tiers: [],
@@ -1525,6 +1562,7 @@ export type ApiFixture = {
   imports: ImportSummary[]
   tiers: Tiers
   tiersBreakdown: Record<number, TiersBreakdown>
+  allTiersBreakdown: AllAccountsTiersBreakdown
   rebalancing: Rebalancing
 }
 
@@ -1563,7 +1601,8 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
   if (
     dataSet === "populated" ||
     dataSet === "nearEqualEnd" ||
-    dataSet === "benchmarkUnavailable"
+    dataSet === "benchmarkUnavailable" ||
+    dataSet === "tiersBreakdownUnavailable"
   ) {
     return {
       accounts: [ikzeAccount, mainAccount].sort((a, b) =>
@@ -1590,6 +1629,10 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       imports,
       tiers: populatedTiers,
       tiersBreakdown: { 1: mainTiersBreakdown },
+      allTiersBreakdown:
+        dataSet === "tiersBreakdownUnavailable"
+          ? allTiersBreakdownUnavailable
+          : allTiersBreakdown,
       rebalancing: populatedRebalancing,
     }
   }
@@ -1620,6 +1663,13 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     imports: [],
     tiers: emptyTiers,
     tiersBreakdown: {},
+    allTiersBreakdown: {
+      ...mainTiersBreakdown,
+      available: true,
+      warnings: [],
+      tiers: [],
+      noTier: null,
+    },
     rebalancing: emptyRebalancing,
   }
 }

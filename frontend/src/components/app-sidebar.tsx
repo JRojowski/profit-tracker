@@ -99,6 +99,11 @@ export function AppSidebar() {
           label: "Benchmarks",
         },
         {
+          to: paths.allTiersBreakdown,
+          icon: LayersIcon,
+          label: "Tiers Breakdown",
+        },
+        {
           to: paths.rebalancing,
           icon: TargetIcon,
           label: "Rebalancing",

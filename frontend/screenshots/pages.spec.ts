@@ -69,6 +69,22 @@ const pageCases: PageCase[] = [
     expand: "2 Closed Positions of ALPHA.PL",
   },
   {
+    // The Closed Positions row of ALPHA.PL is open and shows the Account of each single Closed Position.
+    name: "all-tiers-breakdown",
+    url: "/accounts/all/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "2 Closed Positions of ALPHA.PL",
+  },
+  {
+    // An Exchange Rate is missing, so the page shows the warning in place of the table.
+    name: "all-tiers-breakdown-unavailable",
+    url: "/accounts/all/tiers-breakdown",
+    empty: null,
+    charts: false,
+    populatedSet: "tiersBreakdownUnavailable",
+  },
+  {
     name: "benchmarks",
     url: "/accounts/1/benchmarks",
     empty: "emptyAccounts",

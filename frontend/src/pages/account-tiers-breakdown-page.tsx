@@ -21,7 +21,6 @@ export function AccountTiersBreakdownPage() {
         <Card className="min-w-0">
           <CardHeader>
             <SectionHeading
-              label="Rebalancing"
               title="Tiers Breakdown"
               description="The result of each Instrument, grouped by Tier, in the currency of the Account."
             />

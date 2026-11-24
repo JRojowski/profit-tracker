@@ -499,8 +499,11 @@ export type BreakdownHolding = {
   returnOnCost: string | null
 }
 
+// BreakdownAccount is the Account of a single Closed Position in the Tiers Breakdown of all Accounts.
+export type BreakdownAccount = { id: number; name: string; currency: string }
+
 // BreakdownClosedPositions is the Closed Positions part of an Instrument in the Tiers Breakdown.
-// lastSaleDate is YYYY-MM-DD. account is the name of the Account of a Closed Position, in the view of all Accounts only.
+// lastSaleDate is YYYY-MM-DD. account is the Account of a Closed Position, in the view of all Accounts only.
 export type BreakdownClosedPositions = {
   count: number
   cost: string
@@ -508,7 +511,7 @@ export type BreakdownClosedPositions = {
   realizedProfit: string
   returnOnCost: string | null
   lastSaleDate: string
-  positions: (ClosedPosition & { account?: string })[]
+  positions: (ClosedPosition & { account?: BreakdownAccount })[]
 }
 
 // BreakdownInstrument is one Instrument of a Tier. It has a Holding part, a Closed Positions part, or both.
@@ -554,6 +557,20 @@ export async function fetchTiersBreakdown(
     signal,
   })
   return readJSON<TiersBreakdown>(response)
+}
+
+// AllAccountsTiersBreakdown is the body of the Tiers Breakdown of all Accounts, in PLN. When available is false,
+// the breakdown fields are missing and the warnings tell why.
+export type AllAccountsTiersBreakdown =
+  | ({ available: true; warnings: string[] } & TiersBreakdown)
+  | { available: false; warnings: string[] }
+
+// fetchAllAccountsTiersBreakdown loads the Tiers Breakdown of all Tier Accounts together in PLN.
+export async function fetchAllAccountsTiersBreakdown(
+  signal?: AbortSignal
+): Promise<AllAccountsTiersBreakdown> {
+  const response = await fetch("/api/all-accounts/tiers-breakdown", { signal })
+  return readJSON<AllAccountsTiersBreakdown>(response)
 }
 
 export async function fetchClosedPositions(

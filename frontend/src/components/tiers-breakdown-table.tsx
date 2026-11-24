@@ -371,7 +371,7 @@ function ClosedRows({
               </span>
               <span className="ml-2 num">{formatVolume(position.volume)}</span>
               {position.account !== undefined && (
-                <span className="ml-2">{position.account}</span>
+                <span className="ml-2">{position.account.name}</span>
               )}
             </TableCell>
             <NumberCell>

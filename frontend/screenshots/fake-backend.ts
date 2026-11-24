@@ -35,6 +35,7 @@ function answer(
     "/api/all-accounts/benchmarks": fixture.allBenchmarks,
     "/api/imports": fixture.imports,
     "/api/tiers": fixture.tiers,
+    "/api/all-accounts/tiers-breakdown": fixture.allTiersBreakdown,
     "/api/all-accounts/rebalancing": fixture.rebalancing,
     "/api/prices/refresh/progress": {
       running: false,

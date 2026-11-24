@@ -89,13 +89,23 @@ const cases: {
   // The IKZE page does not exist in an IKE Account.
   { from: "/accounts/2/ikze", to: ike, expected: "/accounts/3" },
   { from: "/accounts/1/holdings", to: ike, expected: "/accounts/3/holdings" },
-  // The Tiers Breakdown page exists only in a Tier Account. The view of all Accounts has none yet.
+  // The Tiers Breakdown page stays between all Accounts and a Tier Account. A non-Tier Account has none.
   {
     from: "/accounts/1/tiers-breakdown",
     to: standard,
     expected: "/accounts/1/tiers-breakdown",
   },
-  { from: "/accounts/1/tiers-breakdown", to: all, expected: "/accounts/all" },
+  {
+    from: "/accounts/1/tiers-breakdown",
+    to: all,
+    expected: "/accounts/all/tiers-breakdown",
+  },
+  {
+    from: "/accounts/all/tiers-breakdown",
+    to: standard,
+    expected: "/accounts/1/tiers-breakdown",
+  },
+  { from: "/accounts/all/tiers-breakdown", to: ikze, expected: "/accounts/2" },
   { from: "/accounts/1/tiers-breakdown", to: ikze, expected: "/accounts/2" },
   { from: "/accounts/1/tiers-breakdown", to: ike, expected: "/accounts/3" },
   // The pages of the Import group are not pages of a view.
