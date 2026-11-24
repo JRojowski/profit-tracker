@@ -21,11 +21,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { useBenchmarkSelection } from "@/hooks/use-benchmark-selection"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { BenchmarkPoint, Benchmarks } from "@/lib/api"
-import {
-  chartGridProps,
-  chartLineWidth,
-  chartTooltipClass,
-} from "@/lib/chart-style"
+import { chartGridProps, chartTooltipClass } from "@/lib/chart-style"
 import { axisDate, dateTime, dayMs, monthTicks } from "@/lib/chart-time"
 import { tagWidth } from "@/lib/end-tags"
 import { formatCompact, formatDate, formatPercent } from "@/lib/format"
@@ -33,6 +29,22 @@ import { cn } from "@/lib/utils"
 
 // userKey is the key of the line of the user in the chart data and in the chart config.
 const userKey = "user"
+
+// userLineWidth is the stroke width of the user line, about twice the width of a Benchmark line.
+const userLineWidth = 3
+
+// benchmarkOpacity is the stroke opacity of a Benchmark line, so that the user line stands out.
+const benchmarkOpacity = 0.5
+
+// benchmarkLineWidth is the stroke width of a Benchmark line.
+const benchmarkLineWidth = 1.25
+
+// drawOrder puts the user line last, so that the chart draws it on top of the Benchmark lines.
+function drawOrder(lines: ChartLine[]): ChartLine[] {
+  return [...lines].sort(
+    (a, b) => Number(a.key === userKey) - Number(b.key === userKey)
+  )
+}
 
 // LineStyle is the colour of a line and the colour of the text on its end tag.
 type LineStyle = { color: string; ink: string }
@@ -220,13 +232,16 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
             />
           )}
         />
-        {lines.map((line) => (
+        {drawOrder(lines).map((line) => (
           <Line
             key={line.key}
             dataKey={line.key}
             type="linear"
             stroke={`var(--color-${line.key})`}
-            strokeWidth={chartLineWidth}
+            strokeWidth={
+              line.key === userKey ? userLineWidth : benchmarkLineWidth
+            }
+            strokeOpacity={line.key === userKey ? 1 : benchmarkOpacity}
             dot={false}
             isAnimationActive={false}
           />
