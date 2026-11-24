@@ -1242,6 +1242,7 @@ const mainTiersBreakdown: TiersBreakdown = {
           name: "Alpha Retail S.A.",
           holding: {
             noValue: false,
+            lastPurchaseDate: "2026-06-10",
             value: "19008.00",
             cost: "14400.00",
             unrealizedProfit: "4608.00",
@@ -1262,6 +1263,7 @@ const mainTiersBreakdown: TiersBreakdown = {
           name: "Beta Software Inc.",
           holding: {
             noValue: false,
+            lastPurchaseDate: "2026-04-02",
             value: "20992.00",
             cost: "16000.00",
             unrealizedProfit: "4992.00",
@@ -1310,6 +1312,7 @@ const mainTiersBreakdown: TiersBreakdown = {
         name: "Gamma Energy S.A.",
         holding: {
           noValue: false,
+          lastPurchaseDate: "2026-05-15",
           value: "8550.00",
           cost: "9000.00",
           unrealizedProfit: "-450.00",

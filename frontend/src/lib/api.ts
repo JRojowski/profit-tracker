@@ -489,10 +489,11 @@ export async function fetchInstrumentOverview(
   return readJSON<InstrumentOverview>(response)
 }
 
-// BreakdownHolding is the Holding part of an Instrument in the Tiers Breakdown. With noValue the Holding has no price,
+// BreakdownHolding is the Holding part of an Instrument in the Tiers Breakdown. lastPurchaseDate is YYYY-MM-DD. With noValue the Holding has no price,
 // and value, unrealizedProfit and returnOnCost are null. returnOnCost is a decimal percentage.
 export type BreakdownHolding = {
   noValue: boolean
+  lastPurchaseDate: string
   value: string | null
   cost: string
   unrealizedProfit: string | null

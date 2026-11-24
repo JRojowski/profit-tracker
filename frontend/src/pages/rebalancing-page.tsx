@@ -1,5 +1,6 @@
 import { PencilIcon } from "lucide-react"
 import { useState } from "react"
+import { useSearchParams } from "react-router"
 
 import { LoadedView } from "@/components/loaded-view"
 import { SectionHeading } from "@/components/section-heading"
@@ -16,7 +17,9 @@ import { useAppState } from "@/lib/app-state"
 export function RebalancingPage() {
   const { accounts, accountsError, valuesVersion } = useAppState()
   const loaded = useLoad("tiers", valuesVersion, fetchTiers)
-  const [editing, setEditing] = useState(false)
+  const [searchParams] = useSearchParams()
+  // The link "?edit=1" opens the "Edit targets" mode.
+  const [editing, setEditing] = useState(searchParams.get("edit") === "1")
   // saved is the configuration of the last save. It shows until the next load.
   const [saved, setSaved] = useState<Tiers | null>(null)
 

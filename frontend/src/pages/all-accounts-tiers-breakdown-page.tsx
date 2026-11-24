@@ -1,14 +1,17 @@
-import { TriangleAlertIcon } from "lucide-react"
+import { PencilIcon, TriangleAlertIcon } from "lucide-react"
+import { Link } from "react-router"
 
 import { LoadedView } from "@/components/loaded-view"
 import { SectionHeading } from "@/components/section-heading"
 import { TiersBreakdownTable } from "@/components/tiers-breakdown-table"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useLoad } from "@/hooks/use-load"
 import { fetchAllAccountsTiersBreakdown } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
+import { paths } from "@/lib/routes"
 
 // AllAccountsTiersBreakdownPage shows the result of each Instrument of all Tier Accounts together, grouped by Tier, in PLN.
 // When an Exchange Rate is missing, it shows the warnings in place of the table.
@@ -36,13 +39,21 @@ export function AllAccountsTiersBreakdownPage() {
         <Card className="min-w-0">
           <CardHeader>
             <SectionHeading
+              action={
+                <Button variant="outline" asChild>
+                  <Link to={`${paths.rebalancing}?edit=1`}>
+                    <PencilIcon data-icon="inline-start" />
+                    Edit targets
+                  </Link>
+                </Button>
+              }
               title="Tiers Breakdown"
               description="The result of each Instrument of all Tier Accounts together, grouped by Tier, in PLN."
             />
           </CardHeader>
           <CardContent className="flex min-w-0 flex-col gap-4">
             {data.available ? (
-              <TiersBreakdownTable breakdown={data} />
+              <TiersBreakdownTable breakdown={data} view="all" />
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
