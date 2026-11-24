@@ -2,6 +2,7 @@ import {
   BriefcaseIcon,
   ChartLineIcon,
   HistoryIcon,
+  LayersIcon,
   LayoutDashboardIcon,
   MessageSquareIcon,
   PiggyBankIcon,
@@ -31,7 +32,7 @@ import {
 import { useSidebarView } from "@/hooks/use-sidebar-view"
 import { useAppState } from "@/lib/app-state"
 import { useAssistant } from "@/lib/assistant-state"
-import { isKraken } from "@/lib/provider"
+import { isKraken, isTierAccount } from "@/lib/provider"
 import { paths } from "@/lib/routes"
 
 type NavEntry = { to: string; icon: LucideIcon; label: string }
@@ -73,6 +74,15 @@ export function AppSidebar() {
           icon: ScaleIcon,
           label: "Benchmarks",
         },
+        ...(isTierAccount(account)
+          ? [
+              {
+                to: paths.tiersBreakdown(account.id),
+                icon: LayersIcon,
+                label: "Tiers Breakdown",
+              },
+            ]
+          : []),
         ...(account.type === "IKZE"
           ? [{ to: paths.ikze(account.id), icon: PiggyBankIcon, label: "IKZE" }]
           : []),

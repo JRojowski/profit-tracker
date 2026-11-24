@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useRouteAccount } from "@/hooks/use-route-account"
 import type { Account } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
+import { isTierAccount } from "@/lib/provider"
 import { paths } from "@/lib/routes"
 
 // AccountLayout gives the Account of the URL to the page of the Account. The sidebar holds the navigation.
@@ -28,6 +29,14 @@ export function AccountLayout() {
 
   // Only an IKZE Account has the IKZE page.
   if (pathname === paths.ikze(account.id) && account.type !== "IKZE") {
+    return <Navigate to={paths.account(account.id)} replace />
+  }
+
+  // Only a Tier Account has the Tiers Breakdown page.
+  if (
+    pathname === paths.tiersBreakdown(account.id) &&
+    !isTierAccount(account)
+  ) {
     return <Navigate to={paths.account(account.id)} replace />
   }
 

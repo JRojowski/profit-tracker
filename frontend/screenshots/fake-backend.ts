@@ -55,6 +55,7 @@ function answer(
       holdings: fixture.holdings,
       "closed-positions": fixture.closedPositions,
       "ikze-limit": fixture.ikzeLimit,
+      "tiers-breakdown": fixture.tiersBreakdown,
     }
     const body = byId[account[2]]?.[id]
     return body === undefined ? undefined : { body }

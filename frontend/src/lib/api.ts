@@ -489,6 +489,73 @@ export async function fetchInstrumentOverview(
   return readJSON<InstrumentOverview>(response)
 }
 
+// BreakdownHolding is the Holding part of an Instrument in the Tiers Breakdown. With noValue the Holding has no price,
+// and value, unrealizedProfit and returnOnCost are null. returnOnCost is a decimal percentage.
+export type BreakdownHolding = {
+  noValue: boolean
+  value: string | null
+  cost: string
+  unrealizedProfit: string | null
+  returnOnCost: string | null
+}
+
+// BreakdownClosedPositions is the Closed Positions part of an Instrument in the Tiers Breakdown.
+// lastSaleDate is YYYY-MM-DD. account is the name of the Account of a Closed Position, in the view of all Accounts only.
+export type BreakdownClosedPositions = {
+  count: number
+  cost: string
+  saleAmount: string
+  realizedProfit: string
+  returnOnCost: string | null
+  lastSaleDate: string
+  positions: (ClosedPosition & { account?: string })[]
+}
+
+// BreakdownInstrument is one Instrument of a Tier. It has a Holding part, a Closed Positions part, or both.
+export type BreakdownInstrument = {
+  ticker: string
+  name: string
+  holding: BreakdownHolding | null
+  closedPositions: BreakdownClosedPositions | null
+}
+
+// BreakdownSum is a sum row of the Tiers Breakdown. returnOnCost is a decimal percentage, or null when the cost is 0.
+export type BreakdownSum = {
+  value: string
+  unrealizedProfit: string
+  realizedProfit: string
+  totalProfit: string
+  cost: string
+  returnOnCost: string | null
+}
+
+// BreakdownGroup is a Tier, or the "No Tier" group with a null order.
+export type BreakdownGroup = {
+  order: number | null
+  name: string
+  instruments: BreakdownInstrument[]
+  sum: BreakdownSum
+}
+
+// TiersBreakdown is the body of the Tiers Breakdown endpoints. All amounts are in the currency.
+export type TiersBreakdown = {
+  currency: string
+  tiers: BreakdownGroup[]
+  noTier: BreakdownGroup | null
+  total: BreakdownSum
+}
+
+// fetchTiersBreakdown loads the Tiers Breakdown of one Tier Account.
+export async function fetchTiersBreakdown(
+  id: number,
+  signal?: AbortSignal
+): Promise<TiersBreakdown> {
+  const response = await fetch(`/api/accounts/${id}/tiers-breakdown`, {
+    signal,
+  })
+  return readJSON<TiersBreakdown>(response)
+}
+
 export async function fetchClosedPositions(
   id: number,
   signal?: AbortSignal

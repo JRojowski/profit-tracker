@@ -1,5 +1,6 @@
 import type { Account } from "./api"
 import { periodParam } from "./benchmark-period"
+import { isTierAccount } from "./provider"
 
 // accountPattern is the route pattern of the pages of one Account.
 export const accountPattern = "/accounts/:id"
@@ -11,6 +12,7 @@ export const paths = {
   account: (id: number) => `/accounts/${id}`,
   holdings: (id: number) => `/accounts/${id}/holdings`,
   closedPositions: (id: number) => `/accounts/${id}/closed-positions`,
+  tiersBreakdown: (id: number) => `/accounts/${id}/tiers-breakdown`,
   benchmarks: (id: number) => `/accounts/${id}/benchmarks`,
   allBenchmarks: "/accounts/all/benchmarks",
   rebalancing: "/accounts/all/rebalancing",
@@ -36,7 +38,11 @@ export function isAllAccountsPath(pathname: string): boolean {
 
 // ViewTarget is a view of the view switch: all Accounts, or one Account with the data that decides its pages.
 export type ViewTarget =
-  { kind: "all" } | { kind: "account"; account: Pick<Account, "id" | "type"> }
+  | { kind: "all" }
+  | {
+      kind: "account"
+      account: Pick<Account, "id" | "type" | "provider" | "currency">
+    }
 
 // switchViewPath gives the URL that opens when the user changes the view. The same page type opens when the new
 // view has it, otherwise the overview opens. The query string is dropped, because filters and the Instrument
@@ -62,6 +68,8 @@ export function switchViewPath(
   const page = onAccountPage ? parts[3] : undefined
   if (page === "holdings") return paths.holdings(id)
   if (page === "closed-positions") return paths.closedPositions(id)
+  if (page === "tiers-breakdown" && isTierAccount(target.account))
+    return paths.tiersBreakdown(id)
   if (page === "ikze" && type === "IKZE") return paths.ikze(id)
   return paths.account(id)
 }

@@ -14,6 +14,8 @@ type PageCase = {
   panel?: boolean
   // panelEnd scrolls the body of the panel to its end before the screenshot, to show the lists at the bottom.
   panelEnd?: boolean
+  // expand is the name of a button that the test clicks before the screenshot, to open a row.
+  expand?: string
   // populatedSet is the data set of the populated state. The default is "populated".
   populatedSet?: DataSet
 }
@@ -57,6 +59,14 @@ const pageCases: PageCase[] = [
     url: "/accounts/1/closed-positions",
     empty: "emptyAccounts",
     charts: false,
+  },
+  {
+    // The Closed Positions row of ALPHA.PL is open and shows its two single Closed Positions.
+    name: "tiers-breakdown",
+    url: "/accounts/1/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "2 Closed Positions of ALPHA.PL",
   },
   {
     name: "benchmarks",
@@ -173,6 +183,9 @@ async function waitForRenderedPage(
     await page
       .locator("[data-overview-body]")
       .evaluate((body) => body.scrollTo(0, body.scrollHeight))
+  }
+  if (pageCase.expand && populated) {
+    await page.getByRole("button", { name: pageCase.expand }).click()
   }
   await page.evaluate(() => document.fonts.ready)
 }

@@ -23,6 +23,7 @@ import type {
   OverviewFill,
   PriceWarning,
   Tiers,
+  TiersBreakdown,
   UnsupportedEntry,
   ValueHistoryPoint,
 } from "../src/lib/api"
@@ -1223,6 +1224,129 @@ const populatedTiers: Tiers = {
   ],
 }
 
+// mainTiersBreakdown is the Tiers Breakdown of the main Account: an Instrument with a Holding and two Closed Positions,
+// an empty Tier, and the "No Tier" group with a loss. The sums agree with mainHoldings and mainClosed.
+const mainTiersBreakdown: TiersBreakdown = {
+  currency: "PLN",
+  tiers: [
+    {
+      order: 1,
+      name: "Global Market Core",
+      instruments: [
+        {
+          ticker: "ALPHA.PL",
+          name: "Alpha Retail S.A.",
+          holding: {
+            noValue: false,
+            value: "19008.00",
+            cost: "14400.00",
+            unrealizedProfit: "4608.00",
+            returnOnCost: "32",
+          },
+          closedPositions: {
+            count: 2,
+            cost: "10800.00",
+            saleAmount: "12960.55",
+            realizedProfit: "2160.55",
+            returnOnCost: "20.0050925925",
+            lastSaleDate: "2026-05-27",
+            positions: [mainClosed[0], mainClosed[3]],
+          },
+        },
+        {
+          ticker: "BETA.US",
+          name: "Beta Software Inc.",
+          holding: {
+            noValue: false,
+            value: "20992.00",
+            cost: "16000.00",
+            unrealizedProfit: "4992.00",
+            returnOnCost: "31.2",
+          },
+          closedPositions: {
+            count: 1,
+            cost: "4000.00",
+            saleAmount: "4900.00",
+            realizedProfit: "900.00",
+            returnOnCost: "22.5",
+            lastSaleDate: "2026-03-18",
+            positions: [mainClosed[1]],
+          },
+        },
+      ],
+      sum: {
+        value: "40000.00",
+        unrealizedProfit: "9600.00",
+        realizedProfit: "3060.55",
+        totalProfit: "12660.55",
+        cost: "45200.00",
+        returnOnCost: "28.0100663716",
+      },
+    },
+    {
+      order: 2,
+      name: "Asymmetric Bets",
+      instruments: [],
+      sum: {
+        value: "0.00",
+        unrealizedProfit: "0.00",
+        realizedProfit: "0.00",
+        totalProfit: "0.00",
+        cost: "0.00",
+        returnOnCost: null,
+      },
+    },
+  ],
+  noTier: {
+    order: null,
+    name: "No Tier",
+    instruments: [
+      {
+        ticker: "GAMMA.PL",
+        name: "Gamma Energy S.A.",
+        holding: {
+          noValue: false,
+          value: "8550.00",
+          cost: "9000.00",
+          unrealizedProfit: "-450.00",
+          returnOnCost: "-5",
+        },
+        closedPositions: null,
+      },
+      {
+        ticker: "OMEGA.PL",
+        name: "Omega Mining S.A.",
+        holding: null,
+        closedPositions: {
+          count: 1,
+          cost: "5000.00",
+          saleAmount: "4350.00",
+          realizedProfit: "-650.00",
+          returnOnCost: "-13",
+          lastSaleDate: "2026-04-22",
+          positions: [mainClosed[2]],
+        },
+      },
+    ],
+    sum: {
+      value: "8550.00",
+      unrealizedProfit: "-450.00",
+      realizedProfit: "-650.00",
+      totalProfit: "-1100.00",
+      cost: "14000.00",
+      returnOnCost: "-7.8571428571",
+    },
+  },
+  total: {
+    value: "48550.00",
+    unrealizedProfit: "9150.00",
+    realizedProfit: "2410.55",
+    totalProfit: "11560.55",
+    cost: "59200.00",
+    returnOnCost: "19.5279560810",
+  },
+}
+
 // emptyTiers is the configuration before the user creates a Tier.
 const emptyTiers: Tiers = {
   tiers: [],
@@ -1268,6 +1392,7 @@ export type ApiFixture = {
   overview: Record<string, InstrumentOverview>
   imports: ImportSummary[]
   tiers: Tiers
+  tiersBreakdown: Record<number, TiersBreakdown>
 }
 
 // fixtureFor gives the answers of the fake backend for a data set.
@@ -1331,6 +1456,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       overview: { "1:BETA.US": betaOverview },
       imports,
       tiers: populatedTiers,
+      tiersBreakdown: { 1: mainTiersBreakdown },
     }
   }
   const emptyAllHistory: AllAccountsValueHistory = {
@@ -1359,6 +1485,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     overview: {},
     imports: [],
     tiers: emptyTiers,
+    tiersBreakdown: {},
   }
 }
 
