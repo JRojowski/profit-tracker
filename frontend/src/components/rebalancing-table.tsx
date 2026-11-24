@@ -51,6 +51,7 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
                 <PartRow
                   key={target.ticker}
                   indent
+                  chevronGap
                   label={
                     <>
                       <span className="font-mono">{target.ticker}</span>{" "}
@@ -117,13 +118,27 @@ type PartRowProps = {
   strong?: boolean
   // indent marks a part inside a Tier.
   indent?: boolean
+  // chevronGap shifts the label right by the empty edge of the chevron icon.
+  chevronGap?: boolean
 }
 
 // PartRow shows the value, the shares, the Gap and the Planned Purchases of one part.
-function PartRow({ label, part, purchases, strong, indent }: PartRowProps) {
+function PartRow({
+  label,
+  part,
+  purchases,
+  strong,
+  indent,
+  chevronGap,
+}: PartRowProps) {
   return (
     <TableRow className={cn(strong && "bg-muted/40 font-medium")}>
-      <TableCell className={cn("whitespace-normal", indent && "pl-8")}>
+      <TableCell
+        className={cn(
+          "whitespace-normal",
+          indent && (chevronGap ? "pl-9" : "pl-8")
+        )}
+      >
         {label}
       </TableCell>
       <TableCell className="text-right num">
