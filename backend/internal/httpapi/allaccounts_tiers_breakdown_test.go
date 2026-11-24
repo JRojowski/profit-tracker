@@ -92,7 +92,7 @@ func TestAllTiersBreakdown_ADR0010Example(t *testing.T) {
 	require.Len(t, got.NoTier.Instruments, 1)
 	amzn := got.NoTier.Instruments[0]
 	assert.Equal(t, &breakdownHoldingDTO{
-		Value: ptr("396.00"), Cost: "400.00", UnrealizedProfit: ptr("-4.00"), ReturnOnCost: ptr("-1"),
+		Value: ptr("396.00"), Cost: "400.00", UnrealizedProfit: ptr("-4.00"), ReturnOnCost: ptr("-1"), LastPurchaseDate: "2026-10-05",
 	}, amzn.Holding)
 	require.NotNil(t, amzn.ClosedPositions)
 	assert.Equal(t, "400.00", amzn.ClosedPositions.Cost)
@@ -166,7 +166,7 @@ func TestAllTiersBreakdown_InstrumentOnBothAccounts_GivesOneRowInPLN(t *testing.
 	require.Len(t, got.Tiers[0].Instruments, 1, "one row for the Instrument on both Accounts")
 	aaa := got.Tiers[0].Instruments[0]
 	assert.Equal(t, &breakdownHoldingDTO{
-		Value: ptr("792.00"), Cost: "800.00", UnrealizedProfit: ptr("-8.00"), ReturnOnCost: ptr("-1"),
+		Value: ptr("792.00"), Cost: "800.00", UnrealizedProfit: ptr("-8.00"), ReturnOnCost: ptr("-1"), LastPurchaseDate: "2026-10-05",
 	}, aaa.Holding)
 	closed := aaa.ClosedPositions
 	require.NotNil(t, closed)

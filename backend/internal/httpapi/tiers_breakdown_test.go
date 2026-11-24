@@ -43,6 +43,7 @@ type breakdownHoldingDTO struct {
 	Cost             string  `json:"cost"`
 	UnrealizedProfit *string `json:"unrealizedProfit"`
 	ReturnOnCost     *string `json:"returnOnCost"`
+	LastPurchaseDate string  `json:"lastPurchaseDate"`
 }
 
 // breakdownClosedDTO is the Closed Positions part of an Instrument.
@@ -179,7 +180,7 @@ func TestTiersBreakdown_Holding_ShowsValueCostAndReturnOnCost(t *testing.T) {
 	assert.Equal(t, 1, *first.Order)
 	require.Len(t, first.Instruments, 2)
 	assert.Equal(t, &breakdownHoldingDTO{
-		Value: ptr("90.00"), Cost: "60.00", UnrealizedProfit: ptr("30.00"), ReturnOnCost: ptr("50"),
+		Value: ptr("90.00"), Cost: "60.00", UnrealizedProfit: ptr("30.00"), ReturnOnCost: ptr("50"), LastPurchaseDate: "2026-10-06",
 	}, first.Instruments[0].Holding)
 }
 
@@ -233,7 +234,7 @@ func TestTiersBreakdown_HoldingWithNoPrice_HasNoValueAndAddsNothingToTheSum(t *t
 
 	got := srv.tiersBreakdown(t, id)
 
-	assert.Equal(t, &breakdownHoldingDTO{NoValue: true, Cost: "30.00"}, got.Tiers[0].Instruments[1].Holding)
+	assert.Equal(t, &breakdownHoldingDTO{NoValue: true, Cost: "30.00", LastPurchaseDate: "2026-10-06"}, got.Tiers[0].Instruments[1].Holding)
 	assert.Equal(t, "100.00", got.Tiers[0].Sum.Cost, "60.00 open + 40.00 closed, with no 30.00 of CCC.US")
 }
 

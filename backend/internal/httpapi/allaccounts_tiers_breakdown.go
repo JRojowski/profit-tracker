@@ -41,6 +41,7 @@ func (a *api) allAccountsTiersBreakdown(w http.ResponseWriter, r *http.Request) 
 
 	var holdings []ledger.Holding
 	var closed []accountClosedPosition
+	openLots := []ledger.OpenLot{}
 	missing := missingRates{noLatest: map[string]bool{}, firstDay: map[string]time.Time{}}
 	for _, v := range views {
 		acc := v.account
@@ -50,6 +51,7 @@ func (a *api) allAccountsTiersBreakdown(w http.ResponseWriter, r *http.Request) 
 		res := allaccounts.ResultsInPLN(allaccounts.Account{ID: acc.ID, Currency: acc.Currency, State: v.state}, v.lots, rates)
 		missing.add(acc.Currency, res)
 		holdings = append(holdings, res.Holdings...)
+		openLots = append(openLots, v.state.OpenLots...)
 		account := &breakdownAccountResponse{ID: acc.ID, Name: acc.Name, Currency: acc.Currency}
 		closed = append(closed, withAccount(res.ClosedPositions, account)...)
 	}
@@ -57,7 +59,7 @@ func (a *api) allAccountsTiersBreakdown(w http.ResponseWriter, r *http.Request) 
 	warnings := missing.warnings()
 	resp := allTiersBreakdownResponse{Available: len(warnings) == 0, Warnings: warnings}
 	if resp.Available {
-		breakdown := tiersBreakdownOf(ledger.PLN, tiers, holdings, closed)
+		breakdown := tiersBreakdownOf(ledger.PLN, tiers, holdings, lastPurchaseTimes(openLots), closed)
 		resp.tiersBreakdownResponse = &breakdown
 	}
 	writeJSON(w, http.StatusOK, resp)

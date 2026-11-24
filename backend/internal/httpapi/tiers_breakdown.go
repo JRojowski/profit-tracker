@@ -57,6 +57,8 @@ type breakdownHoldingResponse struct {
 	UnrealizedProfit *string `json:"unrealizedProfit"`
 	// ReturnOnCost is the Unrealized Profit × 100 / Cost, exact. It is nil if there is no profit or the cost is 0.
 	ReturnOnCost *string `json:"returnOnCost"`
+	// LastPurchaseDate is the Polish day of the latest Fill of the open Lots, as YYYY-MM-DD.
+	LastPurchaseDate string `json:"lastPurchaseDate"`
 }
 
 // breakdownClosedResponse is the Closed Positions part of an Instrument.
@@ -116,7 +118,7 @@ func (a *api) accountTiersBreakdown(w http.ResponseWriter, r *http.Request) {
 		a.writeInternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tiersBreakdownOf(acc.Currency, tiers, view.state.Holdings, withAccount(view.state.ClosedPositions, nil)))
+	writeJSON(w, http.StatusOK, tiersBreakdownOf(acc.Currency, tiers, view.state.Holdings, lastPurchaseTimes(view.state.OpenLots), withAccount(view.state.ClosedPositions, nil)))
 }
 
 // accountClosedPosition is a Closed Position with the Account that the expanded list shows.
@@ -135,11 +137,24 @@ func withAccount(closed []ledger.ClosedPosition, acc *breakdownAccountResponse) 
 	return out
 }
 
+// lastPurchaseTimes returns the time of the latest Fill of the open Lots, by ticker.
+func lastPurchaseTimes(openLots []ledger.OpenLot) map[string]time.Time {
+	last := map[string]time.Time{}
+	for _, l := range openLots {
+		for _, f := range l.Fills {
+			if f.Time.After(last[l.Instrument.Ticker]) {
+				last[l.Instrument.Ticker] = f.Time
+			}
+		}
+	}
+	return last
+}
+
 // tiersBreakdownOf groups the results of the Instruments by Tier. All amounts of the Holdings and the Closed Positions
 // must be in currency. The function does not convert. The Tiers Breakdown of all Accounts calls it with Holdings and
-// Closed Positions that it converted to PLN. Several Holdings of one Instrument, for example one on each Account,
+// Closed Positions that it converted to PLN. lastPurchases holds the time of the latest Fill of the open Lots by ticker. Several Holdings of one Instrument, for example one on each Account,
 // make one Holding part. The same holds for the Closed Positions.
-func tiersBreakdownOf(currency string, tiers []tier.Tier, holdings []ledger.Holding, closed []accountClosedPosition) tiersBreakdownResponse {
+func tiersBreakdownOf(currency string, tiers []tier.Tier, holdings []ledger.Holding, lastPurchases map[string]time.Time, closed []accountClosedPosition) tiersBreakdownResponse {
 	tierOf := map[string]int{}
 	for i, t := range tiers {
 		for _, in := range t.Instruments {
@@ -161,7 +176,9 @@ func tiersBreakdownOf(currency string, tiers []tier.Tier, holdings []ledger.Hold
 	}
 
 	for _, h := range holdings {
-		groupOf(h.Instrument.Ticker).instrument(h.Instrument).addHolding(h)
+		b := groupOf(h.Instrument.Ticker).instrument(h.Instrument)
+		b.addHolding(h)
+		b.lastPurchase = lastPurchases[h.Instrument.Ticker]
 	}
 	for _, c := range closed {
 		groupOf(c.Instrument.Ticker).instrument(c.Instrument).addClosed(c)
@@ -227,6 +244,8 @@ type instrumentBuilder struct {
 	instrument ledger.Instrument
 	holdings   []ledger.Holding
 	closed     []accountClosedPosition
+	// lastPurchase is the time of the latest Fill of the open Lots.
+	lastPurchase time.Time
 }
 
 func (b *instrumentBuilder) addHolding(h ledger.Holding)       { b.holdings = append(b.holdings, h) }
@@ -266,6 +285,7 @@ func (b *instrumentBuilder) response() breakdownInstrumentResponse {
 func (b *instrumentBuilder) holdingPart() *breakdownHoldingResponse {
 	var value, unrealized, cost, unpricedCost decimal.Decimal
 	priced := false
+	lastPurchaseDate := exchange.DayInWarsaw(b.lastPurchase).Format(time.DateOnly)
 	for _, h := range b.holdings {
 		if !h.HasValue() {
 			unpricedCost = unpricedCost.Add(h.Cost)
@@ -277,11 +297,12 @@ func (b *instrumentBuilder) holdingPart() *breakdownHoldingResponse {
 		cost = cost.Add(h.Cost)
 	}
 	if !priced {
-		return &breakdownHoldingResponse{NoValue: true, Cost: formatAmount(unpricedCost)}
+		return &breakdownHoldingResponse{NoValue: true, Cost: formatAmount(unpricedCost), LastPurchaseDate: lastPurchaseDate}
 	}
 	return &breakdownHoldingResponse{
 		Value: new(formatAmount(value)), Cost: formatAmount(cost),
 		UnrealizedProfit: new(formatAmount(unrealized)), ReturnOnCost: returnOnCost(unrealized, cost),
+		LastPurchaseDate: lastPurchaseDate,
 	}
 }
 
