@@ -940,3 +940,85 @@ export async function fetchAllAccountsBenchmarks(
   )
   return readJSON<Benchmarks>(response)
 }
+
+// TierInstrumentTarget is an Instrument Target of a Tier: an Instrument with its own Target Share of the Tier.
+export type TierInstrumentTarget = {
+  ticker: string
+  name: string
+  targetShare: string
+}
+
+// Tier is one Tier of the configuration. Target Shares are decimal text that is a percentage.
+export type Tier = {
+  order: number
+  name: string
+  targetShare: string
+  sharedPart: { name: string; targetShare: string }
+  instrumentTargets: TierInstrumentTarget[]
+  sharedInstruments: { ticker: string; name: string }[]
+}
+
+// TierInstrument is one Instrument of the list for assignment. A null tierOrder means no Tier.
+// A null targetShare means the Shared Part. hasOpenHolding is false for an Instrument that the user sold in full.
+export type TierInstrument = {
+  ticker: string
+  name: string
+  tierOrder: number | null
+  targetShare: string | null
+  hasOpenHolding: boolean
+}
+
+// Tiers is the body of GET /api/tiers.
+export type Tiers = { tiers: Tier[]; instruments: TierInstrument[] }
+
+// TiersRequest is the body of PUT /api/tiers: the full configuration. A null targetShare of an Instrument puts it
+// in the Shared Part.
+export type TiersRequest = {
+  tiers: {
+    order: number
+    name: string
+    targetShare: string
+    sharedPartName: string
+    instruments: { ticker: string; targetShare: string | null }[]
+  }[]
+}
+
+// TierError is one mistake of a configuration. A null tierIndex belongs to no single Tier.
+export type TierError = {
+  tierIndex: number | null
+  ticker: string
+  message: string
+}
+
+// TiersRejected is the error of a PUT that the backend answered with 422. Nothing is saved.
+export class TiersRejected extends Error {
+  readonly errors: TierError[]
+
+  constructor(message: string, errors: TierError[]) {
+    super(message)
+    this.name = "TiersRejected"
+    this.errors = errors
+  }
+}
+
+// fetchTiers loads the Tiers and the list of Instruments for assignment.
+export async function fetchTiers(signal?: AbortSignal): Promise<Tiers> {
+  return readJSON<Tiers>(await fetch("/api/tiers", { signal }))
+}
+
+// saveTiers replaces the full configuration in one request. It throws TiersRejected for a 422 answer.
+export async function saveTiers(request: TiersRequest): Promise<Tiers> {
+  const response = await fetch("/api/tiers", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  })
+  if (response.status === 422) {
+    const body = (await response.json()) as {
+      error?: string
+      errors?: TierError[]
+    }
+    throw new TiersRejected(body.error ?? "HTTP 422", body.errors ?? [])
+  }
+  return readJSON<Tiers>(response)
+}

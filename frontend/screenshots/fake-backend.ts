@@ -3,6 +3,7 @@ import type { Page, Route } from "@playwright/test"
 import {
   fixtureFor,
   importPreviews,
+  tiersRejected,
   unsupportedEntriesError,
   type ApiFixture,
   type DataSet,
@@ -33,6 +34,7 @@ function answer(
     "/api/all-accounts/value-history": fixture.allHistory,
     "/api/all-accounts/benchmarks": fixture.allBenchmarks,
     "/api/imports": fixture.imports,
+    "/api/tiers": fixture.tiers,
     "/api/prices/refresh/progress": {
       running: false,
       done: 0,
@@ -85,6 +87,8 @@ export async function installFakeBackend(
     // preview is the answer of an upload.
     preview?: keyof typeof importPreviews
     unsupportedEntries?: boolean
+    // tiersRejected answers a save of the Tiers with the 422 error.
+    tiersRejected?: boolean
   } = {}
 ): Promise<string[]> {
   const fixture = fixtureFor(dataSet)
@@ -97,7 +101,12 @@ export async function installFakeBackend(
       options.unsupportedEntries &&
       new URL(message.location().url, "http://127.0.0.1").pathname ===
         "/api/imports"
-    if (!expected) failures.push(`console error: ${message.text()}`)
+    const expectedTiers =
+      options.tiersRejected &&
+      new URL(message.location().url, "http://127.0.0.1").pathname ===
+        "/api/tiers"
+    if (!expected && !expectedTiers)
+      failures.push(`console error: ${message.text()}`)
   })
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
@@ -119,6 +128,13 @@ export async function installFakeBackend(
       url.pathname === "/api/imports"
     ) {
       return json(route, unsupportedEntriesError, 400)
+    }
+    if (
+      options.tiersRejected &&
+      route.request().method() === "PUT" &&
+      url.pathname === "/api/tiers"
+    ) {
+      return json(route, tiersRejected, 422)
     }
     const found = answer(fixture, route.request().method(), url.pathname)
     if (found === undefined) {

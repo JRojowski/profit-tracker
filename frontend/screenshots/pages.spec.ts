@@ -135,6 +135,12 @@ const pageCases: PageCase[] = [
     charts: false,
     populatedSet: "krakenRewardUnknown",
   },
+  {
+    name: "rebalancing",
+    url: "/accounts/all/rebalancing",
+    empty: "emptyAccounts",
+    charts: false,
+  },
   { name: "import", url: "/import", empty: null, charts: false },
   { name: "imports", url: "/imports", empty: "emptyAccounts", charts: false },
   { name: "not-found", url: "/no-such-page", empty: null, charts: false },
@@ -336,6 +342,36 @@ for (const previewCase of previewCases) {
         expect(failures).toEqual([])
       })
     }
+  }
+}
+
+// The "Edit targets" mode saves a configuration that the backend rejects. Each message shows next to its Tier.
+for (const theme of themes) {
+  for (const viewport of viewports) {
+    const name = `rebalancing-edit-error-${theme}-${viewport.name}`
+    test(name, async ({ page }) => {
+      await page.setViewportSize(viewport.size)
+      await page.addInitScript((value) => {
+        localStorage.setItem("theme", value)
+      }, theme)
+      await page.clock.setFixedTime(fixedNow)
+      const failures = await installFakeBackend(page, "populated", {
+        tiersRejected: true,
+      })
+
+      await page.goto("/accounts/all/rebalancing")
+      await page.getByRole("button", { name: "Edit targets" }).click()
+      await page.getByRole("button", { name: "Save targets" }).click()
+      await expect(
+        page.getByText("add up to 110, more than 100", { exact: false })
+      ).toBeVisible()
+      await page.waitForLoadState("networkidle")
+      await page.evaluate(() => document.fonts.ready)
+
+      await expectNoHorizontalScroll(page)
+      await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true })
+      expect(failures).toEqual([])
+    })
   }
 }
 

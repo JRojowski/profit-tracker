@@ -13,6 +13,7 @@ import { AllAccountsBenchmarksPage } from "@/pages/all-accounts-benchmarks-page"
 import { AllAccountsPage } from "@/pages/all-accounts-page"
 import { ImportPage } from "@/pages/import-page"
 import { ImportsPage } from "@/pages/imports-page"
+import { RebalancingPage } from "@/pages/rebalancing-page"
 import { NotFoundPage } from "@/pages/not-found-page"
 
 // The backend serves index.html for each of these paths, so a reload opens the same view.
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: paths.root, element: <AllAccountsPage /> },
       { path: paths.allAccounts, element: <AllAccountsPage /> },
       { path: paths.allBenchmarks, element: <AllAccountsBenchmarksPage /> },
+      { path: paths.rebalancing, element: <RebalancingPage /> },
       {
         path: accountPattern,
         element: <AccountLayout />,
