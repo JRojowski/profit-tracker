@@ -1,7 +1,8 @@
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -34,7 +35,10 @@ const userKey = "user"
 const userLineWidth = 3
 
 // benchmarkOpacity is the stroke opacity of a Benchmark line, so that the user line stands out.
-const benchmarkOpacity = 0.5
+const benchmarkOpacity = 0.4
+
+// userAreaOpacity is the opacity of the area under the user line.
+const userAreaOpacity = 0.08
 
 // benchmarkLineWidth is the stroke width of a Benchmark line.
 const benchmarkLineWidth = 1.25
@@ -49,20 +53,21 @@ function drawOrder(lines: ChartLine[]): ChartLine[] {
 // LineStyle is the colour of a line and the colour of the text on its end tag.
 type LineStyle = { color: string; ink: string }
 
-// userStyle is the style of the user line: the primary colour. The tag text uses the ink of chart-1, which has the same hue.
-const userStyle: LineStyle = {
-  color: "var(--primary)",
-  ink: "var(--chart-1-foreground)",
+// userStyle is the style of the user line: the foreground colour, which no Benchmark uses. The tag text is inverted.
+export const userStyle: LineStyle = {
+  color: "var(--foreground)",
+  ink: "var(--background)",
 }
 
 // benchmarkStyles gives the style of the line of each Benchmark. A Benchmark with an unknown id uses otherStyle.
 const benchmarkStyles: Record<string, LineStyle> = {
-  sp500: { color: "var(--chart-4)", ink: "var(--chart-4-foreground)" },
+  sp500: { color: "var(--chart-2)", ink: "var(--chart-2-foreground)" },
+  nasdaq100: { color: "var(--chart-6)", ink: "var(--chart-6-foreground)" },
+  world: { color: "var(--chart-4)", ink: "var(--chart-4-foreground)" },
+  bitcoin: { color: "var(--chart-7)", ink: "var(--chart-7-foreground)" },
   wig20tr: { color: "var(--chart-5)", ink: "var(--chart-5-foreground)" },
   mwig40tr: { color: "var(--chart-8)", ink: "var(--chart-8-foreground)" },
-  world: { color: "var(--chart-2)", ink: "var(--chart-2-foreground)" },
-  gold: { color: "var(--chart-7)", ink: "var(--chart-7-foreground)" },
-  bitcoin: { color: "var(--chart-3)", ink: "var(--chart-3-foreground)" },
+  gold: { color: "var(--chart-other)", ink: "var(--chart-other-foreground)" },
 }
 const otherStyle = benchmarkStyles.world
 
@@ -196,7 +201,7 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
       className="aspect-auto h-64 w-full md:h-80"
       initialDimension={{ width: 320, height: 256 }}
     >
-      <LineChart
+      <ComposedChart
         data={rows}
         margin={{ top: 8, right: tagMargin, bottom: 0, left: 0 }}
         accessibilityLayer
@@ -232,6 +237,18 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
             />
           )}
         />
+        <Area
+          dataKey={userKey}
+          type="linear"
+          stroke="none"
+          fill={`var(--color-${userKey})`}
+          fillOpacity={userAreaOpacity}
+          dot={false}
+          activeDot={false}
+          isAnimationActive={false}
+          legendType="none"
+          tooltipType="none"
+        />
         {drawOrder(lines).map((line) => (
           <Line
             key={line.key}
@@ -247,7 +264,7 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
           />
         ))}
         <ChartEndTags time={last} tags={tags} />
-      </LineChart>
+      </ComposedChart>
     </ChartContainer>
   )
 }
