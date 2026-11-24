@@ -1,8 +1,8 @@
 import { PlusIcon, Trash2Icon } from "lucide-react"
 import { useState } from "react"
 
-import { NoOpenHoldingBadge } from "@/components/tiers-list"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -372,4 +372,9 @@ function InstrumentAssignment({
       </CardContent>
     </Card>
   )
+}
+
+// NoOpenHoldingBadge marks an Instrument that has no open Holding.
+function NoOpenHoldingBadge() {
+  return <Badge variant="outline">No open Holding</Badge>
 }
