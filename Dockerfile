@@ -12,7 +12,7 @@ RUN npm run build
 # Stage 2: build the Go binary with the frontend embedded, as `make build` does.
 # The SQLite driver is pure Go, so the binary needs no C library.
 # Keep the Go version the same as in backend/go.mod.
-FROM golang:1.27.3-alpine AS backend
+FROM golang:1.27.4-alpine AS backend
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
