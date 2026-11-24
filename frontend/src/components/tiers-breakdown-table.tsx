@@ -167,8 +167,8 @@ function orderRows(
   return [...stored, ...rest]
 }
 
-// TiersBreakdownTable shows the Tiers in order and the "No Tier" group last. Each Tier has a group of Holding rows,
-// then a group of Closed Positions rows, then a sum row. The rows follow the date order until the user moves a row.
+// TiersBreakdownTable shows the Tiers in order and the "No Tier" group last. Each Tier row shows the Tier sums. Each Tier has a group of Holding rows,
+// then a group of Closed Positions rows. The rows follow the date order until the user moves a row.
 // A row moves only inside its group and its Tier. The Closed Positions row expands in place. The table has a total row.
 // The view of all Accounts uses the same table.
 export function TiersBreakdownTable({
@@ -287,8 +287,9 @@ export function TiersBreakdownTable({
               ))}
             </TableRow>
           </TableHeader>
-          {ordered.map(({ group, holding, closed }) => (
+          {ordered.map(({ group, holding, closed }, index) => (
             <GroupRows
+              first={index === 0}
               key={group.name}
               group={group}
               holding={holding}
@@ -299,7 +300,12 @@ export function TiersBreakdownTable({
             />
           ))}
           <TableFooter>
-            <SumRow label="Total" sum={breakdown.total} currency={currency} />
+            <SumRow
+              label="Total"
+              sum={breakdown.total}
+              currency={currency}
+              variant="total"
+            />
           </TableFooter>
         </Table>
       </DndContext>
@@ -314,9 +320,10 @@ type GroupRowsProps = {
   currency: string
   expanded: ReadonlySet<string>
   onToggle: (key: string) => void
+  first: boolean
 }
 
-// GroupRows shows the heading row, the Holding rows, the Closed Positions rows and the sum row of one Tier.
+// GroupRows shows the Tier row with the Tier sums, the Holding rows and the Closed Positions rows of one Tier.
 function GroupRows({
   group,
   holding,
@@ -324,19 +331,23 @@ function GroupRows({
   currency,
   expanded,
   onToggle,
+  first,
 }: GroupRowsProps) {
   const holdingSlot = slotOf(group, "holding")
   const closedSlot = slotOf(group, "closed")
   return (
     <TableBody>
-      <TableRow className="bg-muted/50 hover:bg-muted/50">
-        <TableCell
-          colSpan={headers.length}
-          className="font-mono text-xs tracking-wider uppercase"
-        >
-          {group.name}
-        </TableCell>
-      </TableRow>
+      {!first && (
+        <TableRow aria-hidden className="h-8 border-0 hover:bg-transparent">
+          <TableCell colSpan={headers.length} className="p-0" />
+        </TableRow>
+      )}
+      <SumRow
+        label={group.name}
+        sum={group.sum}
+        currency={currency}
+        variant="tier"
+      />
       <SortableContext
         items={holding.map((i) => rowId(holdingSlot, i.ticker))}
         strategy={verticalListSortingStrategy}
@@ -371,11 +382,6 @@ function GroupRows({
           )
         })}
       </SortableContext>
-      <SumRow
-        label={`Sum of ${group.name}`}
-        sum={group.sum}
-        currency={currency}
-      />
     </TableBody>
   )
 }
@@ -594,20 +600,34 @@ function ClosedRows({
   )
 }
 
-// SumRow shows a sum of a Tier or of the whole table. Its Return on Cost uses the cost of the open Lots with a price
+// SumRow shows the sums in the Tier row, or in the Total row of the whole table. Its Return on Cost uses the cost of the open Lots with a price
 // and of the Closed Positions.
 function SumRow({
   label,
   sum,
   currency,
+  variant,
 }: {
   label: string
   sum: BreakdownSum
   currency: string
+  variant: "tier" | "total"
 }) {
   return (
-    <TableRow className="font-medium">
-      <TableCell>{label}</TableCell>
+    <TableRow
+      className={cn(
+        variant === "tier" && "bg-muted/50 font-semibold hover:bg-muted/50",
+        variant === "total" &&
+          "border-t-2 border-foreground/40 bg-muted/50 text-sm font-bold hover:bg-muted/50"
+      )}
+    >
+      <TableCell
+        className={
+          variant === "tier" ? "font-mono tracking-wider uppercase" : ""
+        }
+      >
+        {label}
+      </TableCell>
       <NumberCell>
         <Amount amount={sum.value} currency={currency} />
       </NumberCell>
