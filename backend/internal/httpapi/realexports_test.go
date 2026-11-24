@@ -668,3 +668,44 @@ func rowKey(t *testing.T, r assistantClosedPositionRow) string {
 	require.NoError(t, err)
 	return string(data)
 }
+
+// TestRealExports_Rebalancing_ReturnsTheTableForASampleConfiguration saves a sample configuration of Tiers for the
+// Instruments of the real exports and checks that GET /api/all-accounts/rebalancing returns 200.
+// The sample: Tier 1 of 60 has the first Instrument as an Instrument Target of 30 and every second Instrument in its
+// Shared Part. Tier 2 of 40 has the other Instruments. The failure messages show no amounts.
+func TestRealExports_Rebalancing_ReturnsTheTableForASampleConfiguration(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv := startServer(t)
+	for _, export := range exports {
+		srv.importRealExport(t, export)
+	}
+	// The refresh gets the fake USD rate. The fake price source has no prices, so each Holding has no price.
+	srv.refreshPrices(t)
+	options := srv.getTiers(t).Instruments
+	first := tierRequest{Order: 1, Name: "Sample I", TargetShare: "60", SharedPartName: "Sample shared"}
+	second := tierRequest{Order: 2, Name: "Sample II", TargetShare: "40"}
+	for i, o := range options {
+		switch {
+		case i == 0:
+			first.Instruments = append(first.Instruments, assignmentRequest{Ticker: o.Ticker, TargetShare: share("30")})
+		case i%2 == 1:
+			first.Instruments = append(first.Instruments, assignmentRequest{Ticker: o.Ticker})
+		default:
+			second.Instruments = append(second.Instruments, assignmentRequest{Ticker: o.Ticker})
+		}
+	}
+	srv.putTiersOK(t, tiersRequest{Tiers: []tierRequest{first, second}})
+
+	var got rebalancingResponse
+	srv.getRealJSON(t, "/api/all-accounts/rebalancing", &got)
+
+	require.True(t, got.Available, "the table is available")
+	require.Len(t, got.Tiers, 2)
+	require.NotNil(t, got.Value)
+	sum := decimal.RequireFromString(got.NoTier.Value)
+	for _, tr := range got.Tiers {
+		sum = sum.Add(decimal.RequireFromString(tr.Value))
+	}
+	assert.True(t, sum.Equal(decimal.RequireFromString(*got.Value)), "the Tiers and the No Tier group add up to the value")
+}
