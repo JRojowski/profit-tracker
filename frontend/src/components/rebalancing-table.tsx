@@ -8,6 +8,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -18,6 +19,7 @@ import type {
   RebalancingPart,
   RebalancingPurchase,
 } from "@/lib/api"
+import { sumDecimals } from "@/lib/decimal"
 import { amountSign, formatAmount, formatShare } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -48,8 +50,9 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.tiers.map((tier) => (
+          {data.tiers.map((tier, index) => (
             <Fragment key={tier.order}>
+              {index > 0 && <SpacerRow />}
               <PartRow
                 strong
                 label={
@@ -114,6 +117,7 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
           ))}
           {data.noTier && data.noTier.holdings.length > 0 && (
             <>
+              {data.tiers.length > 0 && <SpacerRow />}
               <PartRow
                 strong
                 label={
@@ -134,8 +138,73 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
             </>
           )}
         </TableBody>
+        <TableFooter>
+          <TotalRow data={data} />
+        </TableFooter>
       </Table>
     </div>
+  )
+}
+
+// SpacerRow adds a vertical gap between two Tiers.
+function SpacerRow() {
+  return (
+    <TableRow aria-hidden className="h-8 border-0 hover:bg-transparent">
+      <TableCell colSpan={6} className="p-0" />
+    </TableRow>
+  )
+}
+
+// TotalRow sums the Tier rows and the "No Tier" row. The shares must give 100 %.
+// The Planned Purchases are summed for each currency. Part Value and Target Value are not shown, so the row sums only the shown columns.
+function TotalRow({ data }: { data: Rebalancing }) {
+  const parts: RebalancingPart[] = data.noTier
+    ? [...data.tiers, data.noTier]
+    : data.tiers
+  const sum = (pick: (part: RebalancingPart) => string) =>
+    sumDecimals(parts.map(pick))
+  const purchases = data.tiers.flatMap((tier) => [
+    ...tier.instrumentTargets.map((target) => target.plannedPurchase),
+    tier.sharedPart.plannedPurchase,
+  ])
+  const currencies = [...new Set(purchases.map((p) => p.currency))]
+  const totals: RebalancingPurchase[] = currencies.map((currency) => ({
+    accountId: null,
+    currency,
+    amount: sumDecimals(
+      purchases
+        .filter((p) => p.currency === currency && p.amount !== null)
+        .map((p) => p.amount ?? "0")
+    ),
+  }))
+  return (
+    <TableRow className="border-t-2 border-foreground/40 bg-muted/50 text-sm font-bold hover:bg-muted/50">
+      <TableCell>Total</TableCell>
+      <TableCell className="text-right num">
+        {formatAmount(
+          sum((part) => part.value),
+          "PLN"
+        )}
+      </TableCell>
+      <TableCell className="text-right num">
+        {formatShare(sum((part) => part.actualShare))}
+      </TableCell>
+      <TableCell className="text-right num">
+        {formatShare(sum((part) => part.targetShare))}
+      </TableCell>
+      <TableCell className="text-right">
+        <span className="num">
+          {formatAmount(
+            sum((part) => part.gap),
+            "PLN",
+            { signed: true }
+          )}
+        </span>
+      </TableCell>
+      <TableCell className="text-right">
+        <PurchaseCell purchases={totals} />
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -162,7 +231,7 @@ function PartRow({
   chevronGap,
 }: PartRowProps) {
   return (
-    <TableRow className={cn(strong && "bg-muted/40 font-medium")}>
+    <TableRow className={cn(strong && "bg-muted/40 font-semibold")}>
       <TableCell
         className={cn(
           "whitespace-normal",
