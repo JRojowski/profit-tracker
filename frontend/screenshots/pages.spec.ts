@@ -69,6 +69,14 @@ const pageCases: PageCase[] = [
     expand: "2 Closed Positions of ALPHA.PL",
   },
   {
+    // The first Tier is collapsed to its Tier row.
+    name: "tiers-breakdown-collapsed",
+    url: "/accounts/1/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "Global Market Core",
+  },
+  {
     // The Closed Positions row of ALPHA.PL is open and shows the Account of each single Closed Position.
     name: "all-tiers-breakdown",
     url: "/accounts/all/tiers-breakdown",

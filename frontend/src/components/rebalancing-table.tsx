@@ -1,6 +1,8 @@
 import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
 import { Fragment, useState } from "react"
 
+import { TierToggle } from "@/components/tier-toggle"
+import { useCollapsedTiers } from "@/hooks/use-collapsed-tiers"
 import { Badge } from "@/components/ui/badge"
 import {
   Table,
@@ -30,6 +32,8 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
       if (!next.delete(order)) next.add(order)
       return next
     })
+  // tiers holds the keys of the Tiers that show only their Tier row.
+  const tiers = useCollapsedTiers("profit-tracker.rebalancing-collapsed:all")
   return (
     <div className="min-w-0 overflow-x-auto rounded-lg border">
       <Table>
@@ -46,61 +50,87 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
         <TableBody>
           {data.tiers.map((tier) => (
             <Fragment key={tier.order}>
-              <PartRow strong label={tier.name} part={tier} />
-              {tier.instrumentTargets.map((target) => (
-                <PartRow
-                  key={target.ticker}
-                  indent
-                  chevronGap
-                  label={
-                    <>
-                      <span className="font-mono">{target.ticker}</span>{" "}
-                      <span className="text-muted-foreground">
-                        {target.name}
-                      </span>
-                      {target.noValue && <NoValueBadge />}
-                    </>
-                  }
-                  part={target}
-                  purchases={[target.plannedPurchase]}
-                />
-              ))}
               <PartRow
-                indent
+                strong
                 label={
-                  <SharedPartToggle
-                    open={!collapsed.has(tier.order)}
-                    onToggle={() => toggle(tier.order)}
+                  <TierToggle
+                    open={!tiers.collapsed.has(String(tier.order))}
+                    onToggle={() => tiers.toggle(String(tier.order))}
                   >
-                    {tier.sharedPart.name || "Shared Part"}
-                    {tier.sharedPart.name && (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        (Shared Part)
-                      </span>
-                    )}
-                  </SharedPartToggle>
+                    {tier.name}
+                  </TierToggle>
                 }
-                part={tier.sharedPart}
-                purchases={[tier.sharedPart.plannedPurchase]}
+                part={tier}
               />
-              {!collapsed.has(tier.order) &&
-                tier.sharedPart.instruments.map((instrument) => (
-                  <HoldingRow key={instrument.ticker} holding={instrument} />
-                ))}
+              {!tiers.collapsed.has(String(tier.order)) && (
+                <>
+                  {tier.instrumentTargets.map((target) => (
+                    <PartRow
+                      key={target.ticker}
+                      indent
+                      chevronGap
+                      label={
+                        <>
+                          <span className="font-mono">{target.ticker}</span>{" "}
+                          <span className="text-muted-foreground">
+                            {target.name}
+                          </span>
+                          {target.noValue && <NoValueBadge />}
+                        </>
+                      }
+                      part={target}
+                      purchases={[target.plannedPurchase]}
+                    />
+                  ))}
+                  <PartRow
+                    indent
+                    label={
+                      <SharedPartToggle
+                        open={!collapsed.has(tier.order)}
+                        onToggle={() => toggle(tier.order)}
+                      >
+                        {tier.sharedPart.name || "Shared Part"}
+                        {tier.sharedPart.name && (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            (Shared Part)
+                          </span>
+                        )}
+                      </SharedPartToggle>
+                    }
+                    part={tier.sharedPart}
+                    purchases={[tier.sharedPart.plannedPurchase]}
+                  />
+                  {!collapsed.has(tier.order) &&
+                    tier.sharedPart.instruments.map((instrument) => (
+                      <HoldingRow
+                        key={instrument.ticker}
+                        holding={instrument}
+                      />
+                    ))}
+                </>
+              )}
             </Fragment>
           ))}
           {data.noTier && data.noTier.holdings.length > 0 && (
             <>
               <PartRow
                 strong
-                label="No Tier"
+                label={
+                  <TierToggle
+                    open={!tiers.collapsed.has("none")}
+                    onToggle={() => tiers.toggle("none")}
+                  >
+                    No Tier
+                  </TierToggle>
+                }
                 part={data.noTier}
                 purchases={[]}
               />
-              {data.noTier.holdings.map((holding) => (
-                <HoldingRow key={holding.ticker} holding={holding} />
-              ))}
+              {!tiers.collapsed.has("none") &&
+                data.noTier.holdings.map((holding) => (
+                  <HoldingRow key={holding.ticker} holding={holding} />
+                ))}
             </>
           )}
         </TableBody>

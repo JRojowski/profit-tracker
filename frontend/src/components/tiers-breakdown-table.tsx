@@ -26,6 +26,8 @@ import {
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { TierToggle } from "@/components/tier-toggle"
+import { useCollapsedTiers } from "@/hooks/use-collapsed-tiers"
 import { useBreakdownOrder } from "@/hooks/use-breakdown-order"
 import {
   Table,
@@ -133,6 +135,11 @@ type RowGroup = "holding" | "closed"
 // DRAG_DISTANCE is the distance in pixels that the pointer moves before a drag starts.
 const DRAG_DISTANCE = 4
 
+// tierKey names one Tier for the list of collapsed Tiers.
+function tierKey(group: BreakdownGroup) {
+  return String(group.order ?? "none")
+}
+
 // slotOf names one Tier and one group of rows. It keys the manual order.
 function slotOf(group: BreakdownGroup, rows: RowGroup) {
   return `${group.order ?? "none"}:${rows}`
@@ -177,6 +184,9 @@ export function TiersBreakdownTable({
 }: TiersBreakdownTableProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const { order, hasManualOrder, setSlot, clear } = useBreakdownOrder(view)
+  const tiers = useCollapsedTiers(
+    `profit-tracker.tiers-breakdown-collapsed:${view}`
+  )
   const toggle = (key: string) =>
     setExpanded((current) => {
       const next = new Set(current)
@@ -297,6 +307,8 @@ export function TiersBreakdownTable({
               currency={currency}
               expanded={expanded}
               onToggle={toggle}
+              open={!tiers.collapsed.has(tierKey(group))}
+              onToggleTier={() => tiers.toggle(tierKey(group))}
             />
           ))}
           <TableFooter>
@@ -321,6 +333,9 @@ type GroupRowsProps = {
   expanded: ReadonlySet<string>
   onToggle: (key: string) => void
   first: boolean
+  // open tells if the Tier shows its rows. onToggleTier collapses or expands the Tier.
+  open: boolean
+  onToggleTier: () => void
 }
 
 // GroupRows shows the Tier row with the Tier sums, the Holding rows and the Closed Positions rows of one Tier.
@@ -332,6 +347,8 @@ function GroupRows({
   expanded,
   onToggle,
   first,
+  open,
+  onToggleTier,
 }: GroupRowsProps) {
   const holdingSlot = slotOf(group, "holding")
   const closedSlot = slotOf(group, "closed")
@@ -347,41 +364,47 @@ function GroupRows({
         sum={group.sum}
         currency={currency}
         variant="tier"
+        open={open}
+        onToggleTier={onToggleTier}
       />
-      <SortableContext
-        items={holding.map((i) => rowId(holdingSlot, i.ticker))}
-        strategy={verticalListSortingStrategy}
-      >
-        {holding.map((instrument) => (
-          <HoldingRow
-            key={instrument.ticker}
-            id={rowId(holdingSlot, instrument.ticker)}
-            instrument={instrument}
-            holding={instrument.holding!}
-            currency={currency}
-          />
-        ))}
-      </SortableContext>
-      <SortableContext
-        items={closed.map((i) => rowId(closedSlot, i.ticker))}
-        strategy={verticalListSortingStrategy}
-      >
-        {closed.map((instrument) => {
-          const key = `${group.name}:${instrument.ticker}`
-          return (
-            <ClosedRows
-              key={instrument.ticker}
-              id={rowId(closedSlot, instrument.ticker)}
-              instrument={instrument}
-              closed={instrument.closedPositions!}
-              currency={currency}
-              open={expanded.has(key)}
-              onToggle={() => onToggle(key)}
-              showName={instrument.holding === null}
-            />
-          )
-        })}
-      </SortableContext>
+      {open && (
+        <>
+          <SortableContext
+            items={holding.map((i) => rowId(holdingSlot, i.ticker))}
+            strategy={verticalListSortingStrategy}
+          >
+            {holding.map((instrument) => (
+              <HoldingRow
+                key={instrument.ticker}
+                id={rowId(holdingSlot, instrument.ticker)}
+                instrument={instrument}
+                holding={instrument.holding!}
+                currency={currency}
+              />
+            ))}
+          </SortableContext>
+          <SortableContext
+            items={closed.map((i) => rowId(closedSlot, i.ticker))}
+            strategy={verticalListSortingStrategy}
+          >
+            {closed.map((instrument) => {
+              const key = `${group.name}:${instrument.ticker}`
+              return (
+                <ClosedRows
+                  key={instrument.ticker}
+                  id={rowId(closedSlot, instrument.ticker)}
+                  instrument={instrument}
+                  closed={instrument.closedPositions!}
+                  currency={currency}
+                  open={expanded.has(key)}
+                  onToggle={() => onToggle(key)}
+                  showName={instrument.holding === null}
+                />
+              )
+            })}
+          </SortableContext>
+        </>
+      )}
     </TableBody>
   )
 }
@@ -607,11 +630,15 @@ function SumRow({
   sum,
   currency,
   variant,
+  open,
+  onToggleTier,
 }: {
   label: string
   sum: BreakdownSum
   currency: string
   variant: "tier" | "total"
+  open?: boolean
+  onToggleTier?: () => void
 }) {
   return (
     <TableRow
@@ -626,7 +653,13 @@ function SumRow({
           variant === "tier" ? "font-mono tracking-wider uppercase" : ""
         }
       >
-        {label}
+        {onToggleTier ? (
+          <TierToggle open={open ?? true} onToggle={onToggleTier}>
+            {label}
+          </TierToggle>
+        ) : (
+          label
+        )}
       </TableCell>
       <NumberCell>
         <Amount amount={sum.value} currency={currency} />
