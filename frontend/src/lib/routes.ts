@@ -13,6 +13,7 @@ export const paths = {
   closedPositions: (id: number) => `/accounts/${id}/closed-positions`,
   benchmarks: (id: number) => `/accounts/${id}/benchmarks`,
   allBenchmarks: "/accounts/all/benchmarks",
+  rebalancing: "/accounts/all/rebalancing",
   ikze: (id: number) => `/accounts/${id}/ikze`,
   import: "/import",
   imports: "/imports",

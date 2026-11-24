@@ -22,6 +22,7 @@ import type {
   InstrumentOverview,
   OverviewFill,
   PriceWarning,
+  Tiers,
   UnsupportedEntry,
   ValueHistoryPoint,
 } from "../src/lib/api"
@@ -1165,6 +1166,91 @@ const bitcoinOverview: InstrumentOverview = {
   feeSum: krakenSummary.feeSum,
 }
 
+// populatedTiers is the configuration of two Tiers with an Instrument Target, a Shared Part and a sold Instrument.
+const populatedTiers: Tiers = {
+  tiers: [
+    {
+      order: 1,
+      name: "Global Market Core",
+      targetShare: "60",
+      sharedPart: { name: "Blue Chips", targetShare: "40" },
+      instrumentTargets: [
+        { ticker: "ALPHA.PL", name: "Alpha Retail S.A.", targetShare: "60" },
+      ],
+      sharedInstruments: [
+        { ticker: "BETA.US", name: "Beta Software Inc." },
+        { ticker: "DELTA.PL", name: "Delta Bond Fund" },
+      ],
+    },
+    {
+      order: 2,
+      name: "Asymmetric Bets",
+      targetShare: "40",
+      sharedPart: { name: "", targetShare: "100" },
+      instrumentTargets: [],
+      sharedInstruments: [],
+    },
+  ],
+  instruments: [
+    {
+      ticker: "ALPHA.PL",
+      name: "Alpha Retail S.A.",
+      tierOrder: 1,
+      targetShare: "60",
+      hasOpenHolding: true,
+    },
+    {
+      ticker: "BETA.US",
+      name: "Beta Software Inc.",
+      tierOrder: 1,
+      targetShare: null,
+      hasOpenHolding: true,
+    },
+    {
+      ticker: "DELTA.PL",
+      name: "Delta Bond Fund",
+      tierOrder: 1,
+      targetShare: null,
+      hasOpenHolding: false,
+    },
+    {
+      ticker: "GAMMA.PL",
+      name: "Gamma Energy S.A.",
+      tierOrder: null,
+      targetShare: null,
+      hasOpenHolding: true,
+    },
+  ],
+}
+
+// emptyTiers is the configuration before the user creates a Tier.
+const emptyTiers: Tiers = {
+  tiers: [],
+  instruments: populatedTiers.instruments.map((i) => ({
+    ...i,
+    tierOrder: null,
+    targetShare: null,
+  })),
+}
+
+// tiersRejected is the 422 answer of a save with the Target Shares of the Tiers that add up to 90.
+export const tiersRejected = {
+  error: "the configuration of the Tiers has 2 error(s), nothing is saved",
+  errors: [
+    {
+      tierIndex: null,
+      ticker: "",
+      message: "The Target Shares of the Tiers add up to 90, not to 100.",
+    },
+    {
+      tierIndex: 0,
+      ticker: "",
+      message:
+        "Tier 1. Global Market Core: the Instrument Targets add up to 110, more than 100.",
+    },
+  ],
+}
+
 // ApiFixture is the set of answers of the fake backend for one data set.
 export type ApiFixture = {
   accounts: Account[]
@@ -1181,6 +1267,7 @@ export type ApiFixture = {
   ikzeLimit: Record<number, IkzeLimit>
   overview: Record<string, InstrumentOverview>
   imports: ImportSummary[]
+  tiers: Tiers
 }
 
 // fixtureFor gives the answers of the fake backend for a data set.
@@ -1243,6 +1330,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       ikzeLimit: { 2: ikzeLimit },
       overview: { "1:BETA.US": betaOverview },
       imports,
+      tiers: populatedTiers,
     }
   }
   const emptyAllHistory: AllAccountsValueHistory = {
@@ -1270,6 +1358,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },
     overview: {},
     imports: [],
+    tiers: emptyTiers,
   }
 }
 

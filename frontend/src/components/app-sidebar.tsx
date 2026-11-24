@@ -7,6 +7,7 @@ import {
   PiggyBankIcon,
   ReceiptIcon,
   ScaleIcon,
+  TargetIcon,
   UploadIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -86,6 +87,11 @@ export function AppSidebar() {
           to: paths.allBenchmarks,
           icon: ScaleIcon,
           label: "Benchmarks",
+        },
+        {
+          to: paths.rebalancing,
+          icon: TargetIcon,
+          label: "Rebalancing",
         },
       ]
   const importPages: NavEntry[] = [
