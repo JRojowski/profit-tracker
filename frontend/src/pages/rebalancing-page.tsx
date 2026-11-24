@@ -4,7 +4,7 @@ import { useState } from "react"
 import { LoadedView } from "@/components/loaded-view"
 import { SectionHeading } from "@/components/section-heading"
 import { TiersEditor } from "@/components/tiers-editor"
-import { TiersList } from "@/components/tiers-list"
+import { RebalancingView } from "@/components/rebalancing-view"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -12,8 +12,7 @@ import { useLoad } from "@/hooks/use-load"
 import { fetchTiers, type Tiers } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
 
-// RebalancingPage shows the Tiers of the view of all Accounts and the "Edit targets" mode. The Rebalancing table
-// comes in a later ticket.
+// RebalancingPage shows the Rebalancing table of the view of all Accounts and the "Edit targets" mode.
 export function RebalancingPage() {
   const { accounts, accountsError, valuesVersion } = useAppState()
   const loaded = useLoad("tiers", valuesVersion, fetchTiers)
@@ -39,11 +38,11 @@ export function RebalancingPage() {
           <div className="flex min-w-0 flex-col gap-4">
             <SectionHeading
               label="Rebalancing"
-              title={editing ? "Edit targets" : "Tiers"}
+              title={editing ? "Edit targets" : "Rebalancing table"}
               description={
                 editing
                   ? "The tool saves all Tiers in one step when you save the targets."
-                  : "Each Tier has a Target Share of the value of all Holdings."
+                  : "Each part shows how far it is from its Target Share and what to buy with the new cash."
               }
               action={
                 !editing && (
@@ -74,7 +73,7 @@ export function RebalancingPage() {
                 </Button>
               </div>
             ) : (
-              <TiersList saved={tiers} />
+              <RebalancingView />
             )}
           </div>
         )

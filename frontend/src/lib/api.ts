@@ -1089,3 +1089,93 @@ export async function saveTiers(request: TiersRequest): Promise<Tiers> {
   }
   return readJSON<Tiers>(response)
 }
+
+// RebalancingRate is the latest Exchange Rate of the Rebalancing table. The date is YYYY-MM-DD.
+export type RebalancingRate = { currency: string; rate: string; date: string }
+
+// RebalancingAccount is one Tier Account. The amounts are in the Account currency.
+export type RebalancingAccount = {
+  accountId: number
+  name: string
+  currency: string
+  freeCash: string
+  cash: string
+  plannedPurchases: string
+  unusedCash: string
+}
+
+// RebalancingPart holds the amounts of a part in PLN. The shares are percentages and the backend does not round them.
+export type RebalancingPart = {
+  value: string
+  actualShare: string
+  targetShare: string
+  targetValue: string
+  gap: string
+}
+
+// RebalancingPurchase is a Planned Purchase in the currency of its Account. A null amount means the Account is missing.
+export type RebalancingPurchase = {
+  accountId: number | null
+  currency: string
+  amount: string | null
+}
+
+// RebalancingTarget is an Instrument Target of the Rebalancing table.
+export type RebalancingTarget = RebalancingPart & {
+  ticker: string
+  name: string
+  noValue: boolean
+  plannedPurchase: RebalancingPurchase
+}
+
+// RebalancingHolding is an Instrument of a Shared Part or of the "No Tier" group. Value and share are null with no value.
+export type RebalancingHolding = {
+  ticker: string
+  name: string
+  noValue: boolean
+  value: string | null
+  share: string | null
+}
+
+// RebalancingTier is one Tier of the Rebalancing table.
+export type RebalancingTier = RebalancingPart & {
+  order: number
+  name: string
+  plannedPurchases: RebalancingPurchase[]
+  instrumentTargets: RebalancingTarget[]
+  sharedPart: RebalancingPart & {
+    name: string
+    plannedPurchase: RebalancingPurchase
+    instruments: RebalancingHolding[]
+  }
+}
+
+// Rebalancing is the body of GET /api/all-accounts/rebalancing.
+export type Rebalancing = {
+  available: boolean
+  warnings: string[]
+  exchangeRate: RebalancingRate | null
+  accounts: RebalancingAccount[]
+  missingAccounts: string[]
+  value: string | null
+  base: string | null
+  tiers: RebalancingTier[]
+  noTier: (RebalancingPart & { holdings: RebalancingHolding[] }) | null
+  unpricedHoldings: { accountId: number; ticker: string; name: string }[]
+}
+
+// fetchRebalancing loads the Rebalancing table. The cash maps an Account id to the cash for Rebalancing as decimal text.
+// An Account with no entry uses its free cash.
+export async function fetchRebalancing(
+  cash: Record<number, string>,
+  signal?: AbortSignal
+): Promise<Rebalancing> {
+  const params = new URLSearchParams()
+  for (const [id, amount] of Object.entries(cash)) {
+    params.append("cash", `${id}:${amount}`)
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : ""
+  return readJSON<Rebalancing>(
+    await fetch(`/api/all-accounts/rebalancing${query}`, { signal })
+  )
+}

@@ -22,6 +22,7 @@ import type {
   InstrumentOverview,
   OverviewFill,
   PriceWarning,
+  Rebalancing,
   Tiers,
   TiersBreakdown,
   UnsupportedEntry,
@@ -1376,6 +1377,137 @@ export const tiersRejected = {
 }
 
 // ApiFixture is the set of answers of the fake backend for one data set.
+// populatedRebalancing is a Rebalancing table with a Planned Purchase on each Account, a negative Gap, a Holding with
+// no Tier and a Holding with no price.
+const populatedRebalancing: Rebalancing = {
+  available: true,
+  warnings: [],
+  exchangeRate: { currency: "USD", rate: "3.6512", date: today },
+  accounts: [
+    {
+      accountId: 1,
+      name: "Main Account",
+      currency: "PLN",
+      freeCash: "4200.00",
+      cash: "4200.00",
+      plannedPurchases: "3000.00",
+      unusedCash: "1200.00",
+    },
+    {
+      accountId: 5,
+      name: "Main Account USD",
+      currency: "USD",
+      freeCash: "1500.00",
+      cash: "1500.00",
+      plannedPurchases: "1500.00",
+      unusedCash: "0.00",
+    },
+  ],
+  missingAccounts: [],
+  value: "48200.00",
+  base: "58300.00",
+  tiers: [
+    {
+      order: 1,
+      name: "Global Market Core",
+      value: "24100.4872",
+      actualShare: "41.3366",
+      targetShare: "60",
+      targetValue: "34980.00",
+      gap: "10879.51",
+      plannedPurchases: [
+        { accountId: 1, currency: "PLN", amount: "3000.00" },
+        { accountId: 5, currency: "USD", amount: "1500.00" },
+      ],
+      instrumentTargets: [
+        {
+          ticker: "ALPHA.PL",
+          name: "Alpha Retail S.A.",
+          noValue: false,
+          value: "9800.00",
+          actualShare: "40.6624",
+          targetShare: "60",
+          targetValue: "20988.00",
+          gap: "11188.00",
+          plannedPurchase: { accountId: 1, currency: "PLN", amount: "3000.00" },
+        },
+      ],
+      sharedPart: {
+        name: "Blue Chips",
+        value: "14300.4872",
+        actualShare: "59.3376",
+        targetShare: "40",
+        targetValue: "13992.00",
+        gap: "-308.49",
+        plannedPurchase: { accountId: 5, currency: "USD", amount: "1500.00" },
+        instruments: [
+          {
+            ticker: "BETA.US",
+            name: "Beta Software Inc.",
+            noValue: false,
+            value: "14300.49",
+            share: "100",
+          },
+        ],
+      },
+    },
+    {
+      order: 2,
+      name: "Asymmetric Bets",
+      value: "20100.00",
+      actualShare: "34.4768",
+      targetShare: "40",
+      targetValue: "23320.00",
+      gap: "3220.00",
+      plannedPurchases: [{ accountId: 5, currency: "USD", amount: "0.00" }],
+      instrumentTargets: [],
+      sharedPart: {
+        name: "",
+        value: "20100.00",
+        actualShare: "100",
+        targetShare: "100",
+        targetValue: "23320.00",
+        gap: "3220.00",
+        plannedPurchase: { accountId: 5, currency: "USD", amount: "0.00" },
+        instruments: [],
+      },
+    },
+  ],
+  noTier: {
+    value: "4000.00",
+    actualShare: "6.8611",
+    targetShare: "0",
+    targetValue: "0.00",
+    gap: "-4000.00",
+    holdings: [
+      {
+        ticker: "GAMMA.PL",
+        name: "Gamma Energy S.A.",
+        noValue: false,
+        value: "4000.00",
+        share: "100",
+      },
+    ],
+  },
+  unpricedHoldings: [
+    { accountId: 1, ticker: "DELTA.PL", name: "Delta Bond Fund" },
+  ],
+}
+
+// emptyRebalancing is the table before the user creates a Tier.
+const emptyRebalancing: Rebalancing = {
+  available: true,
+  warnings: [],
+  exchangeRate: populatedRebalancing.exchangeRate,
+  accounts: [],
+  missingAccounts: ["PLN", "USD"],
+  value: "0.00",
+  base: "0.00",
+  tiers: [],
+  noTier: null,
+  unpricedHoldings: [],
+}
+
 export type ApiFixture = {
   accounts: Account[]
   allSummary: AllAccountsSummary
@@ -1393,6 +1525,7 @@ export type ApiFixture = {
   imports: ImportSummary[]
   tiers: Tiers
   tiersBreakdown: Record<number, TiersBreakdown>
+  rebalancing: Rebalancing
 }
 
 // fixtureFor gives the answers of the fake backend for a data set.
@@ -1457,6 +1590,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       imports,
       tiers: populatedTiers,
       tiersBreakdown: { 1: mainTiersBreakdown },
+      rebalancing: populatedRebalancing,
     }
   }
   const emptyAllHistory: AllAccountsValueHistory = {
@@ -1486,6 +1620,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     imports: [],
     tiers: emptyTiers,
     tiersBreakdown: {},
+    rebalancing: emptyRebalancing,
   }
 }
 
