@@ -257,7 +257,7 @@ func Calculate(in Input) Result {
 	for _, acc := range in.Accounts {
 		result.Accounts = append(result.Accounts, AccountResult{
 			ID: acc.ID, Currency: acc.Currency, Cash: acc.Cash,
-			PlannedPurchases: planned[acc.ID], UnusedCash: acc.Cash.Sub(planned[acc.ID]),
+			PlannedPurchases: planned[acc.ID], UnusedCash: decimal.Max(acc.Cash.Sub(planned[acc.ID]), decimal.Zero),
 		})
 	}
 
@@ -297,6 +297,7 @@ func plan(tiers []Tier, buyers map[string]Account) map[int64]decimal.Decimal {
 		})
 	}
 	planned := map[int64]decimal.Decimal{}
+	last := map[int64]*Purchase{}
 	for i := range tiers {
 		eachPart(&tiers[i], func(gap decimal.Decimal, p *Purchase) {
 			if !p.HasAccount || !gap.IsPositive() {
@@ -306,9 +307,18 @@ func plan(tiers []Tier, buyers map[string]Account) map[int64]decimal.Decimal {
 			p.Amount = gap.Div(acc.Rate)
 			if sum.GreaterThan(acc.Cash) {
 				p.Amount = p.Amount.Mul(decimal.Max(acc.Cash, decimal.Zero)).Div(sum)
+				last[p.AccountID] = p
 			}
 			planned[p.AccountID] = planned[p.AccountID].Add(p.Amount)
 		})
+	}
+	// The division rounds each scaled part. The last part of a scaled Account takes the remainder, so the sum is
+	// the cash and the unused cash is never negative.
+	for id, p := range last {
+		cash := decimal.Max(buyers[p.Currency].Cash, decimal.Zero)
+		others := planned[id].Sub(p.Amount)
+		p.Amount = decimal.Max(cash.Sub(others), decimal.Zero)
+		planned[id] = others.Add(p.Amount)
 	}
 	return planned
 }

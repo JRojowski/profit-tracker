@@ -1,10 +1,13 @@
 package httpapi
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/shopspring/decimal"
@@ -73,20 +76,85 @@ type tiersRequest struct {
 	Tiers []tierRequest `json:"tiers"`
 }
 
-// tierRequest is one Tier of the request.
+// tierRequest is one Tier of the request. The numbers are raw JSON, a number or a text, so that a bad number is a
+// mistake of its Tier (422) and not a JSON error (400).
 type tierRequest struct {
-	Order          int             `json:"order"`
+	Order          json.RawMessage `json:"order"`
 	Name           string          `json:"name"`
-	TargetShare    decimal.Decimal `json:"targetShare"`
+	TargetShare    json.RawMessage `json:"targetShare"`
 	SharedPartName string          `json:"sharedPartName"`
 	// Instruments are the Instruments of the Tier.
 	Instruments []assignmentRequest `json:"instruments"`
 }
 
-// assignmentRequest puts an Instrument in a Tier. A null Target Share puts it in the Shared Part.
+// assignmentRequest puts an Instrument in a Tier. A null or missing Target Share puts it in the Shared Part.
 type assignmentRequest struct {
-	Ticker      string              `json:"ticker"`
-	TargetShare decimal.NullDecimal `json:"targetShare"`
+	Ticker      string          `json:"ticker"`
+	TargetShare json.RawMessage `json:"targetShare"`
+}
+
+// rawText returns the text of a raw JSON number or string, with no quotes. A missing value and null give ok false.
+func rawText(raw json.RawMessage) (text string, ok bool) {
+	text = strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return "", false
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return strings.TrimSpace(s), true
+	}
+	return text, true
+}
+
+// parseTiers converts the request to Tiers. A number that is not valid gives an error of its Tier, and the
+// function returns no Tiers.
+func parseTiers(req []tierRequest) ([]tier.Tier, []tier.Error) {
+	var errs []tier.Error
+	tiers := make([]tier.Tier, 0, len(req))
+	for i, t := range req {
+		name := strings.TrimSpace(t.Name)
+		add := func(ticker, format string, args ...any) {
+			errs = append(errs, tier.Error{TierIndex: i, Ticker: ticker, Message: fmt.Sprintf(format, args...)})
+		}
+		label := fmt.Sprintf("Tier %q", name)
+
+		var order int
+		if text, ok := rawText(t.Order); ok {
+			n, err := strconv.Atoi(text)
+			if err != nil {
+				add("", "%s: the order number %q is not a whole number.", label, text)
+			}
+			order = n
+		}
+		var share decimal.Decimal
+		if text, ok := rawText(t.TargetShare); ok {
+			d, err := decimal.NewFromString(text)
+			if err != nil {
+				add("", "%s: the Target Share %q is not a number.", label, text)
+			}
+			share = d
+		}
+		assignments := make([]tier.Assignment, 0, len(t.Instruments))
+		for _, in := range t.Instruments {
+			a := tier.Assignment{Ticker: in.Ticker}
+			if text, ok := rawText(in.TargetShare); ok {
+				d, err := decimal.NewFromString(text)
+				if err != nil {
+					add(in.Ticker, "%s: the Target Share %q of %s is not a number.", label, text, in.Ticker)
+				}
+				a.TargetShare = decimal.NewNullDecimal(d)
+			}
+			assignments = append(assignments, a)
+		}
+		tiers = append(tiers, tier.Tier{
+			Order: order, Name: name, TargetShare: share, SharedPartName: strings.TrimSpace(t.SharedPartName),
+			Instruments: assignments,
+		})
+	}
+	if len(errs) > 0 {
+		return nil, errs
+	}
+	return tiers, nil
 }
 
 // tiersErrorResponse is the 422 body of PUT /api/tiers. Nothing is saved.
@@ -141,23 +209,33 @@ func (a *api) putTiers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "the body is not valid JSON: "+err.Error())
 		return
 	}
-	tiers := make([]tier.Tier, 0, len(req.Tiers))
-	for _, t := range req.Tiers {
-		assignments := make([]tier.Assignment, 0, len(t.Instruments))
-		for _, in := range t.Instruments {
-			assignments = append(assignments, tier.Assignment{Ticker: in.Ticker, TargetShare: in.TargetShare})
-		}
-		tiers = append(tiers, tier.Tier{
-			Order: t.Order, Name: strings.TrimSpace(t.Name), TargetShare: t.TargetShare, SharedPartName: t.SharedPartName,
-			Instruments: assignments,
-		})
+	tiers, errs := parseTiers(req.Tiers)
+	if len(errs) > 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, toTiersErrorResponse(errs))
+		return
 	}
-	instruments, err := a.store.Instruments(r.Context())
+	// An Instrument is assignable when it has Fills on a Tier Account, or when a saved Tier holds it already.
+	// The second case keeps an old configuration saveable.
+	options, err := a.store.TierAccountInstruments(r.Context())
 	if err != nil {
 		a.writeInternalError(w, r, err)
 		return
 	}
-	known := func(ticker string) bool { _, ok := instruments[ticker]; return ok }
+	saved, err := a.store.Tiers(r.Context())
+	if err != nil {
+		a.writeInternalError(w, r, err)
+		return
+	}
+	assignable := map[string]bool{}
+	for _, o := range options {
+		assignable[o.Ticker] = true
+	}
+	for _, t := range saved {
+		for _, in := range t.Instruments {
+			assignable[in.Ticker] = true
+		}
+	}
+	known := func(ticker string) bool { return assignable[ticker] }
 	if errs := tier.Validate(tiers, known); len(errs) > 0 {
 		writeJSON(w, http.StatusUnprocessableEntity, toTiersErrorResponse(errs))
 		return
@@ -201,6 +279,18 @@ func (a *api) readTiers(r *http.Request) (tiersResponse, error) {
 			assigned[in.Ticker] = assignedInstrument{tierOrder: t.Order, targetShare: in.TargetShare}
 		}
 	}
+	// A saved Tier can hold an Instrument with no Fill on a Tier Account. The list keeps it, so the editor does not
+	// drop it at the next save.
+	listed := make(map[string]bool, len(options))
+	for _, o := range options {
+		listed[o.Ticker] = true
+	}
+	for ticker := range assigned {
+		if !listed[ticker] {
+			options = append(options, store.TierAccountInstrument{Ticker: ticker, Name: instruments[ticker].Name})
+		}
+	}
+	slices.SortFunc(options, func(x, y store.TierAccountInstrument) int { return cmp.Compare(x.Ticker, y.Ticker) })
 	for _, o := range options {
 		item := tierInstrumentResponse{Ticker: o.Ticker, Name: o.Name, HasOpenHolding: open[o.Ticker]}
 		if as, ok := assigned[o.Ticker]; ok {

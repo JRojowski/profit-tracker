@@ -35,8 +35,9 @@ func ResultsInPLN(acc Account, lots []ledger.Lot, rates Rates) Results {
 	if acc.Currency == ledger.PLN {
 		return Results{Available: true, Holdings: s.Holdings, ClosedPositions: s.ClosedPositions}
 	}
+	// Only the value of a Holding uses the latest rate.
 	latest, ok := rates.Latest(acc.Currency)
-	if !ok {
+	if !ok && len(s.Holdings) > 0 {
 		return Results{NoLatestRate: true}
 	}
 

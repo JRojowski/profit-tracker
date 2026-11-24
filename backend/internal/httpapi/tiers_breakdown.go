@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/jrojowski/profit-tracker/backend/internal/exchange"
 	"github.com/jrojowski/profit-tracker/backend/internal/ledger"
 	"github.com/jrojowski/profit-tracker/backend/internal/tier"
 )
@@ -66,7 +67,7 @@ type breakdownClosedResponse struct {
 	RealizedProfit string `json:"realizedProfit"`
 	// ReturnOnCost is the Realized Profit × 100 / Cost, exact. It is nil if the cost is 0.
 	ReturnOnCost *string `json:"returnOnCost"`
-	// LastSaleDate is the date of the latest sale in UTC, as YYYY-MM-DD.
+	// LastSaleDate is the date of the latest sale in Polish time, as YYYY-MM-DD.
 	LastSaleDate string `json:"lastSaleDate"`
 	// Positions are the single Closed Positions, in time order.
 	Positions []breakdownPositionResponse `json:"positions"`
@@ -305,7 +306,7 @@ func (b *instrumentBuilder) closedPart() *breakdownClosedResponse {
 	return &breakdownClosedResponse{
 		Count: len(closed), Cost: formatAmount(cost), SaleAmount: formatAmount(amount),
 		RealizedProfit: formatAmount(profit), ReturnOnCost: returnOnCost(profit, cost),
-		LastSaleDate: last.UTC().Format(time.DateOnly), Positions: positions,
+		LastSaleDate: exchange.DayInWarsaw(last).Format(time.DateOnly), Positions: positions,
 	}
 }
 
