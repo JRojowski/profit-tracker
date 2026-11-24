@@ -29,6 +29,10 @@ func List() []Benchmark {
 			Ticker: "CSPX.L", QuoteCurrency: "USD",
 		},
 		{
+			ID: "nasdaq100", Name: "Nasdaq-100", Fund: "iShares NASDAQ 100 UCITS ETF USD (Acc)",
+			Ticker: "CNDX.L", QuoteCurrency: "USD",
+		},
+		{
 			ID: "wig20tr", Name: "WIG20TR", Fund: "Beta ETF WIG20TR Portfelowy FIZ",
 			Ticker: "ETFBW20TR.WA", QuoteCurrency: "PLN",
 		},

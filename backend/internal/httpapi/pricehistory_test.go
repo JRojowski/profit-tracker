@@ -120,7 +120,7 @@ func TestRefreshPrices_SoldInstrument_GetsHistoryFromFirstFillToYesterday(t *tes
 	assert.Equal(t, []string{"XYZ"}, provider.requestedTickers(), "only a held Instrument gets a current price")
 	assert.Equal(t, []string{"2026-10-19=101", "2026-10-20=103", "2026-10-21=105", "2026-10-22=104"}, srv.storedCloses(t, "ABC.US"))
 	assert.Equal(t, []string{"2026-10-20=50.5", "2026-10-21=51", "2026-10-22=52"}, srv.storedCloses(t, "XYZ.US"))
-	assert.Equal(t, 8, srv.pauses.count(), "the tool pauses before each history request: 2 Instruments and 6 Benchmarks")
+	assert.Equal(t, 9, srv.pauses.count(), "the tool pauses before each history request: 2 Instruments and 7 Benchmarks")
 }
 
 func TestRefreshPrices_SecondRefresh_AsksOnlyMissingDays(t *testing.T) {
@@ -360,8 +360,8 @@ func TestRefreshProgress_ShowsTheRunningHistoryRequest(t *testing.T) {
 
 	close(release)
 	require.NoError(t, <-done)
-	assert.Equal(t, progressResponse{Running: true, Done: 1, Total: 8, Ticker: ptr("XYZ.US")}, got,
-		"the total has the 2 Instruments and the 6 Benchmarks")
+	assert.Equal(t, progressResponse{Running: true, Done: 1, Total: 9, Ticker: ptr("XYZ.US")}, got,
+		"the total has the 2 Instruments and the 7 Benchmarks")
 	assert.Equal(t, progressResponse{}, srv.progress(t), "the refresh is done")
 }
 
