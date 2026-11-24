@@ -1,4 +1,5 @@
-import { Fragment } from "react"
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react"
+import { Fragment, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import {
@@ -15,12 +16,20 @@ import type {
   RebalancingPart,
   RebalancingPurchase,
 } from "@/lib/api"
-import { amountSign, formatAmount, formatShare, signColour } from "@/lib/format"
+import { amountSign, formatAmount, formatShare } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 // RebalancingTable shows each Tier with its Instrument Targets and its Shared Part, and the "No Tier" group.
 // The amounts of a part are in PLN. Each Planned Purchase is in the currency of its Account.
 export function RebalancingTable({ data }: { data: Rebalancing }) {
+  // collapsed holds the order of each Tier whose Shared Part hides its Instruments.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(new Set())
+  const toggle = (order: number) =>
+    setCollapsed((current) => {
+      const next = new Set(current)
+      if (!next.delete(order)) next.add(order)
+      return next
+    })
   return (
     <div className="min-w-0 overflow-x-auto rounded-lg border">
       <Table>
@@ -37,12 +46,7 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
         <TableBody>
           {data.tiers.map((tier) => (
             <Fragment key={tier.order}>
-              <PartRow
-                strong
-                label={tier.name}
-                part={tier}
-                purchases={tier.plannedPurchases}
-              />
+              <PartRow strong label={tier.name} part={tier} />
               {tier.instrumentTargets.map((target) => (
                 <PartRow
                   key={target.ticker}
@@ -63,7 +67,10 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
               <PartRow
                 indent
                 label={
-                  <>
+                  <SharedPartToggle
+                    open={!collapsed.has(tier.order)}
+                    onToggle={() => toggle(tier.order)}
+                  >
                     {tier.sharedPart.name || "Shared Part"}
                     {tier.sharedPart.name && (
                       <span className="text-muted-foreground">
@@ -71,14 +78,15 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
                         (Shared Part)
                       </span>
                     )}
-                  </>
+                  </SharedPartToggle>
                 }
                 part={tier.sharedPart}
                 purchases={[tier.sharedPart.plannedPurchase]}
               />
-              {tier.sharedPart.instruments.map((instrument) => (
-                <HoldingRow key={instrument.ticker} holding={instrument} />
-              ))}
+              {!collapsed.has(tier.order) &&
+                tier.sharedPart.instruments.map((instrument) => (
+                  <HoldingRow key={instrument.ticker} holding={instrument} />
+                ))}
             </Fragment>
           ))}
           {data.noTier && data.noTier.holdings.length > 0 && (
@@ -103,7 +111,8 @@ export function RebalancingTable({ data }: { data: Rebalancing }) {
 type PartRowProps = {
   label: React.ReactNode
   part: RebalancingPart
-  purchases: RebalancingPurchase[]
+  // purchases is missing for a Tier, which shows no Planned Purchase.
+  purchases?: RebalancingPurchase[]
   // strong marks a Tier or the "No Tier" group.
   strong?: boolean
   // indent marks a part inside a Tier.
@@ -130,7 +139,7 @@ function PartRow({ label, part, purchases, strong, indent }: PartRowProps) {
         <GapCell gap={part.gap} />
       </TableCell>
       <TableCell className="text-right">
-        <PurchaseCell purchases={purchases} />
+        {purchases && <PurchaseCell purchases={purchases} />}
       </TableCell>
     </TableRow>
   )
@@ -142,7 +151,7 @@ function GapCell({ gap }: { gap: string }) {
   if (sign === "negative") {
     return (
       <span className="flex flex-col items-end gap-0.5">
-        <span className={cn("num", signColour(sign))}>
+        <span className="num">
           {formatAmount(gap, "PLN", { signed: true })}
         </span>
         <span className="text-xs text-muted-foreground">Over target</span>
@@ -200,5 +209,29 @@ function NoValueBadge() {
     <Badge variant="outline" className="ml-2">
       No value
     </Badge>
+  )
+}
+
+// SharedPartToggle shows a chevron button that expands or collapses the Instruments of a Shared Part.
+function SharedPartToggle({
+  open,
+  onToggle,
+  children,
+}: {
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  const Chevron = open ? ChevronDownIcon : ChevronRightIcon
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={onToggle}
+      className="flex items-start gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Chevron className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <span>{children}</span>
+    </button>
   )
 }
