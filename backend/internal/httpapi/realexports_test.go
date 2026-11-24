@@ -668,3 +668,44 @@ func rowKey(t *testing.T, r assistantClosedPositionRow) string {
 	require.NoError(t, err)
 	return string(data)
 }
+
+// TestRealExports_TiersBreakdown_Returns200ForTierAccountsAndNotFoundForTheRest checks the Tiers Breakdown of each
+// real Account with a sample configuration: the first Holding of each Tier Account goes to a Tier.
+// The failure messages show no amounts.
+func TestRealExports_TiersBreakdown_Returns200ForTierAccountsAndNotFoundForTheRest(t *testing.T) {
+	t.Parallel()
+	exports := realExports(t)
+	srv := startServer(t)
+	for _, export := range exports {
+		srv.importRealExport(t, export)
+	}
+	var accounts []accountResponse
+	srv.getRealJSON(t, "/api/accounts", &accounts)
+	isTierAccount := func(acc accountResponse) bool {
+		return acc.Type == "regular" && (acc.Currency == "PLN" || acc.Currency == "USD")
+	}
+
+	var assigned []assignmentRequest
+	seen := map[string]bool{}
+	for _, acc := range accounts {
+		if !isTierAccount(acc) {
+			continue
+		}
+		var holdings []holdingPageRow
+		srv.getRealJSON(t, fmt.Sprintf("/api/accounts/%d/holdings", acc.ID), &holdings)
+		if len(holdings) > 0 && !seen[holdings[0].Ticker] {
+			seen[holdings[0].Ticker] = true
+			assigned = append(assigned, assignmentRequest{Ticker: holdings[0].Ticker})
+		}
+	}
+	srv.putTiersOK(t, tiersRequest{Tiers: []tierRequest{{Order: 1, Name: "Sample", TargetShare: "100", Instruments: assigned}}})
+
+	for _, acc := range accounts {
+		status, _, body := srv.get(t, fmt.Sprintf("/api/accounts/%d/tiers-breakdown", acc.ID))
+		if isTierAccount(acc) {
+			require.Equal(t, http.StatusOK, status, "Account %d: %s", acc.ID, apiError(body))
+			continue
+		}
+		assert.Equal(t, http.StatusNotFound, status, "Account %d", acc.ID)
+	}
+}

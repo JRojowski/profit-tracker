@@ -66,6 +66,7 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/accounts/{id}/summary", a.accountSummary)
 	mux.HandleFunc("GET /api/accounts/{id}/holdings", a.accountHoldings)
 	mux.HandleFunc("GET /api/accounts/{id}/closed-positions", a.accountClosedPositions)
+	mux.HandleFunc("GET /api/accounts/{id}/tiers-breakdown", a.accountTiersBreakdown)
 	mux.HandleFunc("GET /api/accounts/{id}/instruments/{ticker}/overview", a.instrumentOverview)
 	mux.HandleFunc("GET /api/accounts/{id}/ikze-limit", a.accountIKZELimit)
 	mux.HandleFunc("GET /api/accounts/{id}/allocation", a.accountAllocation)
