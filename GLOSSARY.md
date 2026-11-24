@@ -104,6 +104,10 @@ _Avoid_: Staking, interest, yield, earn
 The Total Result divided by the Net Deposits, as a percentage.
 _Avoid_: ROI, yield
 
+**Return on Cost**:
+The Realized Profit, the Unrealized Profit or their sum for some units of an Instrument, divided by the purchase cost of the same units, as a percentage. It is different from the Simple Return, which uses the Net Deposits of an Account.
+_Avoid_: ROI, yield, profit percent
+
 **Annual Return**:
 The yearly rate of return that gives the current value from the Net Deposits flows, with the date of each flow taken into account.
 _Avoid_: XIRR, IRR, CAGR
@@ -123,6 +127,44 @@ _Avoid_: Index, reference, comparison
 **Benchmark Return**:
 The change of the value of a Benchmark in a period, in the currency of the comparison, as a percentage.
 _Avoid_: Index return, market return
+
+### Rebalancing
+
+**Rebalancing**:
+The calculation that compares the Actual Share of each part with its Target Share and splits new cash into Planned Purchases. It covers the Holdings on the regular XTB Accounts in PLN and in USD.
+_Avoid_: Rebalance plan, buy calculator, recommendation
+
+**Tier**:
+A named part of the Holdings in Rebalancing, with a Target Share and an order number (I, II, and so on). An Instrument belongs to one Tier at most, also after the user sells it.
+_Avoid_: Bucket, koszyk, level, poziom
+
+**Instrument Target**:
+An Instrument in a Tier with its own Target Share of the Tier.
+_Avoid_: Sleeve, slot
+
+**Shared Part**:
+All Instruments of a Tier that are not Instrument Targets, taken together. Its Target Share is the rest of the Tier to 100%.
+_Avoid_: Koszyk, group, sleeve, remainder
+
+**Target Share**:
+The share that the user wants for a part: for a Tier, of the value of all Holdings in Rebalancing; for an Instrument Target or a Shared Part, of the value of its Tier.
+_Avoid_: Weight, desired share
+
+**Actual Share**:
+The share that a part has today, on the same base as its Target Share. Cash is not a part, so the Actual Share is different from the Allocation share.
+_Avoid_: Allocation, current share
+
+**Target Value**:
+The value that a part must have to match its Target Share after the user spends the new cash.
+_Avoid_: Desired value
+
+**Gap**:
+The Target Value of a part minus its value today. It can be negative.
+_Avoid_: Desired buy, deficit, drift
+
+**Planned Purchase**:
+A positive Gap, made smaller when the Gaps on one Account are more than the cash of that Account. An Instrument Target in a currency other than USD uses the PLN Account. All other parts use the USD Account.
+_Avoid_: Scaled buy, order, recommendation
 
 ### IKZE
 
