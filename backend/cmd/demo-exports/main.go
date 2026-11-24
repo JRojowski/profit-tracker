@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -51,5 +52,15 @@ func run(out string) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	fmt.Println(path)
+
+	tiers, err := json.MarshalIndent(demo.Tiers(), "", "  ")
+	if err != nil {
+		return fmt.Errorf("build tiers: %w", err)
+	}
+	tiersPath := filepath.Join(out, "tiers.json")
+	if err := os.WriteFile(tiersPath, tiers, 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", tiersPath, err)
+	}
+	fmt.Println(tiersPath)
 	return nil
 }

@@ -75,6 +75,8 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/all-accounts/allocation", a.allAccountsAllocation)
 	mux.HandleFunc("GET /api/all-accounts/value-history", a.allAccountsValueHistory)
 	mux.HandleFunc("GET /api/all-accounts/benchmarks", a.allAccountsBenchmarks)
+	mux.HandleFunc("GET /api/tiers", a.getTiers)
+	mux.HandleFunc("PUT /api/tiers", a.putTiers)
 	mux.HandleFunc("POST /api/prices/refresh", a.refreshPrices)
 	mux.HandleFunc("GET /api/prices/refresh/progress", a.refreshProgress)
 	mux.HandleFunc("PUT /api/instruments/{ticker}/price-ticker", a.setPriceTicker)
