@@ -120,6 +120,8 @@ func (a *api) refreshProgress(w http.ResponseWriter, _ *http.Request) {
 type accountView struct {
 	account store.Account
 	state   ledger.State
+	// lots are the Lots of the Ledger, also the closed Lots.
+	lots []ledger.Lot
 	// instruments are the price sources of the Instruments by broker ticker.
 	instruments map[string]store.Instrument
 	// prices are the last stored prices by broker ticker, in any currency.

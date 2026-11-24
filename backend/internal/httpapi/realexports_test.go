@@ -708,4 +708,7 @@ func TestRealExports_TiersBreakdown_Returns200ForTierAccountsAndNotFoundForTheRe
 		}
 		assert.Equal(t, http.StatusNotFound, status, "Account %d", acc.ID)
 	}
+
+	status, _, body := srv.get(t, "/api/all-accounts/tiers-breakdown")
+	assert.Equal(t, http.StatusOK, status, "all Accounts: %s", apiError(body))
 }
