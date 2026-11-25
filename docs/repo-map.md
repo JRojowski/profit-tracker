@@ -38,7 +38,7 @@ Read AGENTS.md first.
 | `docs/` | The ADRs, the agent documents, the v3 mockups, the manual checklists and the deployment document. |
 | `frontend/` | The Vite + React + TypeScript + shadcn/ui application. |
 | `infra/` | The Bicep templates for Azure. |
-| `scripts/` | The scripts of the Makefile: `demo.sh`, `setup-azure.sh`. |
+| `scripts/` | The scripts of the Makefile: `demo.sh`, `gate.sh` (the stack selection of the quality gate), `setup-azure.sh`. |
 
 Root files: `Makefile` (all commands), `Dockerfile`, `.dockerignore`, `.gitignore`, `AGENTS.md`, `CLAUDE.md`, `GLOSSARY.md`.
 

@@ -76,8 +76,19 @@ The script `.claude/hooks/quality-gate.sh` runs the build and the tests. It runs
 
 The gate reads its commands from `env` in `.claude/settings.json`:
 
-- `QG_BUILD_CMD`: `go -C backend build ./... && make frontend-check`
-- `QG_TEST_CMD`: `make test && make lint`
+- `QG_BUILD_CMD`: `make gate-build`
+- `QG_TEST_CMD`: `make gate-test`
+
+Both targets call `scripts/gate.sh`. The script compares the tree with the merge base of `origin/main` and selects the stacks:
+
+| Changed path | Build | Tests |
+|---|---|---|
+| `backend/` | `go -C backend build ./...` | `make test && make lint` |
+| `frontend/` | `make frontend-check` | none |
+| Another path, for example `Makefile` or `.claude/` | both | `make test && make lint` |
+| Only `docs/` or `*.md` | none | none |
+
+To see the selected stacks, run `scripts/gate.sh stacks`.
 
 The gate runs the tests through `.claude/hooks/with-test-lock.sh`. The lock lets only one test run on the machine at a time.
 

@@ -38,7 +38,7 @@
     ]
   },
   "env": {
-    "QG_BUILD_CMD": "go -C backend build ./... && make frontend-check",
-    "QG_TEST_CMD": "make test && make lint"
+    "QG_BUILD_CMD": "make gate-build",
+    "QG_TEST_CMD": "make gate-test"
   }
 }
