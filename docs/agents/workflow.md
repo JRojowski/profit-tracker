@@ -90,6 +90,15 @@ Both targets call `scripts/gate.sh`. The script compares the tree with the merge
 
 To see the selected stacks, run `scripts/gate.sh stacks`.
 
+### Worktrees
+
+`/implement-spec` runs each implementer subagent in its own worktree. Two settings make the gate work there:
+
+- The `SubagentStop` hook sets `CLAUDE_PROJECT_DIR="$PWD"`. Claude Code keeps `CLAUDE_PROJECT_DIR` at the main checkout, but the hook process starts in the worktree. Without the override, the gate tests the main checkout.
+- `worktree.symlinkDirectories` links `frontend/node_modules` to the main checkout. When the two `package-lock.json` files are the same, the gate uses the link and does not run `npm ci`. When they are different, the gate removes the link and runs `npm ci` in the worktree.
+
+If you run `/pocock-harness:init` again, it replaces the `SubagentStop` command. Add the override again after the run.
+
 The gate runs the tests through `.claude/hooks/with-test-lock.sh`. The lock lets only one test run on the machine at a time.
 
 The gate skips the run in these cases:
