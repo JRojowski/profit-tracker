@@ -137,6 +137,7 @@ func TestBenchmarks_BenchmarkInAccountCurrency_ReturnAndDifference(t *testing.T)
 		User: userReturnDTO{Return: ptr("1"), Series: octoberSeries(map[int]string{20: "1"})},
 		Benchmarks: []benchmarkDTO{
 			noFullPeriod("sp500", "S&P 500", "iShares Core S&P 500 UCITS ETF USD (Acc)", "CSPX.L", "USD"),
+			noFullPeriod("nasdaq100", "Nasdaq-100", "iShares NASDAQ 100 UCITS ETF USD (Acc)", "CNDX.L", "USD"),
 			{
 				ID: "wig20tr", Name: "WIG20TR", Fund: "Beta ETF WIG20TR Portfelowy FIZ", Ticker: "ETFBW20TR.WA",
 				QuoteCurrency: "PLN", Status: "available", Return: ptr("12.5"), Difference: ptr("-11.5"),
@@ -586,7 +587,7 @@ func TestBenchmarks_CloseInOtherCurrency_NotStoredAndAskedAgain(t *testing.T) {
 }
 
 // benchmarkTickers are the price tickers of the Benchmarks, in the order of the list.
-var benchmarkTickers = []string{"CSPX.L", "ETFBW20TR.WA", "ETFBM40TR.WA", "IWDA.L", "IGLN.L", "BTC-USD"}
+var benchmarkTickers = []string{"CSPX.L", "CNDX.L", "ETFBW20TR.WA", "ETFBM40TR.WA", "IWDA.L", "IGLN.L", "BTC-USD"}
 
 // benchmarkRequests returns the request of each Benchmark from the day from to the day to, in the order of the list.
 func benchmarkRequests(from, to string) []historyRequest {
@@ -610,7 +611,7 @@ func TestRefreshPrices_Benchmarks_RequestsEachBenchmarkFromSevenDaysBeforeFirstC
 
 	assert.Equal(t, benchmarkRequests("2026-09-24", "2026-10-22"), provider.adjustedRequests())
 	assert.Len(t, provider.historyRequests(), 2, "the Instruments get their history as before")
-	assert.Equal(t, 8, srv.pauses.count(), "the tool pauses before each history request, also of a Benchmark")
+	assert.Equal(t, 9, srv.pauses.count(), "the tool pauses before each history request, also of a Benchmark")
 }
 
 func TestRefreshPrices_SecondRefresh_AsksNoBenchmarkDaysAgain(t *testing.T) {
@@ -686,6 +687,6 @@ func TestRefreshPrices_BenchmarkTooManyRequests_StopsTheRefresh(t *testing.T) {
 	refresh := srv.refreshHistory(t)
 
 	assert.True(t, refresh.TooManyRequests)
-	assert.Equal(t, benchmarkRequests("2026-09-24", "2026-10-22")[:2], provider.adjustedRequests(),
+	assert.Equal(t, benchmarkRequests("2026-09-24", "2026-10-22")[:3], provider.adjustedRequests(),
 		"the refresh sends no request after the block")
 }

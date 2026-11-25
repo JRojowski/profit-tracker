@@ -1,3 +1,4 @@
+import { userStyle } from "@/components/benchmark-chart"
 import { TriangleAlertIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { useSearchParams } from "react-router"
@@ -139,6 +140,7 @@ function BenchmarkTable({
           <FigureRow
             name={subjectLabel(subject)}
             detail="Time-Weighted Return"
+            swatch
             returnCell={<ResultBadge value={data.user.return} />}
             differenceCell={null}
           />
@@ -173,6 +175,8 @@ function BenchmarkRow({ benchmark }: { benchmark: BenchmarkReturn }) {
 }
 
 type FigureRowProps = {
+  // swatch shows a small square in the color of the user line before the name.
+  swatch?: boolean
   name: string
   detail: string
   // returnCell and differenceCell are the figures. Undefined means that the tool has no price for the full period.
@@ -185,6 +189,7 @@ type FigureRowProps = {
 
 // FigureRow is one row of the table: the name with its detail and the two figures, in columns on a wide screen.
 function FigureRow({
+  swatch,
   name,
   detail,
   returnCell,
@@ -195,7 +200,16 @@ function FigureRow({
   return (
     <TableRow>
       <TableCell className="font-medium whitespace-normal">
-        {name}
+        <span className="flex items-center gap-2">
+          {swatch && (
+            <span
+              aria-hidden
+              className="size-2.5 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: userStyle.color }}
+            />
+          )}
+          {name}
+        </span>
         <span className="block text-xs font-normal break-words text-muted-foreground">
           {detail}
         </span>

@@ -675,7 +675,7 @@ function returnSeries(
   })
 }
 
-// benchmarkRows gives the six Benchmarks for a user return. Gold has no price for the whole period.
+// benchmarkRows gives the seven Benchmarks for a user return. Gold has no price for the whole period.
 function benchmarkRows(
   user: number,
   from: string,
@@ -689,6 +689,14 @@ function benchmarkRows(
       "CSPX.L",
       "USD",
       45.1,
+    ],
+    [
+      "nasdaq100",
+      "Nasdaq-100",
+      "iShares NASDAQ 100 UCITS ETF USD (Acc)",
+      "CNDX.L",
+      "USD",
+      58.3,
     ],
     [
       "wig20tr",

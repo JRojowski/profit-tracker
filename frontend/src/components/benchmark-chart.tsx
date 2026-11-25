@@ -1,7 +1,7 @@
 import {
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -21,11 +21,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { useBenchmarkSelection } from "@/hooks/use-benchmark-selection"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { BenchmarkPoint, Benchmarks } from "@/lib/api"
-import {
-  chartGridProps,
-  chartLineWidth,
-  chartTooltipClass,
-} from "@/lib/chart-style"
+import { chartGridProps, chartTooltipClass } from "@/lib/chart-style"
 import { axisDate, dateTime, dayMs, monthTicks } from "@/lib/chart-time"
 import { tagWidth } from "@/lib/end-tags"
 import { formatCompact, formatDate, formatPercent } from "@/lib/format"
@@ -34,23 +30,37 @@ import { cn } from "@/lib/utils"
 // userKey is the key of the line of the user in the chart data and in the chart config.
 const userKey = "user"
 
+// benchmarkLineWidth is the stroke width of each line, the user line included.
+const benchmarkLineWidth = 1.25
+
+// benchmarkOpacity is the stroke opacity of a Benchmark line: 75% transparent.
+const benchmarkOpacity = 0.25
+
+// drawOrder puts the user line last, so that the chart draws it on top of the Benchmark lines.
+function drawOrder(lines: ChartLine[]): ChartLine[] {
+  return [...lines].sort(
+    (a, b) => Number(a.key === userKey) - Number(b.key === userKey)
+  )
+}
+
 // LineStyle is the colour of a line and the colour of the text on its end tag.
 type LineStyle = { color: string; ink: string }
 
-// userStyle is the style of the user line: the primary colour. The tag text uses the ink of chart-1, which has the same hue.
-const userStyle: LineStyle = {
-  color: "var(--primary)",
-  ink: "var(--chart-1-foreground)",
+// userStyle is the style of the user line: the foreground colour, which no Benchmark uses. The tag text is inverted.
+export const userStyle: LineStyle = {
+  color: "var(--foreground)",
+  ink: "var(--background)",
 }
 
 // benchmarkStyles gives the style of the line of each Benchmark. A Benchmark with an unknown id uses otherStyle.
 const benchmarkStyles: Record<string, LineStyle> = {
-  sp500: { color: "var(--chart-4)", ink: "var(--chart-4-foreground)" },
+  sp500: { color: "var(--chart-2)", ink: "var(--chart-2-foreground)" },
+  nasdaq100: { color: "var(--chart-6)", ink: "var(--chart-6-foreground)" },
+  world: { color: "var(--chart-4)", ink: "var(--chart-4-foreground)" },
+  bitcoin: { color: "var(--chart-7)", ink: "var(--chart-7-foreground)" },
   wig20tr: { color: "var(--chart-5)", ink: "var(--chart-5-foreground)" },
   mwig40tr: { color: "var(--chart-8)", ink: "var(--chart-8-foreground)" },
-  world: { color: "var(--chart-2)", ink: "var(--chart-2-foreground)" },
-  gold: { color: "var(--chart-7)", ink: "var(--chart-7-foreground)" },
-  bitcoin: { color: "var(--chart-3)", ink: "var(--chart-3-foreground)" },
+  gold: { color: "var(--chart-other)", ink: "var(--chart-other-foreground)" },
 }
 const otherStyle = benchmarkStyles.world
 
@@ -184,7 +194,7 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
       className="aspect-auto h-64 w-full md:h-80"
       initialDimension={{ width: 320, height: 256 }}
     >
-      <LineChart
+      <ComposedChart
         data={rows}
         margin={{ top: 8, right: tagMargin, bottom: 0, left: 0 }}
         accessibilityLayer
@@ -220,19 +230,20 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
             />
           )}
         />
-        {lines.map((line) => (
+        {drawOrder(lines).map((line) => (
           <Line
             key={line.key}
             dataKey={line.key}
             type="linear"
             stroke={`var(--color-${line.key})`}
-            strokeWidth={chartLineWidth}
+            strokeWidth={benchmarkLineWidth}
+            strokeOpacity={line.key === userKey ? 1 : benchmarkOpacity}
             dot={false}
             isAnimationActive={false}
           />
         ))}
         <ChartEndTags time={last} tags={tags} />
-      </LineChart>
+      </ComposedChart>
     </ChartContainer>
   )
 }
