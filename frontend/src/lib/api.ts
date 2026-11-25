@@ -489,6 +489,91 @@ export async function fetchInstrumentOverview(
   return readJSON<InstrumentOverview>(response)
 }
 
+// BreakdownHolding is the Holding part of an Instrument in the Tiers Breakdown. lastPurchaseDate is YYYY-MM-DD. With noValue the Holding has no price,
+// and value, unrealizedProfit and returnOnCost are null. returnOnCost is a decimal percentage.
+export type BreakdownHolding = {
+  noValue: boolean
+  lastPurchaseDate: string
+  value: string | null
+  cost: string
+  unrealizedProfit: string | null
+  returnOnCost: string | null
+}
+
+// BreakdownAccount is the Account of a single Closed Position in the Tiers Breakdown of all Accounts.
+export type BreakdownAccount = { id: number; name: string; currency: string }
+
+// BreakdownClosedPositions is the Closed Positions part of an Instrument in the Tiers Breakdown.
+// lastSaleDate is YYYY-MM-DD. account is the Account of a Closed Position, in the view of all Accounts only.
+export type BreakdownClosedPositions = {
+  count: number
+  cost: string
+  saleAmount: string
+  realizedProfit: string
+  returnOnCost: string | null
+  lastSaleDate: string
+  positions: (ClosedPosition & { account?: BreakdownAccount })[]
+}
+
+// BreakdownInstrument is one Instrument of a Tier. It has a Holding part, a Closed Positions part, or both.
+export type BreakdownInstrument = {
+  ticker: string
+  name: string
+  holding: BreakdownHolding | null
+  closedPositions: BreakdownClosedPositions | null
+}
+
+// BreakdownSum is a sum row of the Tiers Breakdown. returnOnCost is a decimal percentage, or null when the cost is 0.
+export type BreakdownSum = {
+  value: string
+  unrealizedProfit: string
+  realizedProfit: string
+  totalProfit: string
+  cost: string
+  returnOnCost: string | null
+}
+
+// BreakdownGroup is a Tier, or the "No Tier" group with a null order.
+export type BreakdownGroup = {
+  order: number | null
+  name: string
+  instruments: BreakdownInstrument[]
+  sum: BreakdownSum
+}
+
+// TiersBreakdown is the body of the Tiers Breakdown endpoints. All amounts are in the currency.
+export type TiersBreakdown = {
+  currency: string
+  tiers: BreakdownGroup[]
+  noTier: BreakdownGroup | null
+  total: BreakdownSum
+}
+
+// fetchTiersBreakdown loads the Tiers Breakdown of one Tier Account.
+export async function fetchTiersBreakdown(
+  id: number,
+  signal?: AbortSignal
+): Promise<TiersBreakdown> {
+  const response = await fetch(`/api/accounts/${id}/tiers-breakdown`, {
+    signal,
+  })
+  return readJSON<TiersBreakdown>(response)
+}
+
+// AllAccountsTiersBreakdown is the body of the Tiers Breakdown of all Accounts, in PLN. When available is false,
+// the breakdown fields are missing and the warnings tell why.
+export type AllAccountsTiersBreakdown =
+  | ({ available: true; warnings: string[] } & TiersBreakdown)
+  | { available: false; warnings: string[] }
+
+// fetchAllAccountsTiersBreakdown loads the Tiers Breakdown of all Tier Accounts together in PLN.
+export async function fetchAllAccountsTiersBreakdown(
+  signal?: AbortSignal
+): Promise<AllAccountsTiersBreakdown> {
+  const response = await fetch("/api/all-accounts/tiers-breakdown", { signal })
+  return readJSON<AllAccountsTiersBreakdown>(response)
+}
+
 export async function fetchClosedPositions(
   id: number,
   signal?: AbortSignal
@@ -939,4 +1024,176 @@ export async function fetchAllAccountsBenchmarks(
     }
   )
   return readJSON<Benchmarks>(response)
+}
+
+// TierInstrumentTarget is an Instrument Target of a Tier: an Instrument with its own Target Share of the Tier.
+export type TierInstrumentTarget = {
+  ticker: string
+  name: string
+  targetShare: string
+}
+
+// Tier is one Tier of the configuration. Target Shares are decimal text that is a percentage.
+export type Tier = {
+  order: number
+  name: string
+  targetShare: string
+  sharedPart: { name: string; targetShare: string }
+  instrumentTargets: TierInstrumentTarget[]
+  sharedInstruments: { ticker: string; name: string }[]
+}
+
+// TierInstrument is one Instrument of the list for assignment. A null tierOrder means no Tier.
+// A null targetShare means the Shared Part. hasOpenHolding is false for an Instrument that the user sold in full.
+export type TierInstrument = {
+  ticker: string
+  name: string
+  tierOrder: number | null
+  targetShare: string | null
+  hasOpenHolding: boolean
+}
+
+// Tiers is the body of GET /api/tiers.
+export type Tiers = { tiers: Tier[]; instruments: TierInstrument[] }
+
+// TiersRequest is the body of PUT /api/tiers: the full configuration. A null targetShare of an Instrument puts it
+// in the Shared Part.
+export type TiersRequest = {
+  tiers: {
+    order: number
+    name: string
+    targetShare: string
+    sharedPartName: string
+    instruments: { ticker: string; targetShare: string | null }[]
+  }[]
+}
+
+// TierError is one mistake of a configuration. A null tierIndex belongs to no single Tier.
+export type TierError = {
+  tierIndex: number | null
+  ticker: string
+  message: string
+}
+
+// TiersRejected is the error of a PUT that the backend answered with 422. Nothing is saved.
+export class TiersRejected extends Error {
+  readonly errors: TierError[]
+
+  constructor(message: string, errors: TierError[]) {
+    super(message)
+    this.name = "TiersRejected"
+    this.errors = errors
+  }
+}
+
+// fetchTiers loads the Tiers and the list of Instruments for assignment.
+export async function fetchTiers(signal?: AbortSignal): Promise<Tiers> {
+  return readJSON<Tiers>(await fetch("/api/tiers", { signal }))
+}
+
+// saveTiers replaces the full configuration in one request. It throws TiersRejected for a 422 answer.
+export async function saveTiers(request: TiersRequest): Promise<Tiers> {
+  const response = await fetch("/api/tiers", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  })
+  if (response.status === 422) {
+    const body = (await response.json()) as {
+      error?: string
+      errors?: TierError[]
+    }
+    throw new TiersRejected(body.error ?? "HTTP 422", body.errors ?? [])
+  }
+  return readJSON<Tiers>(response)
+}
+
+// RebalancingRate is the latest Exchange Rate of the Rebalancing table. The date is YYYY-MM-DD.
+export type RebalancingRate = { currency: string; rate: string; date: string }
+
+// RebalancingAccount is one Tier Account. The amounts are in the Account currency.
+export type RebalancingAccount = {
+  accountId: number
+  name: string
+  currency: string
+  freeCash: string
+  cash: string
+  plannedPurchases: string
+  unusedCash: string
+}
+
+// RebalancingPart holds the amounts of a part in PLN. The shares are percentages and the backend does not round them.
+export type RebalancingPart = {
+  value: string
+  actualShare: string
+  targetShare: string
+  targetValue: string
+  gap: string
+}
+
+// RebalancingPurchase is a Planned Purchase in the currency of its Account. A null amount means the Account is missing.
+export type RebalancingPurchase = {
+  accountId: number | null
+  currency: string
+  amount: string | null
+}
+
+// RebalancingTarget is an Instrument Target of the Rebalancing table.
+export type RebalancingTarget = RebalancingPart & {
+  ticker: string
+  name: string
+  noValue: boolean
+  plannedPurchase: RebalancingPurchase
+}
+
+// RebalancingHolding is an Instrument of a Shared Part or of the "No Tier" group. Value and share are null with no value.
+export type RebalancingHolding = {
+  ticker: string
+  name: string
+  noValue: boolean
+  value: string | null
+  share: string | null
+}
+
+// RebalancingTier is one Tier of the Rebalancing table.
+export type RebalancingTier = RebalancingPart & {
+  order: number
+  name: string
+  plannedPurchases: RebalancingPurchase[]
+  instrumentTargets: RebalancingTarget[]
+  sharedPart: RebalancingPart & {
+    name: string
+    plannedPurchase: RebalancingPurchase
+    instruments: RebalancingHolding[]
+  }
+}
+
+// Rebalancing is the body of GET /api/all-accounts/rebalancing.
+export type Rebalancing = {
+  available: boolean
+  warnings: string[]
+  exchangeRate: RebalancingRate | null
+  accounts: RebalancingAccount[]
+  missingAccounts: string[]
+  value: string | null
+  base: string | null
+  tiers: RebalancingTier[]
+  noTier: (RebalancingPart & { holdings: RebalancingHolding[] }) | null
+  unpricedHoldings: { accountId: number; ticker: string; name: string }[]
+}
+
+// fetchRebalancing loads the Rebalancing table. The cash maps an Account id to the cash for Rebalancing as decimal text.
+// An Account with no entry uses its free cash.
+export async function fetchRebalancing(
+  cash: Record<number, string>,
+  signal?: AbortSignal
+): Promise<Rebalancing> {
+  const params = new URLSearchParams()
+  for (const [id, amount] of Object.entries(cash)) {
+    params.append("cash", `${id}:${amount}`)
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : ""
+  return readJSON<Rebalancing>(
+    await fetch(`/api/all-accounts/rebalancing${query}`, { signal })
+  )
 }

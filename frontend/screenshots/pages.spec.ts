@@ -14,6 +14,8 @@ type PageCase = {
   panel?: boolean
   // panelEnd scrolls the body of the panel to its end before the screenshot, to show the lists at the bottom.
   panelEnd?: boolean
+  // expand is the name of a button that the test clicks before the screenshot, to open a row.
+  expand?: string
   // populatedSet is the data set of the populated state. The default is "populated".
   populatedSet?: DataSet
 }
@@ -57,6 +59,38 @@ const pageCases: PageCase[] = [
     url: "/accounts/1/closed-positions",
     empty: "emptyAccounts",
     charts: false,
+  },
+  {
+    // The Closed Positions row of ALPHA.PL is open and shows its two single Closed Positions.
+    name: "tiers-breakdown",
+    url: "/accounts/1/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "2 Closed Positions of ALPHA.PL",
+  },
+  {
+    // The first Tier is collapsed to its Tier row.
+    name: "tiers-breakdown-collapsed",
+    url: "/accounts/1/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "Global Market Core",
+  },
+  {
+    // The Closed Positions row of ALPHA.PL is open and shows the Account of each single Closed Position.
+    name: "all-tiers-breakdown",
+    url: "/accounts/all/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "2 Closed Positions of ALPHA.PL",
+  },
+  {
+    // An Exchange Rate is missing, so the page shows the warning in place of the table.
+    name: "all-tiers-breakdown-unavailable",
+    url: "/accounts/all/tiers-breakdown",
+    empty: null,
+    charts: false,
+    populatedSet: "tiersBreakdownUnavailable",
   },
   {
     name: "benchmarks",
@@ -135,6 +169,12 @@ const pageCases: PageCase[] = [
     charts: false,
     populatedSet: "krakenRewardUnknown",
   },
+  {
+    name: "rebalancing",
+    url: "/accounts/all/rebalancing",
+    empty: "emptyAccounts",
+    charts: false,
+  },
   { name: "import", url: "/import", empty: null, charts: false },
   { name: "imports", url: "/imports", empty: "emptyAccounts", charts: false },
   { name: "not-found", url: "/no-such-page", empty: null, charts: false },
@@ -167,6 +207,9 @@ async function waitForRenderedPage(
     await page
       .locator("[data-overview-body]")
       .evaluate((body) => body.scrollTo(0, body.scrollHeight))
+  }
+  if (pageCase.expand && populated) {
+    await page.getByRole("button", { name: pageCase.expand }).click()
   }
   await page.evaluate(() => document.fonts.ready)
 }
@@ -336,6 +379,36 @@ for (const previewCase of previewCases) {
         expect(failures).toEqual([])
       })
     }
+  }
+}
+
+// The "Edit targets" mode saves a configuration that the backend rejects. Each message shows next to its Tier.
+for (const theme of themes) {
+  for (const viewport of viewports) {
+    const name = `rebalancing-edit-error-${theme}-${viewport.name}`
+    test(name, async ({ page }) => {
+      await page.setViewportSize(viewport.size)
+      await page.addInitScript((value) => {
+        localStorage.setItem("theme", value)
+      }, theme)
+      await page.clock.setFixedTime(fixedNow)
+      const failures = await installFakeBackend(page, "populated", {
+        tiersRejected: true,
+      })
+
+      await page.goto("/accounts/all/rebalancing")
+      await page.getByRole("button", { name: "Edit targets" }).click()
+      await page.getByRole("button", { name: "Save targets" }).click()
+      await expect(
+        page.getByText("add up to 110, more than 100", { exact: false })
+      ).toBeVisible()
+      await page.waitForLoadState("networkidle")
+      await page.evaluate(() => document.fonts.ready)
+
+      await expectNoHorizontalScroll(page)
+      await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: true })
+      expect(failures).toEqual([])
+    })
   }
 }
 

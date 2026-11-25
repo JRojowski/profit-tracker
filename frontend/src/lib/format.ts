@@ -192,3 +192,15 @@ export function formatCompact(value: string | number): string {
     }).format(Number(value))
   )
 }
+
+// formatShare shows a share of the Rebalancing table with 1 decimal place, for example "12.5 %".
+// The backend sends the share unrounded, for example "12.4999" for 12.4999 %.
+export function formatShare(percent: string): string {
+  return withMinusSign(
+    new Intl.NumberFormat(undefined, {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(Number(percent) / 100)
+  )
+}

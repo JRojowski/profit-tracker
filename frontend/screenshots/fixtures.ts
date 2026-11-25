@@ -22,6 +22,11 @@ import type {
   InstrumentOverview,
   OverviewFill,
   PriceWarning,
+  Rebalancing,
+  Tiers,
+  TiersBreakdown,
+  AllAccountsTiersBreakdown,
+  BreakdownGroup,
   UnsupportedEntry,
   ValueHistoryPoint,
 } from "../src/lib/api"
@@ -37,6 +42,7 @@ export type DataSet =
   | "populated"
   | "nearEqualEnd"
   | "benchmarkUnavailable"
+  | "tiersBreakdownUnavailable"
   | "noAccounts"
   | "emptyAccounts"
   | "kraken"
@@ -1173,7 +1179,383 @@ const bitcoinOverview: InstrumentOverview = {
   feeSum: krakenSummary.feeSum,
 }
 
+// populatedTiers is the configuration of two Tiers with an Instrument Target, a Shared Part and a sold Instrument.
+const populatedTiers: Tiers = {
+  tiers: [
+    {
+      order: 1,
+      name: "Global Market Core",
+      targetShare: "60",
+      sharedPart: { name: "Blue Chips", targetShare: "40" },
+      instrumentTargets: [
+        { ticker: "ALPHA.PL", name: "Alpha Retail S.A.", targetShare: "60" },
+      ],
+      sharedInstruments: [
+        { ticker: "BETA.US", name: "Beta Software Inc." },
+        { ticker: "DELTA.PL", name: "Delta Bond Fund" },
+      ],
+    },
+    {
+      order: 2,
+      name: "Asymmetric Bets",
+      targetShare: "40",
+      sharedPart: { name: "", targetShare: "100" },
+      instrumentTargets: [],
+      sharedInstruments: [],
+    },
+  ],
+  instruments: [
+    {
+      ticker: "ALPHA.PL",
+      name: "Alpha Retail S.A.",
+      tierOrder: 1,
+      targetShare: "60",
+      hasOpenHolding: true,
+    },
+    {
+      ticker: "BETA.US",
+      name: "Beta Software Inc.",
+      tierOrder: 1,
+      targetShare: null,
+      hasOpenHolding: true,
+    },
+    {
+      ticker: "DELTA.PL",
+      name: "Delta Bond Fund",
+      tierOrder: 1,
+      targetShare: null,
+      hasOpenHolding: false,
+    },
+    {
+      ticker: "GAMMA.PL",
+      name: "Gamma Energy S.A.",
+      tierOrder: null,
+      targetShare: null,
+      hasOpenHolding: true,
+    },
+  ],
+}
+
+// mainTiersBreakdown is the Tiers Breakdown of the main Account: an Instrument with a Holding and two Closed Positions,
+// an empty Tier, and the "No Tier" group with a loss. The sums agree with mainHoldings and mainClosed.
+const mainTiersBreakdown: TiersBreakdown = {
+  currency: "PLN",
+  tiers: [
+    {
+      order: 1,
+      name: "Global Market Core",
+      instruments: [
+        {
+          ticker: "ALPHA.PL",
+          name: "Alpha Retail S.A.",
+          holding: {
+            noValue: false,
+            lastPurchaseDate: "2026-06-10",
+            value: "19008.00",
+            cost: "14400.00",
+            unrealizedProfit: "4608.00",
+            returnOnCost: "32",
+          },
+          closedPositions: {
+            count: 2,
+            cost: "10800.00",
+            saleAmount: "12960.55",
+            realizedProfit: "2160.55",
+            returnOnCost: "20.0050925925",
+            lastSaleDate: "2026-05-27",
+            positions: [mainClosed[0], mainClosed[3]],
+          },
+        },
+        {
+          ticker: "BETA.US",
+          name: "Beta Software Inc.",
+          holding: {
+            noValue: false,
+            lastPurchaseDate: "2026-04-02",
+            value: "20992.00",
+            cost: "16000.00",
+            unrealizedProfit: "4992.00",
+            returnOnCost: "31.2",
+          },
+          closedPositions: {
+            count: 1,
+            cost: "4000.00",
+            saleAmount: "4900.00",
+            realizedProfit: "900.00",
+            returnOnCost: "22.5",
+            lastSaleDate: "2026-03-18",
+            positions: [mainClosed[1]],
+          },
+        },
+      ],
+      sum: {
+        value: "40000.00",
+        unrealizedProfit: "9600.00",
+        realizedProfit: "3060.55",
+        totalProfit: "12660.55",
+        cost: "45200.00",
+        returnOnCost: "28.0100663716",
+      },
+    },
+    {
+      order: 2,
+      name: "Asymmetric Bets",
+      instruments: [],
+      sum: {
+        value: "0.00",
+        unrealizedProfit: "0.00",
+        realizedProfit: "0.00",
+        totalProfit: "0.00",
+        cost: "0.00",
+        returnOnCost: null,
+      },
+    },
+  ],
+  noTier: {
+    order: null,
+    name: "No Tier",
+    instruments: [
+      {
+        ticker: "GAMMA.PL",
+        name: "Gamma Energy S.A.",
+        holding: {
+          noValue: false,
+          lastPurchaseDate: "2026-05-15",
+          value: "8550.00",
+          cost: "9000.00",
+          unrealizedProfit: "-450.00",
+          returnOnCost: "-5",
+        },
+        closedPositions: null,
+      },
+      {
+        ticker: "OMEGA.PL",
+        name: "Omega Mining S.A.",
+        holding: null,
+        closedPositions: {
+          count: 1,
+          cost: "5000.00",
+          saleAmount: "4350.00",
+          realizedProfit: "-650.00",
+          returnOnCost: "-13",
+          lastSaleDate: "2026-04-22",
+          positions: [mainClosed[2]],
+        },
+      },
+    ],
+    sum: {
+      value: "8550.00",
+      unrealizedProfit: "-450.00",
+      realizedProfit: "-650.00",
+      totalProfit: "-1100.00",
+      cost: "14000.00",
+      returnOnCost: "-7.8571428571",
+    },
+  },
+  total: {
+    value: "48550.00",
+    unrealizedProfit: "9150.00",
+    realizedProfit: "2410.55",
+    totalProfit: "11560.55",
+    cost: "59200.00",
+    returnOnCost: "19.5279560810",
+  },
+}
+
+// allTiersBreakdown is the Tiers Breakdown of all Accounts: the main Breakdown, with the Account on each single Closed Position.
+const allTiersBreakdown: AllAccountsTiersBreakdown = {
+  ...mainTiersBreakdown,
+  available: true,
+  warnings: [],
+  tiers: mainTiersBreakdown.tiers.map(withAccount),
+  noTier: mainTiersBreakdown.noTier && withAccount(mainTiersBreakdown.noTier),
+}
+
+// withAccount gives each single Closed Position of a group the main Account.
+function withAccount(group: BreakdownGroup): BreakdownGroup {
+  return {
+    ...group,
+    instruments: group.instruments.map((instrument) => ({
+      ...instrument,
+      closedPositions: instrument.closedPositions && {
+        ...instrument.closedPositions,
+        positions: instrument.closedPositions.positions.map((position) => ({
+          ...position,
+          account: { id: 1, name: mainAccount.name, currency: "PLN" },
+        })),
+      },
+    })),
+  }
+}
+
+// allTiersBreakdownUnavailable is the answer when an Exchange Rate is missing.
+const allTiersBreakdownUnavailable: AllAccountsTiersBreakdown = {
+  available: false,
+  warnings: [
+    "The tool has no Exchange Rate of USD for 2026-03-02. It cannot convert the amounts of the USD Account to PLN.",
+  ],
+}
+
+// emptyTiers is the configuration before the user creates a Tier.
+const emptyTiers: Tiers = {
+  tiers: [],
+  instruments: populatedTiers.instruments.map((i) => ({
+    ...i,
+    tierOrder: null,
+    targetShare: null,
+  })),
+}
+
+// tiersRejected is the 422 answer of a save with the Target Shares of the Tiers that add up to 90.
+export const tiersRejected = {
+  error: "the configuration of the Tiers has 2 error(s), nothing is saved",
+  errors: [
+    {
+      tierIndex: null,
+      ticker: "",
+      message: "The Target Shares of the Tiers add up to 90, not to 100.",
+    },
+    {
+      tierIndex: 0,
+      ticker: "",
+      message:
+        "Tier 1. Global Market Core: the Instrument Targets add up to 110, more than 100.",
+    },
+  ],
+}
+
 // ApiFixture is the set of answers of the fake backend for one data set.
+// populatedRebalancing is a Rebalancing table with a Planned Purchase on each Account, a negative Gap, a Holding with
+// no Tier and a Holding with no price.
+const populatedRebalancing: Rebalancing = {
+  available: true,
+  warnings: [],
+  exchangeRate: { currency: "USD", rate: "3.6512", date: today },
+  accounts: [
+    {
+      accountId: 1,
+      name: "Main Account",
+      currency: "PLN",
+      freeCash: "4200.00",
+      cash: "4200.00",
+      plannedPurchases: "3000.00",
+      unusedCash: "1200.00",
+    },
+    {
+      accountId: 5,
+      name: "Main Account USD",
+      currency: "USD",
+      freeCash: "1500.00",
+      cash: "1500.00",
+      plannedPurchases: "1500.00",
+      unusedCash: "0.00",
+    },
+  ],
+  missingAccounts: [],
+  value: "48200.00",
+  base: "48200.00",
+  tiers: [
+    {
+      order: 1,
+      name: "Global Market Core",
+      value: "24100.00",
+      actualShare: "50",
+      targetShare: "60",
+      targetValue: "28920.00",
+      gap: "4820.00",
+      plannedPurchases: [
+        { accountId: 1, currency: "PLN", amount: "3000.00" },
+        { accountId: 5, currency: "USD", amount: "1500.00" },
+      ],
+      instrumentTargets: [
+        {
+          ticker: "ALPHA.PL",
+          name: "Alpha Retail S.A.",
+          noValue: false,
+          value: "9800.00",
+          actualShare: "40.6639",
+          targetShare: "60",
+          targetValue: "17352.00",
+          gap: "7552.00",
+          plannedPurchase: { accountId: 1, currency: "PLN", amount: "3000.00" },
+        },
+      ],
+      sharedPart: {
+        name: "Blue Chips",
+        value: "14300.00",
+        actualShare: "59.3361",
+        targetShare: "40",
+        targetValue: "11568.00",
+        gap: "-2732.00",
+        plannedPurchase: { accountId: 5, currency: "USD", amount: "1500.00" },
+        instruments: [
+          {
+            ticker: "BETA.US",
+            name: "Beta Software Inc.",
+            noValue: false,
+            value: "14300.00",
+            share: "100",
+          },
+        ],
+      },
+    },
+    {
+      order: 2,
+      name: "Asymmetric Bets",
+      value: "20100.00",
+      actualShare: "41.7012",
+      targetShare: "40",
+      targetValue: "19280.00",
+      gap: "-820.00",
+      plannedPurchases: [{ accountId: 5, currency: "USD", amount: "0.00" }],
+      instrumentTargets: [],
+      sharedPart: {
+        name: "",
+        value: "20100.00",
+        actualShare: "100",
+        targetShare: "100",
+        targetValue: "19280.00",
+        gap: "-820.00",
+        plannedPurchase: { accountId: 5, currency: "USD", amount: "0.00" },
+        instruments: [],
+      },
+    },
+  ],
+  noTier: {
+    value: "4000.00",
+    actualShare: "8.2988",
+    targetShare: "0",
+    targetValue: "0.00",
+    gap: "-4000.00",
+    holdings: [
+      {
+        ticker: "GAMMA.PL",
+        name: "Gamma Energy S.A.",
+        noValue: false,
+        value: "4000.00",
+        share: "100",
+      },
+    ],
+  },
+  unpricedHoldings: [
+    { accountId: 1, ticker: "DELTA.PL", name: "Delta Bond Fund" },
+  ],
+}
+
+// emptyRebalancing is the table before the user creates a Tier.
+const emptyRebalancing: Rebalancing = {
+  available: true,
+  warnings: [],
+  exchangeRate: populatedRebalancing.exchangeRate,
+  accounts: [],
+  missingAccounts: ["PLN", "USD"],
+  value: "0.00",
+  base: "0.00",
+  tiers: [],
+  noTier: null,
+  unpricedHoldings: [],
+}
+
 export type ApiFixture = {
   accounts: Account[]
   allSummary: AllAccountsSummary
@@ -1189,6 +1571,10 @@ export type ApiFixture = {
   ikzeLimit: Record<number, IkzeLimit>
   overview: Record<string, InstrumentOverview>
   imports: ImportSummary[]
+  tiers: Tiers
+  tiersBreakdown: Record<number, TiersBreakdown>
+  allTiersBreakdown: AllAccountsTiersBreakdown
+  rebalancing: Rebalancing
 }
 
 // fixtureFor gives the answers of the fake backend for a data set.
@@ -1226,7 +1612,8 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
   if (
     dataSet === "populated" ||
     dataSet === "nearEqualEnd" ||
-    dataSet === "benchmarkUnavailable"
+    dataSet === "benchmarkUnavailable" ||
+    dataSet === "tiersBreakdownUnavailable"
   ) {
     return {
       accounts: [ikzeAccount, mainAccount].sort((a, b) =>
@@ -1251,6 +1638,13 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       ikzeLimit: { 2: ikzeLimit },
       overview: { "1:BETA.US": betaOverview },
       imports,
+      tiers: populatedTiers,
+      tiersBreakdown: { 1: mainTiersBreakdown },
+      allTiersBreakdown:
+        dataSet === "tiersBreakdownUnavailable"
+          ? allTiersBreakdownUnavailable
+          : allTiersBreakdown,
+      rebalancing: populatedRebalancing,
     }
   }
   const emptyAllHistory: AllAccountsValueHistory = {
@@ -1278,6 +1672,16 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },
     overview: {},
     imports: [],
+    tiers: emptyTiers,
+    tiersBreakdown: {},
+    allTiersBreakdown: {
+      ...mainTiersBreakdown,
+      available: true,
+      warnings: [],
+      tiers: [],
+      noTier: null,
+    },
+    rebalancing: emptyRebalancing,
   }
 }
 

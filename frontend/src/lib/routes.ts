@@ -1,5 +1,6 @@
 import type { Account } from "./api"
 import { periodParam } from "./benchmark-period"
+import { isTierAccount } from "./provider"
 
 // accountPattern is the route pattern of the pages of one Account.
 export const accountPattern = "/accounts/:id"
@@ -11,8 +12,11 @@ export const paths = {
   account: (id: number) => `/accounts/${id}`,
   holdings: (id: number) => `/accounts/${id}/holdings`,
   closedPositions: (id: number) => `/accounts/${id}/closed-positions`,
+  tiersBreakdown: (id: number) => `/accounts/${id}/tiers-breakdown`,
   benchmarks: (id: number) => `/accounts/${id}/benchmarks`,
   allBenchmarks: "/accounts/all/benchmarks",
+  allTiersBreakdown: "/accounts/all/tiers-breakdown",
+  rebalancing: "/accounts/all/rebalancing",
   ikze: (id: number) => `/accounts/${id}/ikze`,
   import: "/import",
   imports: "/imports",
@@ -35,7 +39,11 @@ export function isAllAccountsPath(pathname: string): boolean {
 
 // ViewTarget is a view of the view switch: all Accounts, or one Account with the data that decides its pages.
 export type ViewTarget =
-  { kind: "all" } | { kind: "account"; account: Pick<Account, "id" | "type"> }
+  | { kind: "all" }
+  | {
+      kind: "account"
+      account: Pick<Account, "id" | "type" | "provider" | "currency">
+    }
 
 // switchViewPath gives the URL that opens when the user changes the view. The same page type opens when the new
 // view has it, otherwise the overview opens. The query string is dropped, because filters and the Instrument
@@ -51,14 +59,19 @@ export function switchViewPath(
     period === null ? "" : `?${new URLSearchParams({ [periodParam]: period })}`
   const onBenchmarks =
     parts[1] === "accounts" && parts[3] === "benchmarks" && parts.length === 4
+  const onTiersBreakdown =
+    parts[1] === "accounts" && parts[3] === "tiers-breakdown"
   if (target.kind === "all") {
-    return onBenchmarks ? `${paths.allBenchmarks}${query}` : paths.allAccounts
+    if (onBenchmarks) return `${paths.allBenchmarks}${query}`
+    return onTiersBreakdown ? paths.allTiersBreakdown : paths.allAccounts
   }
   const { id, type } = target.account
   if (onBenchmarks) return `${paths.benchmarks(id)}${query}`
   const onAccountPage =
     parts[1] === "accounts" && parseAccountId(parts[2]) !== null
   const page = onAccountPage ? parts[3] : undefined
+  if (onTiersBreakdown && isTierAccount(target.account))
+    return paths.tiersBreakdown(id)
   if (page === "holdings") return paths.holdings(id)
   if (page === "closed-positions") return paths.closedPositions(id)
   if (page === "ikze" && type === "IKZE") return paths.ikze(id)

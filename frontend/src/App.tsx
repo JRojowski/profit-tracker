@@ -6,6 +6,8 @@ import { accountPattern, paths } from "@/lib/routes"
 import { AccountHoldingsPage } from "@/pages/account-holdings-page"
 import { AccountBenchmarksPage } from "@/pages/account-benchmarks-page"
 import { AccountIkzePage } from "@/pages/account-ikze-page"
+import { AllAccountsTiersBreakdownPage } from "@/pages/all-accounts-tiers-breakdown-page"
+import { AccountTiersBreakdownPage } from "@/pages/account-tiers-breakdown-page"
 import { AccountLayout } from "@/pages/account-layout"
 import { AccountOverviewPage } from "@/pages/account-overview-page"
 import { AccountClosedPositionsPage } from "@/pages/account-closed-positions-page"
@@ -13,6 +15,7 @@ import { AllAccountsBenchmarksPage } from "@/pages/all-accounts-benchmarks-page"
 import { AllAccountsPage } from "@/pages/all-accounts-page"
 import { ImportPage } from "@/pages/import-page"
 import { ImportsPage } from "@/pages/imports-page"
+import { RebalancingPage } from "@/pages/rebalancing-page"
 import { NotFoundPage } from "@/pages/not-found-page"
 
 // The backend serves index.html for each of these paths, so a reload opens the same view.
@@ -24,6 +27,11 @@ const router = createBrowserRouter([
       { path: paths.allAccounts, element: <AllAccountsPage /> },
       { path: paths.allBenchmarks, element: <AllAccountsBenchmarksPage /> },
       {
+        path: paths.allTiersBreakdown,
+        element: <AllAccountsTiersBreakdownPage />,
+      },
+      { path: paths.rebalancing, element: <RebalancingPage /> },
+      {
         path: accountPattern,
         element: <AccountLayout />,
         children: [
@@ -31,6 +39,7 @@ const router = createBrowserRouter([
           { path: "holdings", element: <AccountHoldingsPage /> },
           { path: "closed-positions", element: <AccountClosedPositionsPage /> },
           { path: "benchmarks", element: <AccountBenchmarksPage /> },
+          { path: "tiers-breakdown", element: <AccountTiersBreakdownPage /> },
           { path: "ikze", element: <AccountIkzePage /> },
         ],
       },

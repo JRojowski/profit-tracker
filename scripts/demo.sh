@@ -5,7 +5,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 addr="${DEMO_ADDR:-127.0.0.1:8099}"
 base="http://$addr"
-work="${TMPDIR:-/tmp}/profit-tracker-demo"
+work="${TMPDIR:-/tmp}/profit-tracker-demo-${addr##*:}"
 db="$work/demo.db"
 exports="$work/exports"
 
@@ -68,6 +68,10 @@ import_file "XTB USD" regular USD "$(ls "$exports"/USD_56100001_*.xlsx)"
 import_file "XTB PLN" regular PLN "$(ls "$exports"/PLN_56100002_*.xlsx)"
 import_file "XTB IKZE" IKZE PLN "$(ls "$exports"/PLN_56100003_*.xlsx)"
 import_kraken "$(ls "$exports"/kraken_spot_ledgers_*.csv)"
+
+# The sample Tiers need the Instruments of the imports above.
+curl -fsS -X PUT -H 'Content-Type: application/json' --data-binary "@$exports/tiers.json" "$base/api/tiers" >/dev/null
+echo "saved the sample Tiers"
 
 # The refresh can fail for the ticker ZZQX.US. That is expected.
 curl -sS -X POST "$base/api/prices/refresh" >/dev/null || echo "price refresh failed (expected for ZZQX.US)"

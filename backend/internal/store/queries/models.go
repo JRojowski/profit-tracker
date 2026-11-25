@@ -157,3 +157,17 @@ type PriceRange struct {
 	LastDay      string
 	FetchedAt    string
 }
+
+type Tier struct {
+	ID             int64
+	OrderNumber    int64
+	Name           string
+	TargetShare    decimal.Decimal
+	SharedPartName string
+}
+
+type TierInstrument struct {
+	Ticker      string
+	TierID      int64
+	TargetShare decimal.NullDecimal
+}

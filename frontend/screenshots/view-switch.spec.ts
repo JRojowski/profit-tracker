@@ -5,10 +5,16 @@ import { switchViewPath, type ViewTarget } from "../src/lib/routes"
 const all: ViewTarget = { kind: "all" }
 const standard: ViewTarget = {
   kind: "account",
-  account: { id: 1, type: "regular" },
+  account: { id: 1, type: "regular", provider: "xtb", currency: "PLN" },
 }
-const ike: ViewTarget = { kind: "account", account: { id: 3, type: "IKE" } }
-const ikze: ViewTarget = { kind: "account", account: { id: 2, type: "IKZE" } }
+const ike: ViewTarget = {
+  kind: "account",
+  account: { id: 3, type: "IKE", provider: "xtb", currency: "PLN" },
+}
+const ikze: ViewTarget = {
+  kind: "account",
+  account: { id: 2, type: "IKZE", provider: "xtb", currency: "PLN" },
+}
 
 // Each case is one change of the view: the page that is open, the new view and the page that must open.
 const cases: {
@@ -83,6 +89,25 @@ const cases: {
   // The IKZE page does not exist in an IKE Account.
   { from: "/accounts/2/ikze", to: ike, expected: "/accounts/3" },
   { from: "/accounts/1/holdings", to: ike, expected: "/accounts/3/holdings" },
+  // The Tiers Breakdown page stays between all Accounts and a Tier Account. A non-Tier Account has none.
+  {
+    from: "/accounts/1/tiers-breakdown",
+    to: standard,
+    expected: "/accounts/1/tiers-breakdown",
+  },
+  {
+    from: "/accounts/1/tiers-breakdown",
+    to: all,
+    expected: "/accounts/all/tiers-breakdown",
+  },
+  {
+    from: "/accounts/all/tiers-breakdown",
+    to: standard,
+    expected: "/accounts/1/tiers-breakdown",
+  },
+  { from: "/accounts/all/tiers-breakdown", to: ikze, expected: "/accounts/2" },
+  { from: "/accounts/1/tiers-breakdown", to: ikze, expected: "/accounts/2" },
+  { from: "/accounts/1/tiers-breakdown", to: ike, expected: "/accounts/3" },
   // The pages of the Import group are not pages of a view.
   { from: "/import", to: standard, expected: "/accounts/1" },
   { from: "/imports", to: all, expected: "/accounts/all" },
