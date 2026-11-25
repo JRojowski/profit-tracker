@@ -1,5 +1,4 @@
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -31,17 +30,14 @@ import { cn } from "@/lib/utils"
 // userKey is the key of the line of the user in the chart data and in the chart config.
 const userKey = "user"
 
-// userLineWidth is the stroke width of the user line, about twice the width of a Benchmark line.
-const userLineWidth = 3
-
-// benchmarkOpacity is the stroke opacity of a Benchmark line, so that the user line stands out.
-const benchmarkOpacity = 0.4
-
-// userAreaOpacity is the opacity of the area under the user line.
-const userAreaOpacity = 0.08
-
 // benchmarkLineWidth is the stroke width of a Benchmark line.
 const benchmarkLineWidth = 1.25
+
+// userLineWidth is the stroke width of the user line: 1.3 times the width of a Benchmark line.
+const userLineWidth = benchmarkLineWidth * 1.3
+
+// benchmarkOpacity is the stroke opacity of a Benchmark line: 75% transparent.
+const benchmarkOpacity = 0.25
 
 // drawOrder puts the user line last, so that the chart draws it on top of the Benchmark lines.
 function drawOrder(lines: ChartLine[]): ChartLine[] {
@@ -236,18 +232,6 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
               config={config}
             />
           )}
-        />
-        <Area
-          dataKey={userKey}
-          type="linear"
-          stroke="none"
-          fill={`var(--color-${userKey})`}
-          fillOpacity={userAreaOpacity}
-          dot={false}
-          activeDot={false}
-          isAnimationActive={false}
-          legendType="none"
-          tooltipType="none"
         />
         {drawOrder(lines).map((line) => (
           <Line
