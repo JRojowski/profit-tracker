@@ -78,6 +78,10 @@ The tracker uses the five default triage labels. See `docs/agents/triage-labels.
 
 Single-context layout: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Workflow
+
+The flow of a task, the skills and the quality gate are in `docs/agents/workflow.md`.
+
 ### Spec
 
 Before you write a spec, read `docs/agents/spec.md`.
