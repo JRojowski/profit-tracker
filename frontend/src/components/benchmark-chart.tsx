@@ -30,11 +30,8 @@ import { cn } from "@/lib/utils"
 // userKey is the key of the line of the user in the chart data and in the chart config.
 const userKey = "user"
 
-// benchmarkLineWidth is the stroke width of a Benchmark line.
+// benchmarkLineWidth is the stroke width of each line, the user line included.
 const benchmarkLineWidth = 1.25
-
-// userLineWidth is the stroke width of the user line: 1.3 times the width of a Benchmark line.
-const userLineWidth = benchmarkLineWidth * 1.3
 
 // benchmarkOpacity is the stroke opacity of a Benchmark line: 75% transparent.
 const benchmarkOpacity = 0.25
@@ -239,9 +236,7 @@ function LinesView({ rows, lines, config, tags, compact }: LinesViewProps) {
             dataKey={line.key}
             type="linear"
             stroke={`var(--color-${line.key})`}
-            strokeWidth={
-              line.key === userKey ? userLineWidth : benchmarkLineWidth
-            }
+            strokeWidth={benchmarkLineWidth}
             strokeOpacity={line.key === userKey ? 1 : benchmarkOpacity}
             dot={false}
             isAnimationActive={false}
