@@ -21,11 +21,12 @@ The tool compares the Time-Weighted Return of the user with the Benchmark Return
 
 ## The list
 
-The ticker check on 2026-11-22 used the chart endpoint of Yahoo Finance. Each fund has daily closes, no dividend events and a currency in a full unit. No candidate needed a replacement.
+The ticker check on 2026-11-22 used the chart endpoint of Yahoo Finance. Each fund has daily closes, no dividend events and a currency in a full unit. No candidate needed a replacement. The user added the Nasdaq-100 on 2026-11-24. The check of `CNDX.L` on that day found daily closes, no dividend events and the currency USD.
 
 | Benchmark | Fund | Price ticker | Quote Currency | First close |
 |---|---|---|---|---|
 | S&P 500 | iShares Core S&P 500 UCITS ETF USD (Acc) | `CSPX.L` | USD | 2010-09-15 |
+| Nasdaq-100 | iShares NASDAQ 100 UCITS ETF USD (Acc) | `CNDX.L` | USD | 2010-09-15 |
 | WIG20TR | Beta ETF WIG20TR Portfelowy FIZ | `ETFBW20TR.WA` | PLN | 2019-01-07 |
 | mWIG40TR | Beta ETF mWIG40TR Portfelowy FIZ | `ETFBM40TR.WA` | PLN | 2019-09-05 |
 | World equities | iShares Core MSCI World UCITS ETF USD (Acc) | `IWDA.L` | USD | 2009-09-25 |

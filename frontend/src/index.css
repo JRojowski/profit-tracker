@@ -104,6 +104,7 @@
   --chart-other-foreground: #0f172a;
   --chart-4-foreground: #ffffff;
   --chart-5-foreground: #0c1017;
+  --chart-6-foreground: #0c1017;
   --chart-7-foreground: #0c1017;
   --chart-8-foreground: #ffffff;
   --radius: 0.625rem;
@@ -163,6 +164,7 @@
   --chart-other-foreground: #f1f5f9;
   --chart-4-foreground: #0c1017;
   --chart-5-foreground: #0c1017;
+  --chart-6-foreground: #0c1017;
   --chart-7-foreground: #0c1017;
   --chart-8-foreground: #0c1017;
   --sidebar: #090d13;

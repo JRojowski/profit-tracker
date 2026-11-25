@@ -92,6 +92,7 @@ func TestAllBenchmarks_PLNAndUSDAccounts_ReturnInPLNAndDifference(t *testing.T) 
 				QuoteCurrency: "USD", Status: "available", Return: ptr("2.6"), Difference: ptr("-4.6"),
 				Series: octoberSeries(map[int]string{15: "1.4", 22: "5.3", 23: "2.6"}),
 			},
+			noFullPeriod("nasdaq100", "Nasdaq-100", "iShares NASDAQ 100 UCITS ETF USD (Acc)", "CNDX.L", "USD"),
 			{
 				ID: "wig20tr", Name: "WIG20TR", Fund: "Beta ETF WIG20TR Portfelowy FIZ", Ticker: "ETFBW20TR.WA",
 				QuoteCurrency: "PLN", Status: "available", Return: ptr("12.5"), Difference: ptr("-14.5"),
