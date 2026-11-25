@@ -5,7 +5,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 addr="${DEMO_ADDR:-127.0.0.1:8099}"
 base="http://$addr"
-work="${TMPDIR:-/tmp}/profit-tracker-demo"
+work="${TMPDIR:-/tmp}/profit-tracker-demo-${addr##*:}"
 db="$work/demo.db"
 exports="$work/exports"
 
