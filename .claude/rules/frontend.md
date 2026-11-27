@@ -1,20 +1,12 @@
 ---
-name: frontend-standard
-description: Frontend conventions for the profit-tracker web app (React, TypeScript, Vite, Tailwind, shadcn/ui, Recharts). Use when you write, review, or refactor code in frontend/, or when you check a UI change in the browser.
+paths:
+  - "frontend/src/**/*"
+  - "frontend/screenshots/**/*"
 ---
 
 # Frontend standard
 
 The frontend is one Vite app in `frontend/`. The Go binary embeds the build and serves `index.html` for each client route.
-
-## Completion criterion
-
-Your frontend work is done only when both checks pass:
-
-1. `make frontend-check` passes with zero errors. It runs the typecheck, eslint, the prettier check and the build.
-2. The browser check in "Check in the browser" passes for each flow that you changed.
-
-To format the code, run `cd frontend && npm run format`. If `npx <tool>` fails with "could not determine executable", run the tool from `frontend/node_modules/.bin/`.
 
 ## Stack
 
@@ -108,18 +100,3 @@ The project tokens in addition to the shadcn tokens:
 ## Comments
 
 Write a comment above each exported component, hook, function and type. Write it in full sentences, in active voice, at most 25 words for each sentence. Match the density of the comments in the files around it.
-
-## Check in the browser
-
-Do this check after each change to a page.
-
-1. Run `make demo`. It starts the tool on `127.0.0.1:8099` with a new test database and synthetic data. Never use the files in `exports/`. They hold personal data.
-2. Optional: for fast reloads, run `PROFIT_TRACKER_ADDR=127.0.0.1:8099 make frontend-dev`.
-3. Open each changed route with the Playwright MCP tools. Save each screenshot in `.playwright-mcp/` in the repository root. The Playwright tools do not write to other folders.
-4. Check each route in four states: the dark theme and the light theme, at a width of 1440 px and at 375 px. The theme switch is the button at the right of the top bar.
-5. At 375 px, run `document.documentElement.scrollWidth <= document.documentElement.clientWidth` in the page. The result must be `true`.
-6. Read the console messages. There must be no errors, except the errors of a backend that you stopped on purpose.
-7. Do each acceptance criterion of the ticket in the browser. Look at each screenshot and compare it with the mockup.
-8. Click "Refresh prices" one time. The values must stay on the screen while the new values load.
-
-Stop the demo server when you are done, with the command that `make demo` prints.

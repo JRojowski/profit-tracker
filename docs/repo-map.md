@@ -32,7 +32,7 @@ Read AGENTS.md first.
 
 | Path | Holds |
 |---|---|
-| `.claude/` | The project agents, skills, hooks and settings of Claude Code. |
+| `.claude/` | The project agents, rules, skills, hooks and settings of Claude Code. The coding standards are in `.claude/rules/`. |
 | `.github/` | The CI and deployment workflows, and the Dependabot configuration. |
 | `backend/` | The Go module: the HTTP API, the domain calculations and the SQLite store. |
 | `docs/` | The ADRs, the agent documents, the v3 mockups, the manual checklists and the deployment document. |

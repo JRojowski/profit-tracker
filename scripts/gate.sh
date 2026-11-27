@@ -4,6 +4,12 @@
 # A change in backend/ selects the backend. A change in frontend/ selects the frontend.
 # A change in another path selects both stacks. The script ignores docs/ and *.md files.
 # Usage: scripts/gate.sh build|test|stacks
+#
+# Two bases are in use, on purpose:
+# - quality-gate.sh skips the whole run when the code is the same as at the last green run.
+#   It uses the last green commit as its base.
+# - This script selects the stacks from all changes since the merge base with origin/main.
+#   Thus a run after a green run still checks each stack that the branch changed.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

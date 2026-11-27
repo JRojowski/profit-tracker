@@ -62,10 +62,20 @@ Claude starts these skills when the task needs them. You can also ask for them b
 
 The main session gives each code change to an implementer subagent:
 
-| Agent | Code | Standard |
-|---|---|---|
-| `go-developer` | `backend/` | `.claude/skills/go-code-standard/SKILL.md` |
-| `frontend-developer` | `frontend/` | `.claude/skills/frontend-standard/SKILL.md` |
+| Agent | Code | Standard | Check of the behaviour |
+|---|---|---|---|
+| `go-developer` | `backend/` | `.claude/rules/go.md` | Tests, test-first |
+| `frontend-developer` | `frontend/` | `.claude/rules/frontend.md` | The `browser-check` skill and `make frontend-screenshots` |
+
+The two agents have different work loops and different limits. `go-developer` writes a test first. `frontend-developer` checks each change in the browser and does not change Go code. The `SubagentStop` hook of the quality gate selects the agents by name.
+
+### Rules and skills
+
+A rule holds a coding standard. A skill holds a procedure.
+
+- A rule in `.claude/rules/` has a `paths:` list. Claude Code loads the rule automatically when Claude reads or edits a matching file. This also applies to the main session and to a review.
+- Claude does not load a rule when it reads a diff only, for example the output of `git diff`. Before such a review, read the rule.
+- The skill `browser-check` tells how to check a page in the browser. `frontend-developer` preloads it.
 
 ## Quality gate
 
@@ -87,6 +97,8 @@ Both targets call `scripts/gate.sh`. The script compares the tree with the merge
 | `frontend/` | `make frontend-check` | none |
 | Another path, for example `Makefile` or `.claude/` | both | `make test && make lint` |
 | Only `docs/` or `*.md` | none | none |
+
+The gate does not run the screenshot tests (`make frontend-screenshots`), because they are slow and need Chromium. `frontend-developer` runs them before it reports. CI does not run them.
 
 To see the selected stacks, run `scripts/gate.sh stacks`.
 

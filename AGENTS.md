@@ -39,13 +39,13 @@ The Assistant reads these values:
 ## Frontend
 
 - Delegate frontend implementation work to the `frontend-developer` subagent.
-- When you write or review frontend code yourself, load the `frontend-standard` skill first.
-- After the subagent reports, check the changed pages in the browser yourself. The frontend has no automatic tests.
+- The frontend standard is in `.claude/rules/frontend.md`. It loads automatically when you read a file in `frontend/src/`. When you review only a diff, read the rule first.
+- The screenshot tests (`make frontend-screenshots`) check the look of each page, but not the behaviour. After the subagent reports, check the changed pages in the browser yourself with the `browser-check` skill.
 
 ## Go backend
 
 - Delegate Go implementation work to the `go-developer` subagent.
-- When you write or review Go code yourself, load the `go-code-standard` skill first.
+- The Go standard is in `.claude/rules/go.md`. It loads automatically when you read a file in `backend/`. When you review only a diff, read the rule first.
 
 ## Second review with Codex
 
