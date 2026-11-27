@@ -10,12 +10,14 @@ type PageCase = {
   empty: DataSet | null
   // charts tells that the populated page draws a chart, so the test waits for it.
   charts: boolean
-  // panel tells that the page opens the Instrument Overview panel.
+  // panel tells that the page opens a panel at the right side, for example the Instrument Overview.
   panel?: boolean
   // panelEnd scrolls the body of the panel to its end before the screenshot, to show the lists at the bottom.
   panelEnd?: boolean
   // expand is the name of a button that the test clicks before the screenshot, to open a row.
   expand?: string
+  // showClosed clicks "Show closed positions" before expand, because the page hides the Closed Positions rows at first.
+  showClosed?: boolean
   // populatedSet is the data set of the populated state. The default is "populated".
   populatedSet?: DataSet
 }
@@ -66,7 +68,16 @@ const pageCases: PageCase[] = [
     url: "/accounts/1/tiers-breakdown",
     empty: null,
     charts: false,
+    showClosed: true,
     expand: "2 Closed Positions of ALPHA.PL",
+  },
+  {
+    // The button "Show closed positions" shows OMEGA.PL, which the user no longer holds.
+    name: "tiers-breakdown-closed-shown",
+    url: "/accounts/1/tiers-breakdown",
+    empty: null,
+    charts: false,
+    expand: "Show closed positions",
   },
   {
     // The first Tier is collapsed to its Tier row.
@@ -82,6 +93,7 @@ const pageCases: PageCase[] = [
     url: "/accounts/all/tiers-breakdown",
     empty: null,
     charts: false,
+    showClosed: true,
     expand: "2 Closed Positions of ALPHA.PL",
   },
   {
@@ -177,6 +189,20 @@ const pageCases: PageCase[] = [
   },
   { name: "import", url: "/import", empty: null, charts: false },
   { name: "imports", url: "/imports", empty: "emptyAccounts", charts: false },
+  {
+    name: "imports-cash-operations",
+    url: "/imports?import=1",
+    empty: null,
+    charts: false,
+    panel: true,
+  },
+  {
+    name: "imports-cash-operations-empty",
+    url: "/imports?import=3",
+    empty: null,
+    charts: false,
+    panel: true,
+  },
   { name: "not-found", url: "/no-such-page", empty: null, charts: false },
 ]
 
@@ -207,6 +233,9 @@ async function waitForRenderedPage(
     await page
       .locator("[data-overview-body]")
       .evaluate((body) => body.scrollTo(0, body.scrollHeight))
+  }
+  if (pageCase.showClosed && populated) {
+    await page.getByRole("button", { name: /Show closed positions/ }).click()
   }
   if (pageCase.expand && populated) {
     await page.getByRole("button", { name: pageCase.expand }).click()

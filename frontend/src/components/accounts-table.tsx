@@ -1,5 +1,9 @@
-import { SectionHeading } from "@/components/section-heading"
+import { ArrowDownIcon, ArrowUpIcon } from "lucide-react"
+import { useMemo, useState } from "react"
 import { Link } from "react-router"
+import type { SortingState } from "@tanstack/react-table"
+
+import { SectionHeading } from "@/components/section-heading"
 
 import { AccountBadges } from "@/components/account-badges"
 import { unpricedNote } from "@/components/overview-hero"
@@ -13,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { AllAccountsSummary } from "@/lib/api"
+import type { AllAccountsSummary, AllAccountsRow } from "@/lib/api"
 import {
   amountSign,
   formatAmount,
@@ -21,15 +25,79 @@ import {
   signColour,
 } from "@/lib/format"
 import { paths } from "@/lib/routes"
+import {
+  decimalSortValue,
+  nextSorting,
+  sortRows,
+  textSortValue,
+  type SortableColumn,
+} from "@/lib/table-sort"
 import { cn } from "@/lib/utils"
 
 type AccountsTableProps = {
   summary: AllAccountsSummary
 }
 
+// accountColumns are the sortable columns of the table. The ids are the ids of the sorting.
+const accountColumns: SortableColumn<AllAccountsRow>[] = [
+  { id: "account", sortValue: (row) => textSortValue(row.name) },
+  { id: "value", sortValue: (row) => decimalSortValue(row.value) },
+  { id: "totalResult", sortValue: (row) => decimalSortValue(row.totalResult) },
+  {
+    id: "annualReturn",
+    sortValue: (row) => decimalSortValue(row.annualReturn),
+  },
+]
+
+// SortHeader is the button of a sortable header. It shows the direction of the sort of its column.
+function SortHeader({
+  id,
+  sorting,
+  onSort,
+  align,
+  children,
+}: {
+  id: string
+  sorting: SortingState
+  onSort: (id: string, additive: boolean) => void
+  align?: "right"
+  children: React.ReactNode
+}) {
+  const sort = sorting.find((s) => s.id === id)
+  const Arrow = sort?.desc ? ArrowDownIcon : ArrowUpIcon
+  return (
+    <button
+      type="button"
+      onClick={(event) => onSort(id, event.shiftKey)}
+      className={cn(
+        "-mx-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-1 outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50",
+        align === "right" && "flex-row-reverse"
+      )}
+    >
+      <span>{children}</span>
+      {sort && <Arrow aria-hidden className="size-3.5 text-muted-foreground" />}
+    </button>
+  )
+}
+
+// ariaSort gives the aria-sort value of the header of a column.
+function ariaSort(sorting: SortingState, id: string) {
+  const sort = sorting.find((s) => s.id === id)
+  if (!sort) return "none"
+  return sort.desc ? "descending" : "ascending"
+}
+
 // AccountsTable shows the value, the Total Result and the Annual Return of each Account in PLN, and a total row.
-// A click on a row opens the Overview of that Account.
+// A click on a header sorts the rows by that column. A click on a row opens the Overview of that Account.
+// Each row has the same height. A note under the name of an Account is one line.
 export function AccountsTable({ summary }: AccountsTableProps) {
+  const [sorting, setSorting] = useState<SortingState>([])
+  const rows = useMemo(
+    () => sortRows(summary.accounts, sorting, accountColumns),
+    [summary.accounts, sorting]
+  )
+  const sort = (id: string, additive: boolean) =>
+    setSorting(nextSorting(sorting, id, additive))
   return (
     <Card>
       <CardHeader>
@@ -39,27 +107,87 @@ export function AccountsTable({ summary }: AccountsTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Account</TableHead>
-              <TableHead className="text-right">
-                <span className="hidden md:inline">Value</span>
+              <TableHead aria-sort={ariaSort(sorting, "account")}>
+                <SortHeader id="account" sorting={sorting} onSort={sort}>
+                  Account
+                </SortHeader>
+              </TableHead>
+              <TableHead
+                className="text-right"
+                aria-sort={ariaSort(sorting, "value")}
+              >
+                <span className="hidden md:inline">
+                  <SortHeader
+                    id="value"
+                    sorting={sorting}
+                    onSort={sort}
+                    align="right"
+                  >
+                    Value
+                  </SortHeader>
+                </span>
                 {/* On a narrow screen, one column holds the three figures, one under the other. */}
-                <span className="flex flex-col items-end py-1 leading-tight md:hidden">
-                  <span>Value</span>
-                  <span>Total Result</span>
-                  <span>Annual Return</span>
+                <span className="flex flex-col items-end leading-tight md:hidden">
+                  <SortHeader
+                    id="value"
+                    sorting={sorting}
+                    onSort={sort}
+                    align="right"
+                  >
+                    Value
+                  </SortHeader>
+                  <SortHeader
+                    id="totalResult"
+                    sorting={sorting}
+                    onSort={sort}
+                    align="right"
+                  >
+                    Total Result
+                  </SortHeader>
+                  <SortHeader
+                    id="annualReturn"
+                    sorting={sorting}
+                    onSort={sort}
+                    align="right"
+                  >
+                    Annual Return
+                  </SortHeader>
                 </span>
               </TableHead>
-              <TableHead className="hidden text-right md:table-cell">
-                Total Result
+              <TableHead
+                className="hidden text-right md:table-cell"
+                aria-sort={ariaSort(sorting, "totalResult")}
+              >
+                <SortHeader
+                  id="totalResult"
+                  sorting={sorting}
+                  onSort={sort}
+                  align="right"
+                >
+                  Total Result
+                </SortHeader>
               </TableHead>
-              <TableHead className="hidden text-right md:table-cell">
-                Annual Return
+              <TableHead
+                className="hidden text-right md:table-cell"
+                aria-sort={ariaSort(sorting, "annualReturn")}
+              >
+                <SortHeader
+                  id="annualReturn"
+                  sorting={sorting}
+                  onSort={sort}
+                  align="right"
+                >
+                  Annual Return
+                </SortHeader>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {summary.accounts.map((row) => (
-              <TableRow key={row.accountId} className="relative cursor-pointer">
+            {rows.map((row) => (
+              <TableRow
+                key={row.accountId}
+                className="relative h-28 cursor-pointer md:h-16"
+              >
                 <TableCell>
                   <div className="flex flex-col gap-1">
                     <span className="flex items-center gap-2">
@@ -72,16 +200,12 @@ export function AccountsTable({ summary }: AccountsTableProps) {
                       </Link>
                       <AccountBadges account={row} />
                     </span>
-                    {row.note && (
-                      <span className="text-sm whitespace-normal text-muted-foreground">
-                        {row.note}
-                      </span>
-                    )}
-                    {row.unpricedHoldings > 0 && (
-                      <span className="text-sm whitespace-normal text-muted-foreground">
-                        {unpricedNote(row.unpricedHoldings)}
-                      </span>
-                    )}
+                    <span
+                      className="max-w-40 truncate text-sm text-muted-foreground md:max-w-md"
+                      title={rowNote(row)}
+                    >
+                      {rowNote(row)}
+                    </span>
                   </div>
                 </TableCell>
                 <TableCell className="text-right align-top num">
@@ -122,6 +246,14 @@ export function AccountsTable({ summary }: AccountsTableProps) {
   )
 }
 
+// rowNote gives the one-line note under the name of an Account, or "-" when there is none.
+function rowNote(row: AllAccountsRow) {
+  const notes = [row.note, unpricedNote(row.unpricedHoldings)].filter(
+    (note): note is string => Boolean(note)
+  )
+  return notes.length > 0 ? notes.join(" ") : "-"
+}
+
 type AmountTextProps = {
   amount: string | null
   // signed shows the sign and the colour of a result.
@@ -150,7 +282,10 @@ function ReturnText({ percent, note }: ReturnTextProps) {
       <span className="flex flex-col items-end gap-1">
         <span className="num">—</span>
         {note && (
-          <span className="max-w-48 font-sans text-xs font-normal whitespace-normal text-muted-foreground">
+          <span
+            className="max-w-32 truncate font-sans text-xs font-normal text-muted-foreground md:max-w-48"
+            title={note ?? undefined}
+          >
             {note}
           </span>
         )}

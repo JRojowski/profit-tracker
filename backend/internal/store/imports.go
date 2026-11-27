@@ -65,6 +65,10 @@ type Import struct {
 	AccountName           string
 	NewCashOperations     int
 	SkippedCashOperations int
+	// PeriodFrom and PeriodTo are the times of the first and the last Cash Operation that the Import added.
+	// They are nil if the Import added none.
+	PeriodFrom *time.Time
+	PeriodTo   *time.Time
 }
 
 // NewPreview is the data of a new Import in preview.
@@ -290,10 +294,19 @@ func (s *Store) SaveImport(ctx context.Context, p SaveImport) (Import, error) {
 	if err != nil {
 		return Import{}, fmt.Errorf("read saved import %d: %w", p.ImportID, err)
 	}
+	period, err := q.ImportPeriod(ctx, p.ImportID)
+	if err != nil {
+		return Import{}, fmt.Errorf("read period of import %d: %w", p.ImportID, err)
+	}
 	if err := tx.Commit(); err != nil {
 		return Import{}, fmt.Errorf("commit import %d: %w", p.ImportID, err)
 	}
-	return toImport(queries.SavedImportsRow(row))
+	imp, err := toImport(queries.SavedImportsRow(row))
+	if err != nil {
+		return Import{}, err
+	}
+	imp.PeriodFrom, imp.PeriodTo, err = parsePeriod(row.ID, period.FirstTime, period.LastTime)
+	return imp, err
 }
 
 // saveAccount returns the ID of the Account. If the ID is 0, it finds the Account by its account number,
@@ -325,9 +338,18 @@ func saveAccount(ctx context.Context, q *queries.Queries, a Account) (int64, err
 
 // Imports returns the saved Imports, the newest first.
 func (s *Store) Imports(ctx context.Context) ([]Import, error) {
-	rows, err := queries.New(s.db).SavedImports(ctx)
+	q := queries.New(s.db)
+	rows, err := q.SavedImports(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read imports: %w", err)
+	}
+	periods, err := q.ImportPeriods(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read import periods: %w", err)
+	}
+	periodOf := make(map[int64]queries.ImportPeriodsRow, len(periods))
+	for _, p := range periods {
+		periodOf[p.ImportID] = p
 	}
 	imports := make([]Import, 0, len(rows))
 	for _, row := range rows {
@@ -335,9 +357,68 @@ func (s *Store) Imports(ctx context.Context) ([]Import, error) {
 		if err != nil {
 			return nil, err
 		}
+		if p, ok := periodOf[imp.ID]; ok {
+			imp.PeriodFrom, imp.PeriodTo, err = parsePeriod(imp.ID, p.FirstTime, p.LastTime)
+			if err != nil {
+				return nil, err
+			}
+		}
 		imports = append(imports, imp)
 	}
 	return imports, nil
+}
+
+// parsePeriod parses the first and the last time of the Cash Operations of an Import.
+// Empty texts mean that the Import added none, and give nil.
+func parsePeriod(importID int64, first, last string) (*time.Time, *time.Time, error) {
+	if first == "" || last == "" {
+		return nil, nil, nil
+	}
+	from, err := time.Parse(timeLayout, first)
+	if err != nil {
+		return nil, nil, fmt.Errorf("import %d: parse period start %q: %w", importID, first, err)
+	}
+	to, err := time.Parse(timeLayout, last)
+	if err != nil {
+		return nil, nil, fmt.Errorf("import %d: parse period end %q: %w", importID, last, err)
+	}
+	from, to = from.UTC(), to.UTC()
+	return &from, &to, nil
+}
+
+// ImportedCashOperation is a Cash Operation that an Import added, with its XTB ID.
+type ImportedCashOperation struct {
+	XTBID string
+	CashOperationData
+}
+
+// ImportCashOperations returns the Cash Operations of a saved Import, in time order.
+// It returns ErrNotFound if there is no saved Import with the ID.
+func (s *Store) ImportCashOperations(ctx context.Context, importID int64) ([]ImportedCashOperation, error) {
+	q := queries.New(s.db)
+	state, err := q.ImportState(ctx, importID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && state != StateSaved) {
+		return nil, fmt.Errorf("import %d: %w", importID, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read state of import %d: %w", importID, err)
+	}
+	rows, err := q.ImportCashOperations(ctx, importID)
+	if err != nil {
+		return nil, fmt.Errorf("read cash operations of import %d: %w", importID, err)
+	}
+	ops := make([]ImportedCashOperation, 0, len(rows))
+	for _, row := range rows {
+		data, err := withTime(row.Time, CashOperationData{
+			Type: row.Type, Amount: row.Amount, Comment: row.Comment,
+			Ticker: row.Ticker, PositionID: row.PositionID, Volume: row.Volume, Price: row.Price,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("cash operation %s of import %d: %w", row.XtbID, importID, err)
+		}
+		ops = append(ops, ImportedCashOperation{XTBID: row.XtbID, CashOperationData: data})
+	}
+	return ops, nil
 }
 
 func toImport(row queries.SavedImportsRow) (Import, error) {

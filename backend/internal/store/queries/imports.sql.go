@@ -101,6 +101,60 @@ func (q *Queries) DecideImportConflict(ctx context.Context, arg DecideImportConf
 	return i, err
 }
 
+const importCashOperations = `-- name: ImportCashOperations :many
+SELECT c.xtb_id, c.type, c.time, c.amount, c.comment,
+       COALESCE(i.ticker, '') AS ticker, COALESCE(c.position_id, '') AS position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.import_id = ?
+ORDER BY c.time, c.id
+`
+
+type ImportCashOperationsRow struct {
+	XtbID      string
+	Type       string
+	Time       string
+	Amount     decimal.Decimal
+	Comment    string
+	Ticker     string
+	PositionID string
+	Volume     decimal.NullDecimal
+	Price      decimal.NullDecimal
+}
+
+func (q *Queries) ImportCashOperations(ctx context.Context, importID int64) ([]ImportCashOperationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, importCashOperations, importID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ImportCashOperationsRow
+	for rows.Next() {
+		var i ImportCashOperationsRow
+		if err := rows.Scan(
+			&i.XtbID,
+			&i.Type,
+			&i.Time,
+			&i.Amount,
+			&i.Comment,
+			&i.Ticker,
+			&i.PositionID,
+			&i.Volume,
+			&i.Price,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const importConflictKind = `-- name: ImportConflictKind :one
 SELECT kind
 FROM import_conflicts
@@ -160,6 +214,59 @@ func (q *Queries) ImportConflicts(ctx context.Context, importID int64) ([]Import
 			&i.CheckClosedPositions,
 			&i.Decision,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const importPeriod = `-- name: ImportPeriod :one
+SELECT CAST(COALESCE(MIN(time), '') AS TEXT) AS first_time, CAST(COALESCE(MAX(time), '') AS TEXT) AS last_time
+FROM cash_operations
+WHERE import_id = ?
+`
+
+type ImportPeriodRow struct {
+	FirstTime string
+	LastTime  string
+}
+
+func (q *Queries) ImportPeriod(ctx context.Context, importID int64) (ImportPeriodRow, error) {
+	row := q.db.QueryRowContext(ctx, importPeriod, importID)
+	var i ImportPeriodRow
+	err := row.Scan(&i.FirstTime, &i.LastTime)
+	return i, err
+}
+
+const importPeriods = `-- name: ImportPeriods :many
+SELECT import_id, CAST(MIN(time) AS TEXT) AS first_time, CAST(MAX(time) AS TEXT) AS last_time
+FROM cash_operations
+GROUP BY import_id
+`
+
+type ImportPeriodsRow struct {
+	ImportID  int64
+	FirstTime string
+	LastTime  string
+}
+
+func (q *Queries) ImportPeriods(ctx context.Context) ([]ImportPeriodsRow, error) {
+	rows, err := q.db.QueryContext(ctx, importPeriods)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ImportPeriodsRow
+	for rows.Next() {
+		var i ImportPeriodsRow
+		if err := rows.Scan(&i.ImportID, &i.FirstTime, &i.LastTime); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

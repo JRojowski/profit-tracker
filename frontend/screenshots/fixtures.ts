@@ -17,6 +17,7 @@ import type {
   Holding,
   HistoryPeriod,
   IkzeLimit,
+  ImportCashOperation,
   ImportPreview,
   ImportSummary,
   InstrumentOverview,
@@ -945,6 +946,18 @@ const ikzeLimit: IkzeLimit = {
 
 const imports: ImportSummary[] = [
   {
+    id: 3,
+    fileName: "account_10000001_2026_repeat.xlsx",
+    importedAt: "2026-06-11T07:45:00Z",
+    accountId: 1,
+    accountNumber: "10000001",
+    accountName: "Main Account",
+    newCashOperations: 0,
+    skippedCashOperations: 148,
+    periodFrom: null,
+    periodTo: null,
+  },
+  {
     id: 2,
     fileName: "account_10000002_2026.xlsx",
     importedAt: "2026-06-10T08:30:00Z",
@@ -953,6 +966,8 @@ const imports: ImportSummary[] = [
     accountName: "Retirement",
     newCashOperations: 18,
     skippedCashOperations: 0,
+    periodFrom: "2025-12-31T23:30:00Z",
+    periodTo: "2026-06-05T09:15:00Z",
   },
   {
     id: 1,
@@ -963,8 +978,75 @@ const imports: ImportSummary[] = [
     accountName: "Main Account",
     newCashOperations: 142,
     skippedCashOperations: 6,
+    periodFrom: "2025-11-03T10:02:00Z",
+    periodTo: "2026-06-08T14:40:00Z",
   },
 ]
+
+// importCashOperations are the Cash Operations of each Import, by Import id. Import 3 added none.
+// The lists are short samples, not as long as the counts of the Imports.
+const importCashOperations: Record<number, ImportCashOperation[]> = {
+  1: [
+    {
+      xtbId: "9001",
+      type: "Deposit",
+      time: "2025-11-03T09:12:00Z",
+      amount: "5000.00",
+      comment: "Synthetic deposit",
+      ticker: "",
+      positionId: "",
+      volume: null,
+      price: null,
+    },
+    {
+      xtbId: "9002",
+      type: "Stock purchase",
+      time: "2025-11-04T14:31:08Z",
+      amount: "-1249.50",
+      comment: "OPEN BUY 10 @ 124.95",
+      ticker: "BETA.US",
+      positionId: "5001",
+      volume: "10",
+      price: "124.95",
+    },
+    {
+      xtbId: "9003",
+      type: "Stock sale",
+      time: "2026-02-17T15:02:44Z",
+      amount: "812.40",
+      comment: "CLOSE BUY 6.5 @ 124.98",
+      ticker: "BETA.US",
+      positionId: "5001",
+      volume: "6.5",
+      price: "124.98",
+    },
+    {
+      xtbId: "9004",
+      type: "Dividend",
+      time: "2026-06-08T10:00:00Z",
+      amount: "14.27",
+      comment: "BETA.US USD 0.2200/ SHR",
+      ticker: "BETA.US",
+      positionId: "",
+      volume: null,
+      price: null,
+    },
+  ],
+  2: [
+    {
+      xtbId: "9101",
+      type: "Deposit",
+      time: "2026-01-12T08:00:00Z",
+      amount: "2000.00",
+      comment: "Synthetic IKZE deposit",
+      ticker: "",
+      positionId: "",
+      volume: null,
+      price: null,
+    },
+  ],
+  3: [],
+}
 
 // overviewPrices builds the weekday closes of BETA.US in USD for the 150 days before the fixed date.
 function overviewPrices(): { date: string; close: string }[] {
@@ -1571,6 +1653,7 @@ export type ApiFixture = {
   ikzeLimit: Record<number, IkzeLimit>
   overview: Record<string, InstrumentOverview>
   imports: ImportSummary[]
+  importCashOperations: Record<number, ImportCashOperation[]>
   tiers: Tiers
   tiersBreakdown: Record<number, TiersBreakdown>
   allTiersBreakdown: AllAccountsTiersBreakdown
@@ -1638,6 +1721,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
       ikzeLimit: { 2: ikzeLimit },
       overview: { "1:BETA.US": betaOverview },
       imports,
+      importCashOperations,
       tiers: populatedTiers,
       tiersBreakdown: { 1: mainTiersBreakdown },
       allTiersBreakdown:
@@ -1672,6 +1756,7 @@ export function fixtureFor(dataSet: DataSet): ApiFixture {
     ikzeLimit: { 2: { currentYear: 2026, rows: [] } },
     overview: {},
     imports: [],
+    importCashOperations: {},
     tiers: emptyTiers,
     tiersBreakdown: {},
     allTiersBreakdown: {

@@ -61,6 +61,7 @@ func NewHandler(opts Options) http.Handler {
 	mux.HandleFunc("POST /api/imports/{id}/cancel", a.cancelImport)
 	mux.HandleFunc("POST /api/imports/{id}/conflicts/{conflictId}", a.decideConflict)
 	mux.HandleFunc("GET /api/imports", a.listImports)
+	mux.HandleFunc("GET /api/imports/{id}/cash-operations", a.listImportCashOperations)
 	mux.HandleFunc("GET /api/accounts", a.listAccounts)
 	mux.HandleFunc("PATCH /api/accounts/{id}", a.renameAccount)
 	mux.HandleFunc("GET /api/accounts/{id}/summary", a.accountSummary)

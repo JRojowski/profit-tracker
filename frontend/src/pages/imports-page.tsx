@@ -1,8 +1,9 @@
 import { SectionHeading } from "@/components/section-heading"
 import { PlusIcon } from "lucide-react"
-import { Link } from "react-router"
+import { Link, useNavigate, useSearchParams } from "react-router"
 
 import { AccountBadges } from "@/components/account-badges"
+import { ImportCashOperationsPanel } from "@/components/import-cash-operations-panel"
 import { LoadedView } from "@/components/loaded-view"
 import { StackedHead } from "@/components/stacked-head"
 import { Badge } from "@/components/ui/badge"
@@ -19,6 +20,7 @@ import {
 import { useLoad } from "@/hooks/use-load"
 import { fetchImports, type Account, type ImportSummary } from "@/lib/api"
 import { useAppState } from "@/lib/app-state"
+import { formatPolishDate } from "@/lib/format"
 import { paths } from "@/lib/routes"
 import { cn } from "@/lib/utils"
 
@@ -31,6 +33,14 @@ export function ImportsPage() {
   const imports = useLoad("imports", valuesVersion, (signal) =>
     fetchImports(signal)
   )
+  // The query "import" holds the id of the Import whose Cash Operations the panel shows.
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const selectedId = parseImportId(searchParams.get("import"))
+  const selected =
+    imports.status === "ok"
+      ? (imports.data.find((item) => item.id === selectedId) ?? null)
+      : null
 
   return (
     <Card className="min-w-0">
@@ -64,11 +74,25 @@ export function ImportsPage() {
                 There are no Imports yet.
               </p>
             ) : (
-              <ImportsTable imports={data} accounts={accounts ?? []} />
+              <ImportsTable
+                imports={data}
+                accounts={accounts ?? []}
+                onOpen={(id) => navigate(paths.importCashOperations(id))}
+              />
             )
           }
         </LoadedView>
       </CardContent>
+      {selected && (
+        <ImportCashOperationsPanel
+          item={selected}
+          currency={
+            accounts?.find((account) => account.id === selected.accountId)
+              ?.currency ?? ""
+          }
+          onClose={() => navigate(paths.imports)}
+        />
+      )}
     </Card>
   )
 }
@@ -77,11 +101,14 @@ type ImportsTableProps = {
   imports: ImportSummary[]
   // accounts give the type and the currency of the Account of each Import.
   accounts: Account[]
+  // onOpen shows the Cash Operations of the Import with this id.
+  onOpen: (id: number) => void
 }
 
-// ImportsTable shows each Import with its date, file, Account and counts of Cash Operations.
+// ImportsTable shows each Import with its date, file, Account, period and counts of Cash Operations.
+// A click on a row, or the file button with the keyboard, opens the Cash Operations of the Import.
 // The table has a fixed layout, so a long file name wraps and the table never gets wider than its card.
-function ImportsTable({ imports, accounts }: ImportsTableProps) {
+function ImportsTable({ imports, accounts, onOpen }: ImportsTableProps) {
   const byId = new Map(accounts.map((account) => [account.id, account]))
 
   return (
@@ -92,9 +119,10 @@ function ImportsTable({ imports, accounts }: ImportsTableProps) {
           <TableHead>
             <span className="hidden md:inline">File</span>
             {/* On a narrow screen, one column holds the file, the date and the Account. */}
-            <StackedHead labels={["File", "Date", "Account"]} />
+            <StackedHead labels={["File", "Date", "Period", "Account"]} />
           </TableHead>
           <TableHead className="hidden w-48 md:table-cell">Account</TableHead>
+          <TableHead className="hidden w-44 md:table-cell">Period</TableHead>
           <TableHead className="hidden w-28 text-right whitespace-normal md:table-cell">
             New Cash Operations
           </TableHead>
@@ -111,23 +139,36 @@ function ImportsTable({ imports, accounts }: ImportsTableProps) {
           const importedAt = new Date(item.importedAt)
           const account = byId.get(item.accountId)
           return (
-            <TableRow key={item.id}>
+            <TableRow
+              key={item.id}
+              className="cursor-pointer"
+              onClick={() => onOpen(item.id)}
+            >
               <TableCell className="hidden md:table-cell">
                 <ImportDate time={importedAt} />
               </TableCell>
               <TableCell className="align-top whitespace-normal md:align-middle">
                 <div className="flex min-w-0 flex-col gap-1">
-                  <span className="font-mono text-xs break-all">
+                  {/* The button is the keyboard route to the row. A click on it reaches the click handler of the row. */}
+                  <button
+                    type="button"
+                    className="w-fit max-w-full rounded-sm text-left font-mono text-xs break-all underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Show the Cash Operations of ${item.fileName}`}
+                  >
                     {item.fileName}
-                  </span>
+                  </button>
                   <span className="flex flex-col gap-1 md:hidden">
                     <ImportDate time={importedAt} />
+                    <ImportPeriod item={item} />
                     <ImportAccount item={item} account={account} />
                   </span>
                 </div>
               </TableCell>
               <TableCell className="hidden whitespace-normal md:table-cell">
                 <ImportAccount item={item} account={account} />
+              </TableCell>
+              <TableCell className="hidden md:table-cell">
+                <ImportPeriod item={item} />
               </TableCell>
               <TableCell className="hidden text-right md:table-cell">
                 <NewCount count={item.newCashOperations} />
@@ -148,6 +189,23 @@ function ImportsTable({ imports, accounts }: ImportsTableProps) {
         })}
       </TableBody>
     </Table>
+  )
+}
+
+// parseImportId gives the Import id of the query text, or null when the text is not an id.
+function parseImportId(text: string | null): number | null {
+  return text !== null && /^[1-9][0-9]*$/.test(text) ? Number(text) : null
+}
+
+// ImportPeriod shows the dates, in Polish time, of the first and the last Cash Operation of an Import, or "—" when it added none.
+function ImportPeriod({ item }: { item: ImportSummary }) {
+  if (item.periodFrom === null || item.periodTo === null) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  return (
+    <span className="num text-xs">
+      {formatPolishDate(item.periodFrom)} – {formatPolishDate(item.periodTo)}
+    </span>
   )
 }
 

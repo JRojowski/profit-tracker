@@ -20,6 +20,8 @@ export const paths = {
   ikze: (id: number) => `/accounts/${id}/ikze`,
   import: "/import",
   imports: "/imports",
+  // importCashOperations opens the Import history with the Cash Operations of one Import.
+  importCashOperations: (id: number) => `/imports?import=${id}`,
 } as const
 
 // parseAccountId gives the Account id of a URL segment, or null when the segment is not an id.
