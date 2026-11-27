@@ -113,7 +113,7 @@ The goal: the user sees which operations an Import adds before the user confirms
 - Kraken Import, crypto Holdings at the Average Cost and the Bitcoin Benchmark: spec #88, tickets #89 to #96, merged in #97.
 - Nasdaq-100 Benchmark: merged in #110.
 - Tiers, Rebalancing and the Tiers Breakdown: tickets #104 to #106, merged in #109.
-- Tiers Breakdown, Accounts table and Import History fixes: hide the closed rows, a name on each Instrument row, sortable Accounts, the Period and the Cash Operations of each Import.
+- Tiers Breakdown, Accounts table and Import History fixes: hide the closed rows, a name on each Instrument row, sortable Accounts, the Period and the Cash Operations of each Import: #112.
 
 ## Rejected for now
 
