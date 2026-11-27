@@ -44,14 +44,29 @@ type accountResponse struct {
 
 // importResponse is one saved Import in GET /api/imports and in the confirm response.
 type importResponse struct {
-	ID                    int64  `json:"id"`
-	FileName              string `json:"fileName"`
-	ImportedAt            string `json:"importedAt"`
-	AccountID             int64  `json:"accountId"`
-	AccountNumber         string `json:"accountNumber"`
-	AccountName           string `json:"accountName"`
-	NewCashOperations     int    `json:"newCashOperations"`
-	SkippedCashOperations int    `json:"skippedCashOperations"`
+	ID                    int64   `json:"id"`
+	FileName              string  `json:"fileName"`
+	ImportedAt            string  `json:"importedAt"`
+	AccountID             int64   `json:"accountId"`
+	AccountNumber         string  `json:"accountNumber"`
+	AccountName           string  `json:"accountName"`
+	NewCashOperations     int     `json:"newCashOperations"`
+	SkippedCashOperations int     `json:"skippedCashOperations"`
+	PeriodFrom            *string `json:"periodFrom"`
+	PeriodTo              *string `json:"periodTo"`
+}
+
+// importCashOperationResponse is one Cash Operation in GET /api/imports/{id}/cash-operations.
+type importCashOperationResponse struct {
+	XTBID      string  `json:"xtbId"`
+	Type       string  `json:"type"`
+	Time       string  `json:"time"`
+	Amount     string  `json:"amount"`
+	Comment    string  `json:"comment"`
+	Ticker     string  `json:"ticker"`
+	PositionID string  `json:"positionId"`
+	Volume     *string `json:"volume"`
+	Price      *string `json:"price"`
 }
 
 type errorBody struct {

@@ -348,6 +348,16 @@ func (s *Service) Imports(ctx context.Context) ([]store.Import, error) {
 	return s.store.Imports(ctx)
 }
 
+// ImportCashOperations returns the Cash Operations that the saved Import added, in time order.
+// It returns ErrImportNotFound if there is no saved Import with the ID.
+func (s *Service) ImportCashOperations(ctx context.Context, id int64) ([]store.ImportedCashOperation, error) {
+	ops, err := s.store.ImportCashOperations(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, fmt.Errorf("import %d: %w", id, ErrImportNotFound)
+	}
+	return ops, err
+}
+
 // account returns the Account of the account number, or nil if the number is new.
 func (s *Service) account(ctx context.Context, number string) (*store.Account, error) {
 	account, err := s.store.AccountByNumber(ctx, number)

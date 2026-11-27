@@ -21,6 +21,8 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  EyeIcon,
+  EyeOffIcon,
   GripVerticalIcon,
 } from "lucide-react"
 import { useState } from "react"
@@ -183,6 +185,8 @@ export function TiersBreakdownTable({
   view,
 }: TiersBreakdownTableProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
+  // All Closed Positions rows are hidden until the user asks for them.
+  const [showClosed, setShowClosed] = useState(false)
   const { order, hasManualOrder, setSlot, clear } = useBreakdownOrder(view)
   const tiers = useCollapsedTiers(
     `profit-tracker.tiers-breakdown-collapsed:${view}`
@@ -197,6 +201,11 @@ export function TiersBreakdownTable({
     ? [...breakdown.tiers, breakdown.noTier]
     : breakdown.tiers
   const { currency } = breakdown
+  const closedCount = groups.reduce(
+    (count, group) =>
+      count + group.instruments.filter((i) => i.closedPositions).length,
+    0
+  )
 
   // visible holds the tickers of each slot in the shown order.
   const visible = new Map<string, string[]>()
@@ -219,7 +228,11 @@ export function TiersBreakdownTable({
       slotOf(group, "closed"),
       closed.map((i) => i.ticker)
     )
-    return { group, holding, closed }
+    return {
+      group,
+      holding,
+      closed: showClosed ? closed : [],
+    }
   })
 
   const sensors = useSensors(
@@ -270,11 +283,28 @@ export function TiersBreakdownTable({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {hasManualOrder && (
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={clear}>
-            Restore date order
-          </Button>
+      {(hasManualOrder || closedCount > 0) && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {closedCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={showClosed}
+              onClick={() => setShowClosed((current) => !current)}
+            >
+              {showClosed ? (
+                <EyeOffIcon data-icon="inline-start" />
+              ) : (
+                <EyeIcon data-icon="inline-start" />
+              )}
+              {showClosed ? "Hide" : "Show"} closed positions ({closedCount})
+            </Button>
+          )}
+          {hasManualOrder && (
+            <Button variant="outline" size="sm" onClick={clear}>
+              Restore date order
+            </Button>
+          )}
         </div>
       )}
       <DndContext
@@ -398,7 +428,6 @@ function GroupRows({
                   currency={currency}
                   open={expanded.has(key)}
                   onToggle={() => onToggle(key)}
-                  showName={instrument.holding === null}
                 />
               )
             })}
@@ -444,15 +473,14 @@ function useSortableRow(id: string, ticker: string) {
   }
 }
 
-// InstrumentCell shows the ticker of an Instrument with the label of the row. It shows the name when asked.
+// InstrumentCell shows the ticker of an Instrument with the label of the row, and the name under it.
+// An empty name shows "-", so that each row has two lines.
 function InstrumentCell({
   instrument,
   label,
-  showName,
 }: {
   instrument: BreakdownInstrument
   label: string
-  showName: boolean
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -462,11 +490,12 @@ function InstrumentCell({
           {label}
         </span>
       </span>
-      {showName && (
-        <span className="max-w-32 truncate text-xs text-muted-foreground md:max-w-56">
-          {instrument.name}
-        </span>
-      )}
+      <span
+        className="max-w-32 truncate text-xs text-muted-foreground md:max-w-56"
+        title={instrument.name || undefined}
+      >
+        {instrument.name.trim() || "-"}
+      </span>
     </div>
   )
 }
@@ -491,7 +520,7 @@ function HoldingRow({
         <div className="flex items-start gap-1">
           <span className="mt-0.5 flex">{handle}</span>
           <span className="size-4 shrink-0" aria-hidden />
-          <InstrumentCell instrument={instrument} label="Holding" showName />
+          <InstrumentCell instrument={instrument} label="Holding" />
         </div>
       </TableCell>
       <NumberCell>
@@ -527,7 +556,6 @@ type ClosedRowsProps = {
   currency: string
   open: boolean
   onToggle: () => void
-  showName: boolean
 }
 
 // ClosedRows shows the Closed Positions row of an Instrument. The button opens the single Closed Positions below it.
@@ -538,7 +566,6 @@ function ClosedRows({
   currency,
   open,
   onToggle,
-  showName,
 }: ClosedRowsProps) {
   const { rowProps, handle } = useSortableRow(id, instrument.ticker)
   const Chevron = open ? ChevronDownIcon : ChevronRightIcon
@@ -557,11 +584,7 @@ function ClosedRows({
               className="flex items-start gap-1 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Chevron className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              <InstrumentCell
-                instrument={instrument}
-                label={label}
-                showName={showName}
-              />
+              <InstrumentCell instrument={instrument} label={label} />
             </button>
           </div>
         </TableCell>

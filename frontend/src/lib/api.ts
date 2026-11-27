@@ -118,6 +118,25 @@ export type ImportSummary = {
   accountName: string
   newCashOperations: number
   skippedCashOperations: number
+  // periodFrom and periodTo are the times (RFC 3339, UTC) of the first and the last Cash Operation that the Import
+  // added. They are null when the Import added none.
+  periodFrom: string | null
+  periodTo: string | null
+}
+
+// ImportCashOperation is one Cash Operation that an Import added. The time is RFC 3339 text in UTC.
+// The amount is decimal text. ticker and positionId are "" for an operation with none. volume and price are null for
+// an operation with none.
+export type ImportCashOperation = {
+  xtbId: string
+  type: string
+  time: string
+  amount: string
+  comment: string
+  ticker: string
+  positionId: string
+  volume: string | null
+  price: string | null
 }
 
 // UnsupportedEntry is one entry of a Kraken export that the tool does not support. The time is RFC 3339 text in UTC.
@@ -487,6 +506,17 @@ export async function fetchInstrumentOverview(
   )
   if (response.status === 404) return null
   return readJSON<InstrumentOverview>(response)
+}
+
+// fetchImportCashOperations loads the Cash Operations that one Import added, in time order.
+export async function fetchImportCashOperations(
+  id: number,
+  signal?: AbortSignal
+): Promise<ImportCashOperation[]> {
+  const response = await fetch(`/api/imports/${id}/cash-operations`, {
+    signal,
+  })
+  return readJSON<ImportCashOperation[]>(response)
 }
 
 // BreakdownHolding is the Holding part of an Instrument in the Tiers Breakdown. lastPurchaseDate is YYYY-MM-DD. With noValue the Holding has no price,

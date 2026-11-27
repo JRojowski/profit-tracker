@@ -64,3 +64,21 @@ UPDATE import_conflicts
 SET decision = ?
 WHERE id = ? AND import_id = ?
 RETURNING *;
+
+-- name: ImportPeriods :many
+SELECT import_id, CAST(MIN(time) AS TEXT) AS first_time, CAST(MAX(time) AS TEXT) AS last_time
+FROM cash_operations
+GROUP BY import_id;
+
+-- name: ImportCashOperations :many
+SELECT c.xtb_id, c.type, c.time, c.amount, c.comment,
+       COALESCE(i.ticker, '') AS ticker, COALESCE(c.position_id, '') AS position_id, c.volume, c.price
+FROM cash_operations c
+LEFT JOIN instruments i ON i.id = c.instrument_id
+WHERE c.import_id = ?
+ORDER BY c.time, c.id;
+
+-- name: ImportPeriod :one
+SELECT CAST(COALESCE(MIN(time), '') AS TEXT) AS first_time, CAST(COALESCE(MAX(time), '') AS TEXT) AS last_time
+FROM cash_operations
+WHERE import_id = ?;

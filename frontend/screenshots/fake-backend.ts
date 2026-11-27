@@ -63,6 +63,14 @@ function answer(
     return body === undefined ? undefined : { body }
   }
 
+  const importOperations = /^\/api\/imports\/(\d+)\/cash-operations$/.exec(path)
+  if (importOperations) {
+    const body = fixture.importCashOperations[Number(importOperations[1])]
+    return body === undefined
+      ? { body: { error: "Import not found." }, status: 404, failed: true }
+      : { body }
+  }
+
   const overview =
     /^\/api\/accounts\/(\d+)\/instruments\/([^/]+)\/overview$/.exec(path)
   if (overview) {

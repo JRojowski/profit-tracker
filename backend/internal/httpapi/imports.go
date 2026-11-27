@@ -107,6 +107,16 @@ type importResponse struct {
 	AccountName           string `json:"accountName"`
 	NewCashOperations     int    `json:"newCashOperations"`
 	SkippedCashOperations int    `json:"skippedCashOperations"`
+	// PeriodFrom and PeriodTo are the times (RFC 3339, UTC) of the first and the last Cash Operation
+	// that the Import added. The frontend converts them to local time. They are null if the Import added none.
+	PeriodFrom *string `json:"periodFrom"`
+	PeriodTo   *string `json:"periodTo"`
+}
+
+// importCashOperationResponse is one Cash Operation that an Import added.
+type importCashOperationResponse struct {
+	XTBID string `json:"xtbId"`
+	cashOperationDataResponse
 }
 
 // confirmRequest is the body of POST /api/imports/{id}/confirm.
@@ -261,8 +271,37 @@ func (a *api) listImports(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// listImportCashOperations returns the Cash Operations that the Import added, in time order.
+func (a *api) listImportCashOperations(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "id", "import")
+	if !ok {
+		return
+	}
+	ops, err := a.importer.ImportCashOperations(r.Context(), id)
+	if err != nil {
+		a.writeImportError(w, r, err)
+		return
+	}
+	resp := make([]importCashOperationResponse, 0, len(ops))
+	for _, op := range ops {
+		resp = append(resp, importCashOperationResponse{XTBID: op.XTBID, cashOperationDataResponse: toCashOperationDataResponse(op.CashOperationData)})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// utcTimePtr formats t as an RFC 3339 time in UTC. It returns nil if t is nil.
+func utcTimePtr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
+}
+
 func toImportResponse(imp store.Import) importResponse {
 	return importResponse{
+		PeriodFrom:            utcTimePtr(imp.PeriodFrom),
+		PeriodTo:              utcTimePtr(imp.PeriodTo),
 		ID:                    imp.ID,
 		FileName:              imp.FileName,
 		ImportedAt:            imp.ImportedAt.UTC().Format(time.RFC3339),
