@@ -1,5 +1,7 @@
 # Host on Azure Container Apps with SQLite and Litestream
 
+> Status: parked on 2026-11-19. The decision stays valid, but the work is on hold. The tool has one user and runs locally. See issue #31.
+
 The tool runs on Azure in the private subscription of the user, in the region Poland Central. One container app runs on the Consumption plan and scales to zero replicas when nobody uses it. The database stays one SQLite file on the disk of the container. Litestream copies each change of that file to Azure Blob Storage, and restores the file when a new replica starts.
 
 ## Why

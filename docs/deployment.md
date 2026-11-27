@@ -1,5 +1,7 @@
 # Deployment to Azure
 
+> Status: parked on 2026-11-19. The tool has one user and runs locally, so the cloud cost has no benefit now. No Azure resource exists. The deployment job does not run while the variable `AZURE_CLIENT_ID` is empty. See issue #31.
+
 The tool runs in Azure Container Apps in the private Azure subscription of the user. ADR 0006 gives the reasons.
 
 Warning: until the sign-in is done (ticket #35), the address of the tool is public and has no sign-in. Do not import real XTB exports before that.
