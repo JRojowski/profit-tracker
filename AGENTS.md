@@ -1,0 +1,108 @@
+# profit-tracker
+
+## Commands
+
+Run these commands from the repository root.
+
+| Task | Command |
+|---|---|
+| Run all backend tests | `make test` |
+| Run the real-export tests (they skip when `exports/` has no xlsx file) | `cd backend && go test -count=1 -run TestRealExports -v ./internal/httpapi/` |
+| Lint the backend | `make lint` |
+| Install the frontend packages | `make frontend-install` |
+| Typecheck, lint, check the format of and build the frontend | `make frontend-check` |
+| Compare each page with its stored image (screenshot tests of the frontend) | `make frontend-screenshots` (It builds the frontend. It needs no backend. The first run downloads Chromium and needs network access. The fixtures are in `frontend/screenshots/fixtures.ts`.) |
+| Replace the stored images with the current look | `make frontend-screenshots-update` (Read the image differences in `frontend/screenshots/images/` before you commit. The images are for macOS.) |
+| Build one binary with the embedded frontend | `make build` (output: `bin/profit-tracker`) |
+| Start the backend for development | `make backend-dev` |
+| Start the binary with a new database of synthetic demo data | `make demo` (It needs network access for the prices. It prints the URL and the stop command. `DEMO_ADDR` sets the address, default `127.0.0.1:8099`.) |
+| Start the frontend for development | `make frontend-dev` (Vite sends `/api` to `PROFIT_TRACKER_ADDR`, default `127.0.0.1:8088`) |
+
+The binary reads the flags `-addr` and `-db`, or the variables `PROFIT_TRACKER_ADDR` and `PROFIT_TRACKER_DB`. The default database is `profit-tracker/profit-tracker.db` in the user configuration directory.
+
+The Assistant reads these values:
+
+| Value | Meaning |
+|---|---|
+| `PROFIT_TRACKER_OPENROUTER_KEY` | The OpenRouter API key. Environment only, with no flag, because a flag is visible in the process list. If it is empty, the Assistant is off. Never log or commit the key. |
+| `PROFIT_TRACKER_ASSISTANT_MODEL` or the flag `-assistant-model` | The OpenRouter model ID. The default is a free model that supports function calls: `openrouter.DefaultModel` in `backend/internal/openrouter`. |
+| `PROFIT_TRACKER_OPENROUTER_URL` | The base URL of the provider. Environment only. The default is `https://openrouter.ai/api/v1`. Set it to a local fake provider for a manual check. |
+
+## Layout
+
+- `backend/`: the Go module.
+- `frontend/`: the Vite + React + TypeScript + shadcn/ui application.
+- `scripts/`: the scripts of the Makefile, for example `demo.sh`.
+- `docs/adr/`: the decisions. `docs/design/v3/`: the mockups of v3. `docs/checklists/`: the manual test checklists.
+- `exports/`: the real XTB exports of the user. They hold personal data. Never commit them and never copy their content.
+
+## Frontend
+
+- Delegate frontend implementation work to the `frontend-developer` subagent.
+- The frontend standard is in `.claude/rules/frontend.md`. It loads automatically when you read a file in `frontend/src/`. When you review only a diff, read the rule first.
+- The screenshot tests (`make frontend-screenshots`) check the look of each page, but not the behaviour. After the subagent reports, check the changed pages in the browser yourself with the `browser-check` skill.
+
+## Go backend
+
+- Delegate Go implementation work to the `go-developer` subagent.
+- The Go standard is in `.claude/rules/go.md`. It loads automatically when you read a file in `backend/`. When you review only a diff, read the rule first.
+
+## Second review with Codex
+
+Codex gives a second review from a different model. Do this review for each change to code, before you commit.
+
+1. Start the Codex review in the background. Then do your own review, for example with the `code-review` skill.
+
+   ```bash
+   codex exec review --uncommitted --ephemeral -o <scratchpad>/codex-review.md > /dev/null 2>&1
+   ```
+
+   The review takes some minutes. The `-o` file holds only the verdict. The full output is a long trace, so send it to `/dev/null`.
+2. Treat each Codex finding as a claim. Read the code it names and confirm or reject the finding.
+3. Fix each confirmed finding, test-first. Go fixes go to the `go-developer` subagent.
+4. In the final report to the user, list each Codex finding with its result: fixed, or rejected with the reason.
+
+The review is complete when each Codex finding has a result. If Codex fails (for example, the login expired), tell the user and continue without it.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub Issues in `JRojowski/profit-tracker`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The tracker uses the five default triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Workflow
+
+The flow of a task, the skills and the quality gate are in `docs/agents/workflow.md`.
+
+### Spec
+
+Before you write a spec, read `docs/agents/spec.md`.
+
+### Implementer subagents
+
+`implement` and `implement-spec` give each code change to an implementer subagent.
+Use `go-developer` for `backend/` and `frontend-developer` for `frontend/`.
+Run tests through `.claude/hooks/with-test-lock.sh`.
+
+### Repository map
+
+Before you search the code, read `docs/repo-map.md`.
+
+### Project documents
+
+`docs-sync` keeps the documents in `docs/agents/project-docs.md` current.
+
+### Install
+
+```bash
+claude plugin install mattpocock-skills@claude-plugins-official
+claude plugin install pocock-harness@protopia-skills
+```

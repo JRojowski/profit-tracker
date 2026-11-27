@@ -1,21 +1,13 @@
 ---
-name: go-code-standard
-description: Go conventions for the profit-tracker backend. Use when you write, review, or refactor Go code, Go tests, SQL queries for sqlc, or the backend module layout.
+paths:
+  - "backend/**/*.go"
+  - "backend/**/*.sql"
+  - "backend/go.mod"
 ---
 
 # Go code standard
 
 The backend is one Go module in `backend/`. Write idiomatic Go: the code that an experienced Go reviewer expects to see, with the standard library first.
-
-## Completion criterion
-
-Your Go work is done only when all three commands pass in `backend/` with zero issues:
-
-1. `golangci-lint fmt` (gofumpt and goimports, from `.golangci.yml`)
-2. `golangci-lint run ./...`
-3. `go test -race ./...`
-
-If you changed a `.sql` file, run `sqlc generate` before these commands. A hook formats each `.go` file after an edit, but the commands above are the gate.
 
 Fix the cause of a lint issue. Use `//nolint:<linter> // <reason>` only when the linter is wrong for that line, and write the reason.
 

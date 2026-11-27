@@ -1,6 +1,6 @@
 WEB_DIST := backend/internal/web/dist
 
-.PHONY: test lint frontend-install frontend-check frontend-screenshots frontend-screenshots-update frontend-dev backend-dev build demo bicep-lint
+.PHONY: test lint gate-build gate-test frontend-install frontend-check frontend-screenshots frontend-screenshots-update frontend-dev backend-dev build demo bicep-lint
 
 # Run all backend tests.
 test:
@@ -9,6 +9,14 @@ test:
 # Format check and lint the backend.
 lint:
 	cd backend && golangci-lint fmt --diff && golangci-lint run ./...
+
+# The build of the quality gate: only the stacks that changed since origin/main. See scripts/gate.sh.
+gate-build:
+	scripts/gate.sh build
+
+# The tests of the quality gate: only the stacks that changed since origin/main. See scripts/gate.sh.
+gate-test:
+	scripts/gate.sh test
 
 frontend-install:
 	cd frontend && npm ci
