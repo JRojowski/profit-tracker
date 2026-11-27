@@ -218,3 +218,32 @@ Phone width (390 px wide):
 - [ ] The Closed Positions table has no price, sale amount or cost field in its rows.
 
 Check the light theme and the dark theme, at 1440 px and at 390 px.
+
+## 8. Tiers Breakdown, Accounts table and Import History
+
+Open `make demo`. Use the wide layout first.
+
+Tiers Breakdown (the page of one Account and the page of All Accounts):
+
+- [ ] The page shows only the Holding rows. No Closed Positions row shows.
+- [ ] Click "Show closed positions (N)". All Closed Positions rows show. Click the button again. They hide.
+- [ ] The Tier sums and the Total are the same with the closed rows hidden and shown.
+- [ ] Each Instrument row shows the name under the ticker, or "-" when the name is empty.
+- [ ] All Instrument rows have the same height.
+
+Accounts table on the Overview of All Accounts:
+
+- [ ] Click each header. The rows sort from the smallest to the largest value, then in the reverse order. The arrow shows the direction.
+- [ ] Click a second header with Shift. The rows sort by the two columns.
+- [ ] All rows have the same height.
+
+Import History:
+
+- [ ] The column "Period" shows the dates of the first and the last Cash Operation of each Import, in Polish time.
+- [ ] An Import that added no Cash Operation shows "—" in "Period".
+- [ ] Click a row. The panel "Cash Operations of the Import" opens. The URL has `?import=<id>`.
+- [ ] The amounts in the panel show the currency of the Account.
+- [ ] Press Escape, or click the Back button. The panel closes and `import` leaves the URL.
+- [ ] Use the keyboard: Tab to the file name of a row, press Enter. The panel opens.
+
+Check the light theme and the dark theme, at 1440 px and at 375 px. The page does not scroll sideways.
