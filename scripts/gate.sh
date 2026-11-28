@@ -42,26 +42,10 @@ done <<< "$changed"
 
 echo "gate: backend=$backend frontend=$frontend" >&2
 
-# Run `make frontend-check`. In a worktree, frontend/node_modules can be a link to the
-# node_modules of the main checkout (setting worktree.symlinkDirectories).
+# Run `make frontend-check`. The make target calls scripts/ensure-node-modules.sh. It
+# guards a node_modules link to the main checkout (setting worktree.symlinkDirectories).
 frontend_check() {
-  local modules=frontend/node_modules
-  if [ ! -L "$modules" ]; then
-    make frontend-check
-    return
-  fi
-  # The lockfile next to the link target belongs to the linked node_modules.
-  local linked_lock
-  linked_lock="$(dirname "$(readlink "$modules")")/package-lock.json"
-  if cmp -s frontend/package-lock.json "$linked_lock"; then
-    # The lockfiles are the same. Do not let make run `npm ci` through the link.
-    make -o "$modules" frontend-check
-  else
-    # The lockfiles are different. Remove only the link and install locally.
-    echo "gate: package-lock.json differs from $linked_lock. Local npm ci." >&2
-    rm "$modules"
-    make frontend-check
-  fi
+  make frontend-check
 }
 
 case "$stage" in

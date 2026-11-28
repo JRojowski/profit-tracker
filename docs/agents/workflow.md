@@ -82,7 +82,7 @@ A rule holds a coding standard. A skill holds a procedure.
 The script `.claude/hooks/quality-gate.sh` runs the build and the tests. It runs at two points:
 
 1. When `go-developer` or `frontend-developer` stops (hook `SubagentStop`).
-2. Before each `git push` that Claude runs (hook `PreToolUse`).
+2. Before each `git push` that Claude runs (hook `PreToolUse`). The wrapper `.claude/hooks/gate-on-push.sh` checks that the command really runs `git push`, and then calls the gate. The `if` filter in `settings.json` is only a cheap pre-filter.
 
 The gate reads its commands from `env` in `.claude/settings.json`:
 
