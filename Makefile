@@ -1,6 +1,6 @@
 WEB_DIST := backend/internal/web/dist
 
-.PHONY: test lint gate-build gate-test frontend-install frontend-check frontend-screenshots frontend-screenshots-update frontend-dev backend-dev build demo bicep-lint
+.PHONY: frontend/node_modules test lint gate-build gate-test frontend-install frontend-check frontend-screenshots frontend-screenshots-update frontend-dev backend-dev build demo bicep-lint
 
 # Run all backend tests.
 test:
@@ -18,12 +18,14 @@ gate-build:
 gate-test:
 	scripts/gate.sh test
 
+# Reinstall the packages. In a worktree with a linked node_modules, the same guard applies.
 frontend-install:
-	cd frontend && npm ci
+	scripts/ensure-node-modules.sh --force
 
-frontend/node_modules: frontend/package-lock.json
-	cd frontend && npm ci
-	touch frontend/node_modules
+# Phony on purpose: make must not compare mtimes through a node_modules link.
+# The script is fast when nothing is to do. See scripts/ensure-node-modules.sh.
+frontend/node_modules:
+	scripts/ensure-node-modules.sh
 
 # Typecheck, lint, check the format of and build the frontend.
 frontend-check: frontend/node_modules

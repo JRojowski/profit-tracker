@@ -11,7 +11,7 @@ Run these commands from the repository root.
 | Lint the backend | `make lint` |
 | Install the frontend packages | `make frontend-install` |
 | Typecheck, lint, check the format of and build the frontend | `make frontend-check` |
-| Compare each page with its stored image (screenshot tests of the frontend) | `make frontend-screenshots` (It builds the frontend. It needs no backend. The first run downloads Chromium and needs network access. The fixtures are in `frontend/screenshots/fixtures.ts`.) |
+| Compare each page with its stored image (screenshot tests of the frontend) | `make frontend-screenshots` (It builds the frontend. It needs no backend. The first run downloads Chromium and needs network access. The fixtures are in `frontend/screenshots/fixtures.ts`. The default port is 4173. In a worktree, set `SCREENSHOT_PORT` to a free port, so that two runs do not stop each other.) |
 | Replace the stored images with the current look | `make frontend-screenshots-update` (Read the image differences in `frontend/screenshots/images/` before you commit. The images are for macOS.) |
 | Build one binary with the embedded frontend | `make build` (output: `bin/profit-tracker`) |
 | Start the backend for development | `make backend-dev` |

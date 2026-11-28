@@ -31,6 +31,7 @@ Add a new module only when the standard library cannot do the job in a few lines
 - Use `decimal.Decimal` for every amount, price, volume and rate. A `float64` for money or volume is a bug.
 - Convert xlsx cell values to `decimal.Decimal` from their text, not through `float64`.
 - Keep times in UTC as `time.Time`. Convert to local time only in the frontend.
+- Send each time in the API as RFC3339 UTC text. Do not cut a time to a date in Go, because the UTC date can be one day before the Polish date. The frontend makes the date.
 
 ## Layout
 
